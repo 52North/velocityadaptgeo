@@ -1,0 +1,11 @@
+{
+  "name": "gis-search-dev",
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "devcontainer",
+
+  // where the project will live INSIDE the container
+  "workspaceFolder": "/workspace",
+
+  // let docker-compose handle the mount (no custom mounts here)
+  "overrideCommand": false
+}
