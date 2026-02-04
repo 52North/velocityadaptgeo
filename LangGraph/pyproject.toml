@@ -1,12 +1,10 @@
 [project]
-name = "gis"
+name = "VeloCityAdapt"
 version = "0.1.0"
-description = "Add your description here"
+description = "VeloCityAdapt"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "aiofiles>=24.1.0",
-    "bs4>=0.0.2",
     "dotenv>=0.9.9",
     "fastapi>=0.120.4",
     "langchain>=1.0.3",
@@ -15,9 +13,6 @@ dependencies = [
     "langchain-neo4j>=0.6.0",
     "langchain-openai>=1.0.1",
     "langgraph>=1.0.2",
-    "markdown>=3.10",
-    "matplotlib>=3.10.8",
-    "openai>=2.6.1",
     "pandas>=2.3.3",
     "pytest>=8.4.2",
     "python-dotenv>=1.2.1",
