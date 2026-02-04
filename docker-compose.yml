@@ -1,0 +1,47 @@
+services:
+  pygeoapi:
+    image: geopython/pygeoapi:latest
+    container_name: pygeoapi
+    volumes:
+      - ./pygeoapi_instance/pygeoapi-config.yml:/pygeoapi/local.config.yml
+      - ./pygeoapi_instance/processes:/pygeoapi/processes
+    environment:
+      - PYGEOAPI_CONFIG=/pygeoapi/local.config.yml
+      - PYTHONPATH=/pygeoapi
+    ports:
+      - "5000:80"
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama:/root/.ollama
+    environment:
+      - OLLAMA_NUM_GPU=1
+      - OLLAMA_GPU_OVERHEAD=0
+      - OLLAMA_HOST=0.0.0.0
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    runtime: nvidia
+
+  ollama-pull-mistral:
+    image: ollama/ollama:latest
+    container_name: ollama-pull-mistral
+    depends_on:
+      - ollama
+    volumes:
+      - ollama:/root/.ollama
+    command: [ "ollama", "pull", "mistral:7b-instruct" ]
+    runtime: nvidia
+    restart: "no"
+
+volumes:
+  ollama:
