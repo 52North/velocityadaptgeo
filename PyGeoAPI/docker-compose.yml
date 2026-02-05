@@ -22,7 +22,6 @@ services:
     environment:
       - OLLAMA_NUM_GPU=1
       - OLLAMA_GPU_OVERHEAD=0
-      - OLLAMA_HOST=0.0.0.0
     command: serve
 
   ollama-init:
@@ -35,14 +34,16 @@ services:
       - ollama:/root/.ollama
     env_file:
       - ollama/.env
+    environment:
+      - PYTHONUNBUFFERED=1
     working_dir: /app
     command:
       - sh
       - -c
       - |
         set -e
-        python -m pip install --no-cache-dir ollama
-        python ollama-model-pull.py
+        python -m pip install --no-cache-dir ollama && \
+        python -u ollama-model-pull.py
     restart: "no"
 
 volumes:

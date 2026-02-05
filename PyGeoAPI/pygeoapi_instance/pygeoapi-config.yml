@@ -7,11 +7,9 @@ server:
   encoding: utf-8
   cors: true
 
-  # 🔴 REQUIRED
   languages:
     - en-US
 
-  # optional but recommended
   language: en-US
 
 
