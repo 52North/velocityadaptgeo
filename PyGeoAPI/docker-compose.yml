@@ -23,25 +23,27 @@ services:
       - OLLAMA_NUM_GPU=1
       - OLLAMA_GPU_OVERHEAD=0
       - OLLAMA_HOST=0.0.0.0
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
-    runtime: nvidia
+    command: serve
 
-  ollama-pull-mistral:
-    image: ollama/ollama:latest
-    container_name: ollama-pull-mistral
+  ollama-init:
+    image: python:3.11-slim
+    container_name: ollama-init
     depends_on:
       - ollama
     volumes:
+      - ./ollama:/app
       - ollama:/root/.ollama
-    command: [ "ollama", "pull", "mistral:7b-instruct" ]
-    runtime: nvidia
+    env_file:
+      - ollama/.env
+    working_dir: /app
+    command:
+      - sh
+      - -c
+      - |
+        set -e
+        python -m pip install --no-cache-dir ollama
+        python ollama-model-pull.py
     restart: "no"
 
 volumes:
-  ollama:
+  ollama: {}
