@@ -6,7 +6,7 @@ from fastapi import FastAPI, UploadFile, File
 from fastapi.responses import StreamingResponse
 import asyncio
 from typing import AsyncGenerator
-from src.llm.main_agent import supervisor_app
+from LangGraph.src.llm.workflow import supervisor_app
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
