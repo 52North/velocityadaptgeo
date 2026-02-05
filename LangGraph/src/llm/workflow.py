@@ -1,20 +1,22 @@
-from langchain_core.messages import HumanMessage, AIMessage, RemoveMessage
-from typing import TypedDict, Optional, Any
+from langgraph.graph import StateGraph, END
+from langgraph.graph.message import MessagesState
+from langchain_ollama import ChatOllama
 
-from langchain_classic.memory import ConversationBufferMemory
-from langchain_core.messages import HumanMessage, SystemMessage, RemoveMessage, AIMessage
-from langgraph.checkpoint.memory import InMemorySaver
-from langgraph.graph import StateGraph, START, END
-# from langgraph.checkpoint.memory import InMemorySaver
-from langchain_openai import ChatOpenAI
-import json
+llm = ChatOllama(
+    model="llama3.2:3b",
+    temperature=0.7,
+    base_url="http://localhost:11434",
+    streaming=True,
+)
 
-from src.llm.state.agent_state import AgentState
-from src.llm.tools.graph import StaticGraph
-from src.llm.tools.dynamic_graph import DynamicGraph
-from dotenv import load_dotenv
-import os
+async def agent_node(state):
+    result = await llm.ainvoke(state["messages"])  # ✅ async
+    return {"messages": [result]}
 
-load_dotenv()
+graph = StateGraph(MessagesState)
 
-workflow = StateGraph()
+graph.add_node("agent", agent_node)
+graph.set_entry_point("agent")
+graph.add_edge("agent", END)
+
+compiled_graph = graph.compile()

@@ -1,0 +1,28 @@
+{
+    "name": "Debug FastAPI (Uvicorn)",
+    "type": "python",
+    "request": "launch",
+    "module": "uvicorn",
+    "args": [
+        "src.app:app",
+        "--reload"
+    ],
+    "env": {
+        "PYTHONPATH": "${workspaceFolder}/src"
+    },
+    "configurations": [
+        {
+            "name": "Debug FastAPI (Uvicorn)",
+            "type": "python",
+            "request": "launch",
+            "module": "uvicorn",
+            "args": [
+                "app:app",
+                "--reload"
+            ],
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/src"
+            }
+        }
+    ]
+}
