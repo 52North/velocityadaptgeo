@@ -56,12 +56,12 @@ async def agent_node(state):
         *state["messages"],
     ]
 
-    print(messages)
-
     result = await agent.ainvoke({"messages": messages})
-    # TODO: Invokes correctly, but never returns a result. Need to debug why the agent isn't returning tool results properly.
+
     print("Agent result:", result)
 
+    #TODO: Takes ages to process, even after receiving tool result. Why?
+    #TODO: Result is a bit fucked up, probably an error in encoding in PyGeoAPI.
     return {
         "messages": result["messages"]
     }

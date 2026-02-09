@@ -25,6 +25,8 @@ async def buffer_geometry(geometry: dict, distance: float) -> dict:
         }
     }
 
+    print("Sending request to pygeoapi with payload:", payload)
+
     async with httpx.AsyncClient() as client:
         response = await client.post(
             f"{PYGEOAPI_URL}/processes/buffer/execution",
@@ -37,7 +39,6 @@ async def buffer_geometry(geometry: dict, distance: float) -> dict:
     print("STATUS:", response.status_code)
     print("HEADERS:", response.headers)
     print("BODY:", repr(response.text))
-
 
     data = response.json()
 
@@ -55,3 +56,5 @@ async def buffer_geometry(geometry: dict, distance: float) -> dict:
 
 if __name__ == "__main__":
     mcp.run(transport="http", host="0.0.0.0", port=8001)
+
+# TODO Use environments to make this better for debugging and production.
