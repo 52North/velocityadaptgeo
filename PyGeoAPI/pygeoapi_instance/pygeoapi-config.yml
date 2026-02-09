@@ -2,7 +2,7 @@ server:
   bind:
     host: 0.0.0.0
     port: 80
-  url: http://localhost:5000
+  url: http://localhost:80
   mimetype: application/json
   encoding: utf-8
   cors: true
@@ -20,7 +20,7 @@ metadata:
   identification:
     title: PyGeoAPI Buffer Example
     description: Simple OGC Processes buffer example
-    url: http://localhost:5000
+    url: http://localhost:80
     keywords:
       - ogc
       - buffer
@@ -52,3 +52,16 @@ resources:
     type: process
     processor:
       name: processes.buffer.BufferProcessor
+
+    inputs:
+      geometry:
+        schema:
+          type: object
+      distance:
+        schema:
+          type: number
+
+    outputs:
+      result:
+        schema:
+          type: object

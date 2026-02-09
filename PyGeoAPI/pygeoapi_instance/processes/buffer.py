@@ -52,7 +52,7 @@ class BufferProcessor(BaseProcessor):
             }
 
             # 🔴 MUST return (outputs, mimetype)
-            return result, "application/json"
+            return "application/json", result
 
         except (KeyError, ValueError, ShapelyError) as err:
             raise ProcessorExecuteError(f"Buffer failed: {err}")
