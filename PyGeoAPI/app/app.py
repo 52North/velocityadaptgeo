@@ -1,17 +1,12 @@
 import os
 import httpx
-from fastapi import FastAPI
-from mcp.server.fastmcp import FastMCP
+from fastmcp import FastMCP
 
 PYGEOAPI_URL = os.getenv("PYGEOAPI_URL", "http://localhost:5000")
 
-app = FastAPI(title="Geometry MCP Server")
-
 # Create FastMCP server
 mcp = FastMCP(
-    name="geometry-tools",
-    version="1.0.0",
-    description="LLM-accessible geometry tools backed by pygeoapi"
+    name="geometry"
 )
 
 @mcp.tool(
@@ -39,5 +34,5 @@ async def buffer_geometry(geometry: dict, distance: float) -> dict:
 
     return response.json()["outputs"]["result"]
 
-# Mount MCP on FastAPI
-app.mount("/mcp", mcp)
+if __name__ == "__main__":
+    mcp.run(transport="http", host="0.0.0.0", port=8000)

@@ -1,6 +1,5 @@
 ```sh
-cd src
-uvicorn app:app --reload
+cd src && uvicorn app:app --reload
 ```
 
 

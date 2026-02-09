@@ -1,0 +1,15 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install uv (https://github.com/astral-sh/uv)
+RUN pip install --upgrade pip && pip install uv
+
+COPY ./ /app
+COPY ./pyproject.toml /app/pyproject.toml
+
+RUN uv sync
+
+EXPOSE 8000
+
+CMD ["uv", "run", "--", "python", "app.py"]

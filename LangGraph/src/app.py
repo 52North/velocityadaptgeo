@@ -29,6 +29,19 @@ async def chat(req: ChatRequest):
 
     return ChatResponse(response=assistant_message)
 
+@app.post("/api/stream_chat")
+async def stream_chat(req: ChatRequest):
+    input_state = {
+        "messages": [HumanMessage(content=req.prompt)]
+    }
+
+    # Run LangGraph with streaming enabled
+    async for result in compiled_graph.astream(input_state):
+        assistant_message = result["messages"][-1].content
+        print("Streaming assistant message:", assistant_message)  # Debug log
+        yield assistant_message
+
+
 
 BASE_DIR = Path(__file__).resolve().parent
 FRONTEND_DIR = BASE_DIR / "frontend"

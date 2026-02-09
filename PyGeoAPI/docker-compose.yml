@@ -46,5 +46,17 @@ services:
         python -u ollama-model-pull.py
     restart: "no"
 
+  app:
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+    container_name: fastmcp
+    environment:
+      - PYGEOAPI_URL=http://pygeoapi:80
+    ports:
+      - "0.0.0.0:8001:8000"
+    depends_on:
+      - pygeoapi
+
 volumes:
   ollama: {}

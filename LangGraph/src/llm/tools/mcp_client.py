@@ -31,15 +31,12 @@ async def load_mcp_tools():
         - Tool loading is asynchronous and should be awaited.
     """
 
-    client = MultiServerMCPClient(
-       {
-        "geometry": {
-            "transport": "http",
-            "url": "http://localhost:8000/mcp"
-        }
-    }
-
-    )
+    import json
+    import os
+    config_path = os.path.join(os.path.dirname(__file__), "mcp_servers.json")
+    with open(config_path, "r") as f:
+        mcp_config = json.load(f)
+    client = MultiServerMCPClient(mcp_config)
 
     # Get all MCP tools from the configured servers
     tools = await client.get_tools()
