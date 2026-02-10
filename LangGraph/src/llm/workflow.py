@@ -8,60 +8,39 @@ from langchain.agents import create_agent
 
 llm = ChatOllama(
     model="llama3.2:3b",
-    temperature=0.4,
+    temperature=0,
     base_url="http://localhost:11434",
     streaming=False,
+    num_predict=500,
+    reasoning=False,
+    keep_alive="10m",
 )
 
-BUFFER_TOOL_SYSTEM_PROMPT = """
-You have access to a tool called `buffer_geometry`.
+SYSTEM_MESSAGE = (
+    "You may call tools to perform operations. "
+    "Do NOT explain, interpret, or summarize tool outputs. "
+    "If a tool returns JSON containing a field named 'geometry', "
+    "you MUST ignore that field completely and never reference, repeat, "
+    "or describe its contents. "
+    "Only acknowledge the operation using the 'Result' field if present. "
+    "Only respond to the user request directly."
+)
 
-This tool buffers a GeoJSON geometry by a numeric distance.
 
-RULES (always follow these exactly):
-- Always call `buffer_geometry` when the user asks to buffer, expand, grow, or create a buffer around a geometry.
-- The `geometry` argument MUST be a raw GeoJSON geometry object.
-- The `geometry` argument MUST contain a "type" such as "Point", "LineString", "Polygon", or similar.
-- The `distance` argument MUST be a plain number.
-- Do NOT pass strings for distance.
-- Do NOT wrap values in objects like { "type": "...", "value": "..." }.
-- Do NOT pass JSON Schema objects.
-- Do NOT pass Feature or FeatureCollection objects unless explicitly requested.
-- The tool returns a raw GeoJSON geometry object.
-
-CORRECT EXAMPLE:
-
-{
-  "tool": "buffer_geometry",
-  "arguments": {
-    "geometry": {
-      "type": "Point",
-      "coordinates": [0, 0]
-    },
-    "distance": 10
-  }
-}
-
-IMPORTANT OUTPUT NOTE:
-- If the user wants a Feature or FeatureCollection, wrap the geometry yourself AFTER receiving the tool result.
-"""
 
 async def agent_node(state):
     mcp_tools = await load_mcp_tools()
 
-    agent = create_agent(llm, mcp_tools)
+    agent = create_agent(llm, mcp_tools, system_prompt=SYSTEM_MESSAGE)
 
     messages = [
-        SystemMessage(content=BUFFER_TOOL_SYSTEM_PROMPT),
         *state["messages"],
     ]
 
     result = await agent.ainvoke({"messages": messages})
 
-    print("Agent result:", result)
-
-    #TODO: Takes ages to process, even after receiving tool result. Why?
-    #TODO: Result is a bit fucked up, probably an error in encoding in PyGeoAPI.
+    # TODO: Takes ages to process, even after receiving tool result. Why?
+    # TODO Append tool result to state for future reference and return values.
     return {
         "messages": result["messages"]
     }

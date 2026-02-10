@@ -6,6 +6,7 @@ from langchain_core.messages import HumanMessage
 from pathlib import Path
 
 from llm.workflow import compiled_graph
+from helper.helper import pretty_print_messages
 
 app = FastAPI()
 
@@ -26,6 +27,8 @@ async def chat(req: ChatRequest):
 
     # Last message is the assistant reply
     assistant_message = result["messages"][-1].content
+
+    pretty_print_messages(result["messages"])
 
     return ChatResponse(response=assistant_message)
 
