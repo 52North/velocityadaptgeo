@@ -12,19 +12,32 @@
 
 <body>
     <div class="app">
-        <header class="header">
-            Geometry Assistant
-        </header>
+        <div class="left-panel">
+            <header class="header">
+                Geometry Assistant
+            </header>
 
-        <main id="chat" class="chat"></main>
+            <main id="chat" class="chat"></main>
 
-        <form id="chat-form" class="input-area">
-            <input id="prompt" type="text" placeholder="Ask something about geometry…" autocomplete="off" required />
-            <button type="submit">Send</button>
-        </form>
+            <form id="chat-form" class="input-area">
+                <input id="prompt" type="text" placeholder="Ask something about geometry…" autocomplete="off"
+                    required />
+                <button type="submit">Send</button>
+            </form>
+        </div>
+
+        <!-- RIGHT SIDE MAP -->
+        <div class="right-panel">
+            <div id="map"></div>
+        </div>
     </div>
 
-    <script src="app.js"></script>
+    <!-- Leaflet CSS + JS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <script src="/static/app.js"></script>
 </body>
+
 
 </html>

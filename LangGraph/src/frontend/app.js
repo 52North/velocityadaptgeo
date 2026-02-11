@@ -1,4 +1,3 @@
-const chat = document.getElementById("chat");
 const form = document.getElementById("chat-form");
 const input = document.getElementById("prompt");
 
@@ -35,40 +34,50 @@ form.addEventListener("submit", (e) => {
 
         if (!step) return;
 
-        // Step changed → reset message reference
+        // Step change, now a new tool is talking.
         if (step !== currentStep) {
             currentStep = step;
-            currentStepMessage = null; // ← key fix
+            currentStepMessage = null;
         }
-
-        // Ignore empty content
-        if (!content || content === "") return;
 
         if (!currentStepMessage) {
-            currentStepMessage = addMessage(
-                "assistant",
-                "",
-                "streaming step-window"
-            );
+            currentStepMessage = addMessage("assistant", "");
         }
 
-        if (typeof content === "object") {
-            const pretty = JSON.stringify(content, null, 2);
-
-            currentStepMessage.innerHTML += `
-                <details class="tool-output">
-                    <summary>🛠 Tool Result (Step ${step})</summary>
-                    <pre>${pretty}</pre>
-                </details>
-            `;
-        }
-        // Normal token streaming
-        else {
+        // Streaming text for fancy output
+        if (content) {
             currentStepMessage.innerHTML += content;
+        }
+
+        // Rendering artifact geometry on map
+        if (data.artifact?.structured_content) {
+
+            const geometry = data.artifact.structured_content;
+
+            console.log("Artifact received:");
+            console.log(data.artifact);
+
+            console.log("Structured geometry:");
+            console.log(geometry);
+
+            try {
+                if (currentGeometryLayer) {
+                    map.removeLayer(currentGeometryLayer);
+                }
+
+                currentGeometryLayer = L.geoJSON(geometry).addTo(map);
+                map.fitBounds(currentGeometryLayer.getBounds());
+
+                console.log("Geometry rendered successfully.");
+            } catch (err) {
+                console.error("Failed to render geometry:", err);
+            }
         }
 
         chat.scrollTop = chat.scrollHeight;
     };
+
+
 
     evtSource.onerror = () => {
         evtSource.close();
@@ -78,3 +87,12 @@ form.addEventListener("submit", (e) => {
         }
     };
 });
+
+// Leaflet Map Setup
+const map = L.map("map").setView([52.52, 13.405], 13); // Muenster default
+
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    attribution: "&copy; OpenStreetMap contributors"
+}).addTo(map);
+
+let currentGeometryLayer = null;

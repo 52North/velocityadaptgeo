@@ -40,7 +40,6 @@ async def chat(req: ChatRequest):
 
 @app.get("/api/stream")
 async def stream(prompt: str):
-
     async def gen():
         input_state = {
             "messages": [HumanMessage(content=prompt)]
@@ -56,10 +55,16 @@ async def stream(prompt: str):
             payload = {
                 "path": path,
                 "metadata": metadata,
-                "type": message_chunk.type,  # ai / tool / human messages
+                "type": message_chunk.type,
                 "id": message_chunk.id,
             }
 
+            # Stream artifact if present to render geometry on frontend map
+            if getattr(message_chunk, "artifact", None):
+                payload["artifact"] = message_chunk.artifact
+                print("Streaming artifact:", message_chunk.artifact)
+
+            # Normal textual streaming
             if isinstance(content, str):
                 payload["content"] = content
                 yield f"data: {json.dumps(payload)}\n\n"
@@ -71,7 +76,6 @@ async def stream(prompt: str):
                         yield f"data: {json.dumps(payload)}\n\n"
 
     return StreamingResponse(gen(), media_type="text/event-stream")
-
 
 @app.get("/")
 async def index():
