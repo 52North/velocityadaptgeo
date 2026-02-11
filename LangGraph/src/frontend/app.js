@@ -10,8 +10,7 @@ function addMessage(role, text = "") {
     chat.scrollTop = chat.scrollHeight;
     return div;
 }
-
-form.addEventListener("submit", async (e) => {
+form.addEventListener("submit", (e) => {
     e.preventDefault();
 
     const prompt = input.value.trim();
@@ -20,25 +19,21 @@ form.addEventListener("submit", async (e) => {
     addMessage("user", prompt);
     input.value = "";
 
-    const assistantMsg = addMessage("assistant", "…");
+    const assistantMsg = addMessage("assistant", "");
 
-    try {
-        const response = await fetch("/chat", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ prompt }),
-        });
+    const evtSource = new EventSource(
+        `/api/stream?prompt=${encodeURIComponent(prompt)}`
+    );
 
-        if (!response.ok) {
-            assistantMsg.textContent = "❌ Error contacting server";
-            return;
-        }
+    evtSource.onmessage = (event) => {
+        const chunk = JSON.parse(event.data);
 
-        const data = await response.json();
-        assistantMsg.textContent = data.response;
+        // adjust depending on structure
+        assistantMsg.textContent += JSON.stringify(chunk);
+    };
 
-    } catch (err) {
-        console.error(err);
-        assistantMsg.textContent = "❌ Network error";
-    }
+    evtSource.onerror = () => {
+        evtSource.close();
+    };
 });
+
