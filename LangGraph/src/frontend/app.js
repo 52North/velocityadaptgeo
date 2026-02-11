@@ -44,7 +44,6 @@ form.addEventListener("submit", (e) => {
         // Ignore empty content
         if (!content || content === "") return;
 
-        // Create message lazily ONLY when content arrives
         if (!currentStepMessage) {
             currentStepMessage = addMessage(
                 "assistant",
@@ -53,7 +52,6 @@ form.addEventListener("submit", (e) => {
             );
         }
 
-        // Tool output (object)
         if (typeof content === "object") {
             const pretty = JSON.stringify(content, null, 2);
 

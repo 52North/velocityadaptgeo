@@ -1,6 +1,8 @@
 import os
 import httpx
 from fastmcp import FastMCP
+from fastmcp.tools.tool import ToolResult
+from mcp.types import TextContent
 
 PYGEOAPI_URL = os.getenv("PYGEOAPI_URL", "http://localhost:5000")
 
@@ -67,12 +69,9 @@ async def buffer_geometry(geometry: dict, distance: float) -> dict:
     else:
         raise RuntimeError(f"Unexpected pygeoapi response: {data}")
 
-    return {
-        "result": "Geometry was successfully created.",
-        "geometry": result
-    }
-
-
+    return ToolResult(
+        content=[TextContent(type="text", text="Geometry was successfully created.")],
+        structured_content=result,)
 
 if __name__ == "__main__":
     mcp.run(transport="http", host="0.0.0.0", port=8001) # Internal port mapping only
