@@ -53,15 +53,25 @@ async def stream(prompt: str):
         ):
             content = message_chunk.content
 
+            payload = {
+                "path": path,
+                "metadata": metadata,
+                "type": message_chunk.type,  # ai / tool / human messages
+                "id": message_chunk.id,
+            }
+
             if isinstance(content, str):
-                yield f"data: {json.dumps({'content': content})}\n\n"
+                payload["content"] = content
+                yield f"data: {json.dumps(payload)}\n\n"
 
             elif isinstance(content, list):
                 for block in content:
                     if block.get("type") == "text":
-                        yield f"data: {json.dumps({'content': block['text']})}\n\n"
+                        payload["content"] = block["text"]
+                        yield f"data: {json.dumps(payload)}\n\n"
 
     return StreamingResponse(gen(), media_type="text/event-stream")
+
 
 @app.get("/")
 async def index():

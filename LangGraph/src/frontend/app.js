@@ -10,6 +10,7 @@ function addMessage(role, text = "") {
     chat.scrollTop = chat.scrollHeight;
     return div;
 }
+
 form.addEventListener("submit", (e) => {
     e.preventDefault();
 
@@ -19,21 +20,63 @@ form.addEventListener("submit", (e) => {
     addMessage("user", prompt);
     input.value = "";
 
-    const assistantMsg = addMessage("assistant", "");
+    let currentStep = null;
+    let currentStepMessage = null;
 
     const evtSource = new EventSource(
         `/api/stream?prompt=${encodeURIComponent(prompt)}`
     );
 
     evtSource.onmessage = (event) => {
-        const chunk = JSON.parse(event.data);
+        const data = JSON.parse(event.data);
 
-        // adjust depending on structure
-        assistantMsg.textContent += JSON.stringify(chunk);
+        const step = data.metadata?.langgraph_step;
+        const content = data.content;
+
+        if (!step) return;
+
+        // Step changed → reset message reference
+        if (step !== currentStep) {
+            currentStep = step;
+            currentStepMessage = null; // ← key fix
+        }
+
+        // Ignore empty content
+        if (!content || content === "") return;
+
+        // Create message lazily ONLY when content arrives
+        if (!currentStepMessage) {
+            currentStepMessage = addMessage(
+                "assistant",
+                "",
+                "streaming step-window"
+            );
+        }
+
+        // Tool output (object)
+        if (typeof content === "object") {
+            const pretty = JSON.stringify(content, null, 2);
+
+            currentStepMessage.innerHTML += `
+                <details class="tool-output">
+                    <summary>🛠 Tool Result (Step ${step})</summary>
+                    <pre>${pretty}</pre>
+                </details>
+            `;
+        }
+        // Normal token streaming
+        else {
+            currentStepMessage.innerHTML += content;
+        }
+
+        chat.scrollTop = chat.scrollHeight;
     };
 
     evtSource.onerror = () => {
         evtSource.close();
+        if (currentStepMessage) {
+            currentStepMessage.classList.remove("streaming");
+            currentStepMessage.classList.add("final");
+        }
     };
 });
-
