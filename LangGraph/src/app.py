@@ -9,7 +9,12 @@ from fastapi.responses import StreamingResponse
 from llm.workflow import compiled_graph
 from helper.helper import pretty_print_messages
 
+BASE_DIR = Path(__file__).resolve().parent
+FRONTEND_DIR = BASE_DIR / "frontend"
+
 app = FastAPI()
+
+app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
 
 class ChatRequest(BaseModel):
     prompt: str
@@ -41,21 +46,22 @@ async def stream(prompt: str):
             "messages": [HumanMessage(content=prompt)]
         }
 
-        async for message_chunk, metadata in compiled_graph.astream(
+        async for path, (message_chunk, metadata) in compiled_graph.astream(
             input_state,
             stream_mode="messages",
+            subgraphs=True
         ):
-            if message_chunk.content:
-                yield f"data: {json.dumps({'content': message_chunk.content})}\n\n"
+            content = message_chunk.content
+
+            if isinstance(content, str):
+                yield f"data: {json.dumps({'content': content})}\n\n"
+
+            elif isinstance(content, list):
+                for block in content:
+                    if block.get("type") == "text":
+                        yield f"data: {json.dumps({'content': block['text']})}\n\n"
 
     return StreamingResponse(gen(), media_type="text/event-stream")
-
-
-
-BASE_DIR = Path(__file__).resolve().parent
-FRONTEND_DIR = BASE_DIR / "frontend"
-
-app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
 
 @app.get("/")
 async def index():
