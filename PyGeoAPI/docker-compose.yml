@@ -45,6 +45,16 @@ services:
         python -m pip install --no-cache-dir ollama && \
         python -u ollama-model-pull.py
     restart: "no"
+
+  nominatim:
+    image: mediagis/nominatim:5.2
+    container_name: nominatim
+    environment:
+      PBF_URL: "https://download.geofabrik.de/europe/germany/nordrhein-westfalen/muenster-regbez-latest.osm.pbf"
+    ports:
+      - "8080:8080"
+    stdin_open: true
+    tty: true
   #app:
   #  build:
   #    context: ./app
@@ -57,5 +67,8 @@ services:
   #  depends_on:
   #    - pygeoapi
 
+
+
 volumes:
   ollama: {}
+  photon_data:
