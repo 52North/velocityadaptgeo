@@ -8,13 +8,12 @@ from langchain.agents import create_agent
 
 llm = ChatOllama(
     model="llama3.2:3b",
-    temperature=0.1,
+    temperature=0,
     base_url="http://localhost:11434",
     streaming=True,
     reasoning=False,
     keep_alive="10m",
 )
-
 
 async def agent_node(state):
     messages = state.get("messages", [])
