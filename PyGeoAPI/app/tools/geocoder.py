@@ -36,10 +36,11 @@ async def geocode(query: str) -> dict:
         raise RuntimeError(f"Nominatim backend error: {r.status_code}")
 
     data = r.json()
+    print("Nominatim response data:", data)
+    print("Query was:", params)
     if not data:
         return {"query": query, "lat": None, "lon": None}
 
-    print("Nominatim response data:", data)
     first = data[0]
     return {
         "query": query,
@@ -89,3 +90,8 @@ async def reverse_geocode(lat: float, lon: float) -> dict:
     }
 
     return {"lat": lat, "lon": lon, "count": 1, "results": [result]}
+
+# Just testing
+if __name__ == "__main__":
+    import asyncio
+    asyncio.run(geocode("Muenster Bahnhof"))

@@ -37,7 +37,6 @@ async def buffer_geometry(geometry: dict, distance: float) -> dict:
     """
     Delegates buffering to pygeoapi OGC API Processes.
     """
-
     payload = {
         "inputs": {
             "geometry": geometry,

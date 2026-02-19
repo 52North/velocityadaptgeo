@@ -1,10 +1,48 @@
 from langgraph.graph import StateGraph, END
-from langgraph.graph.message import MessagesState
+from langgraph.graph.message import add_messages
 from langchain_ollama import ChatOllama
-
-from langchain_core.messages import SystemMessage
-from llm.tools.mcp_client import load_mcp_tools
+from langchain_core.messages import SystemMessage, HumanMessage,  ToolMessage
 from langchain.agents import create_agent
+from llm.tools.mcp_client import load_mcp_tools
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+
+
+from typing import TypedDict, Sequence, Annotated, Optional, Any
+import json
+
+def all_tool_messages(messages):
+    return [m for m in (messages or []) if isinstance(m, ToolMessage)]
+
+def serialize_tool_messages(messages) -> str:
+    tool_msgs = [m for m in (messages or []) if isinstance(m, ToolMessage)]
+    packed = []
+    for tm in tool_msgs:
+        item = {"tool": getattr(tm, "name", None)}
+        # Prefer structured artifacts if present
+        art = getattr(tm, "artifact", None) or {}
+        if isinstance(art, dict) and "structured_content" in art:
+            item["structured_content"] = art["structured_content"]
+        else:
+            item["content"] = tm.content
+        packed.append(item)
+
+    return json.dumps(packed, ensure_ascii=False, indent=2)
+
+class WorkflowState(TypedDict, total=False):
+    messages: Annotated[Sequence, add_messages]
+
+    # planning/execution bookkeeping
+    plan: list[dict]                 # ordered steps from manager
+    current_step: int                # index into plan
+    next_action: str                 # router decision
+
+    tools_meta: list[dict]
+
+    # optional tracking/debug
+    decision_history: list
+    tool_chain: list                 # tool calls made in latest agent run
+    current_context: dict            # free-form context between steps
+
 
 llm = ChatOllama(
     model="llama3.2:3b",
@@ -15,92 +53,229 @@ llm = ChatOllama(
     keep_alive="10m",
 )
 
-async def agent_node(state):
-    messages = state.get("messages", [])
 
-    print(f"[AGENT_NODE] Input message: {messages[-1].content if messages else 'None'}")
-
-    SYSTEM_MESSAGE = (
-        "You are a geospatial analysis assistant. Your task is to analyze the request and call appropriate tools."
-        "First resolve the location with the geocode tool, then use the resulting coordinates to perform any spatial analysis or data retrieval needed to answer the user's question."
-        "Only answer to the users request directly and do not suggest other actions."
-        "Ignore structured content when answering to the user, but use it when calling tools."
-    )
-
+async def tool_registry_node(state: WorkflowState) -> WorkflowState:
     mcp_tools = await load_mcp_tools()
-    print(f"[AGENT_NODE] Available tools: {[tool.name for tool in mcp_tools]}")
 
-    agent = create_agent(llm, mcp_tools, system_prompt=SYSTEM_MESSAGE)
-
-    result = await agent.ainvoke({"messages": messages})
-
-    # Extract and display tool calls from the result
-    print(f"\n[AGENT_NODE] Decision process:")
-    for msg in result["messages"]:
-        if hasattr(msg, 'tool_calls') and msg.tool_calls:
-            print(f"  → Tool calls decided: {msg.tool_calls}")
-        if hasattr(msg, 'name') and msg.name == 'tool':
-            print(f"  → Tool result from {msg.name}: {msg.content}")
-
-    return {
-        "messages": result["messages"]
-    }
-
-
-async def geocode_agent_node(state):
-    print("\n" + "="*80)
-    print("[GEOCODE_AGENT] Starting geocoding step")
-    print("="*80)
-
-    messages = state.get("messages", [])
-    user_input = messages[-1].content if messages else "None"
-    print(f"[GEOCODE_AGENT] User input: {user_input}")
-
-    SYSTEM_MESSAGE = (
-        "You are a geocoding specialist. Your task is to:"
-        "\n1. Extract the location name from the user request."
-        "\n2. Use the geocode tool to find the latitude and longitude of that location."
-        "\n3. Reformat the original question to include these exact coordinates."
-        "\n4. Provide only the reformatted question with coordinates included."
-        "\n\nBe precise with the location name and always include the coordinates in the reformatted question."
-    )
-    mcp_tools = await load_mcp_tools()
-    geocode_tool = [tool for tool in mcp_tools if tool.name == "geocode"]
-    print(f"[GEOCODE_AGENT] Using tools: {[tool.name for tool in geocode_tool]}")
-
-    agent = create_agent(llm, geocode_tool, system_prompt=SYSTEM_MESSAGE)
-
-    result = await agent.ainvoke({"messages": messages})
-
-    # Extract and display tool calls and results
-    print(f"\n[GEOCODE_AGENT] Decision process:")
-    for i, msg in enumerate(result["messages"]):
-        if hasattr(msg, 'tool_calls') and msg.tool_calls:
-            for tool_call in msg.tool_calls:
-                print(f"  → Tool call #{i}: {tool_call['name']}({tool_call['args']})")
-        elif hasattr(msg, 'name') and msg.name == 'geocode':
+    # Keep only metadata that helps planning (no executable objects stored in state)
+    tools_meta = []
+    for t in mcp_tools:
+        # Try to capture args schema where possible (varies by tool implementation)
+        args_schema = None
+        if hasattr(t, "args_schema") and t.args_schema:
             try:
-                import json
-                content = json.loads(msg.content[0]['text']) if isinstance(msg.content, list) else msg.content
-                print(f"  → Tool result: {content}")
-            except:
-                print(f"  → Tool result: {msg.content}")
-        elif hasattr(msg, 'content') and isinstance(msg.content, str):
-            print(f"  → Response: {msg.content[:200]}..." if len(msg.content) > 200 else f"  → Response: {msg.content}")
+                args_schema = t.args_schema.model_json_schema()
+            except Exception:
+                args_schema = str(t.args_schema)
 
-    print("="*80 + "\n")
+        tools_meta.append({
+            "name": getattr(t, "name", type(t).__name__),
+            "description": getattr(t, "description", "") or "",
+            "args_schema": args_schema,  # may be None
+        })
+
+    decision_history = state.get("decision_history", [])
+    decision_history.append({
+        "node": "tool_registry_node",
+        "tools_available": [tm["name"] for tm in tools_meta],
+        "reasoning": "Loaded MCP tools and stored metadata for planning/execution."
+    })
 
     return {
-        "messages": result["messages"]
+        "tools_meta": tools_meta,
+        "decision_history": decision_history,
+        "next_action": "plan",
     }
 
-graph = StateGraph(MessagesState)
 
-graph.add_node("geocode_agent", geocode_agent_node)
+MANAGER_SYSTEM = """You are a workflow manager for a geospatial assistant.
+You plan steps but you NEVER execute tools.
+
+A critical is the spatial correctness of the answer, so you MUST rely on the provided tools for any geospatial analysis, including geocoding, spatial queries, and geometry processing.
+The Geocoder should always be the first step.
+
+Rules:
+- You must plan using ONLY the tools listed under AVAILABLE_TOOLS.
+- Each step must be one logical action executable in one agent pass.
+- Any step that requires geometry (buffer, intersect, distance, etc.) MUST come AFTER geometry has been produced by geocoding or provided explicitly.
+- Each step must be one logical action executable in one agent pass.
+- Prefer: geocode -> analyze/retrieve -> answer.
+- Output only valid JSON without any explanation. This is IMPORTANT and MUST be followed strictly.
+- Do not include coordinates in the plan, as they are to be taken from the message context.
+
+Output:
+{
+  "plan": [
+    {
+      "name": "...",
+      "instruction": "...",
+      "expected_tools": ["..."]
+    },
+    {
+      "name": "...",
+      "instruction": "...",
+      "expected_tools": ["..."]
+    }
+  ]
+}
+"""
+
+async def management_node(state: WorkflowState) -> WorkflowState:
+    messages = state.get("messages", [])
+    tools_meta = state.get("tools_meta", [])
+
+    latest_user = None
+    for m in reversed(messages):
+        if isinstance(m, HumanMessage):
+            latest_user = m.content
+            break
+
+    if not latest_user:
+        return {"next_action": "end", "plan": [], "current_step": 0}
+
+    tools_blob = json.dumps(tools_meta, indent=2)
+
+    prompt = [
+        SystemMessage(content=MANAGER_SYSTEM),
+        HumanMessage(content=f"""AVAILABLE_TOOLS (use only these):
+        {tools_blob}
+
+        User request:
+        {latest_user}
+
+        Create the plan JSON now.""")
+    ]
+
+    resp = await llm.ainvoke(prompt)
+
+    text = resp.content.strip()
+    try:
+        data = json.loads(text)
+        plan = data.get("plan", [])
+        if not isinstance(plan, list):
+            plan = []
+    except json.JSONDecodeError:
+        plan = []
+
+    decision_history = state.get("decision_history", [])
+    decision_history.append({
+        "node": "management_node",
+        "plan": plan,
+        "reasoning": "Created ordered plan constrained to AVAILABLE_TOOLS."
+    })
+
+    return {
+        "plan": plan,
+        "current_step": 0,
+        "next_action": "run_step" if plan else "end",
+        "decision_history": decision_history,
+    }
+
+async def agent_node(state: WorkflowState) -> WorkflowState:
+    messages = state.get("messages", [])
+    plan = state.get("plan", [])
+    current_step = int(state.get("current_step", 0))
+
+    if current_step >= len(plan):
+        return {"next_action": "done"}
+
+    step = plan[current_step]
+    step_name = step.get("name", f"step_{current_step}")
+    step_instruction = step.get("instruction", "")
+    expected_tools = step.get("expected_tools", [])
+
+    print(f"[AGENT_NODE] Executing step {current_step+1}/{len(plan)}: {step_name}")
+    print(f"[AGENT_NODE] Step instruction: {step_instruction}")
+
+    mcp_tools = await load_mcp_tools()
+    tool_names = [t.name for t in mcp_tools]
+    print(f"[AGENT_NODE] Available tools: {tool_names}")
+
+    # IMPORTANT: agent must follow the manager step and execute only that step.
+
+
+    tool_msgs = serialize_tool_messages(messages)
+    print(f"[AGENT_NODE]tool messages: {tool_msgs}, step instruction: {step_instruction}")
+
+
+    SYSTEM_MESSAGE = f"""You are a geospatial analysis assistant.
+        You MUST execute ONLY the current step described below.
+
+        Data and tool output: {tool_msgs}
+        Current step instruction: {step_instruction}
+
+        Rules:
+        - Wait for the tool result, before fetching the next tool.
+        - If tools are needed, call them. Tool calling happens here.
+        - Do NOT plan additional future steps. Do NOT execute other steps.
+        - Use prior tool outputs already present in the conversation messages/state.
+        - After completing this step, respond with the minimal necessary result for this step.
+        - If this step is "answer", provide the final user-facing answer.
+
+        Ignore structured content when answering to the user, but use it when calling tools.
+        Make sure that the provided dictionary content is correctly formatted for tool calls (e.g. correct keys/values as per tool schema).
+        """
+
+    agent = create_agent(llm, mcp_tools, system_prompt=SYSTEM_MESSAGE, )
+    print(f"[AGENT_NODE] Invoking agent with current_instruction: {step_instruction}")
+
+    result = await agent.ainvoke({"messages": tool_msgs})
+    print(f"[AGENT_NODE] Agent result: {result}")
+    # collect tool calls made in this step (for logging)
+    tool_calls_made = []
+    for msg in result["messages"]:
+        if hasattr(msg, "tool_calls") and msg.tool_calls:
+            tool_calls_made.extend(msg.tool_calls)
+
+    decision_history = state.get("decision_history", [])
+    decision_history.append({
+        "node": "agent_node",
+        "step": {"index": current_step, "name": step_name},
+        "tool_calls": tool_calls_made,
+        "reasoning": "Executed exactly one planned step."
+    })
+
+    next_step = current_step + 1
+    next_action = "run_step" if next_step < len(plan) else "done"
+
+    return {
+        "messages": result["messages"],
+        "decision_history": decision_history,
+        "tool_chain": tool_calls_made,
+        "current_step": next_step,
+        "next_action": next_action,
+        "current_context": state.get("current_context", {}),
+    }
+
+def router(state: WorkflowState) -> str:
+    return state.get("next_action", "end")
+
+
+graph = StateGraph(WorkflowState)
+graph.add_node("tool_registry", tool_registry_node)
+graph.add_node("manager", management_node)
 graph.add_node("agent", agent_node)
-graph.set_entry_point("agent")
-#graph.add_edge("geocode_agent", "agent")
-graph.add_edge("agent", END)
+
+graph.set_entry_point("tool_registry")
+graph.add_edge("tool_registry", "manager")
+
+graph.add_conditional_edges(
+    "manager",
+    router,
+    {
+        "run_step": "agent",
+        "end": END,
+    },
+)
+
+graph.add_conditional_edges(
+    "agent",
+    router,
+    {
+        "run_step": "agent",  # keep executing next logical step
+        "done": END,          # plan complete
+        "end": END,
+    },
+)
 
 compiled_graph = graph.compile()
-
