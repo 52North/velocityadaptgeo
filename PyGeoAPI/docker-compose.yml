@@ -55,19 +55,28 @@ services:
       - "8080:8080"
     stdin_open: true
     tty: true
-  #app:
-  #  build:
-  #    context: ./app
-  #    dockerfile: Dockerfile
-  #  container_name: fastmcp
-  #  environment:
-  #    - PYGEOAPI_URL=http://pygeoapi:80
-  #  ports:
-  #    - "0.0.0.0:8001:8001"
-  #  depends_on:
-  #    - pygeoapi
 
+  mcp:
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+    container_name: fastmcp
+    environment:
+      - PYGEOAPI_URL=http://pygeoapi:80
+    ports:
+      - "0.0.0.0:8001:8001"
+    depends_on:
+      - pygeoapi
 
+  langgraph:
+    build:
+      context: ./LangGraph
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    depends_on:
+      - mcp
+    restart: unless-stopped
 
 volumes:
   ollama: {}
