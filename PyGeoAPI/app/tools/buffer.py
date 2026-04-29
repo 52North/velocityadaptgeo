@@ -4,7 +4,10 @@ from dotenv import load_dotenv
 from fastmcp import FastMCP
 import httpx
 from fastmcp.tools.tool import ToolResult
-from mcp.types import TextContent
+
+from geojson_pydantic.geometries import Geometry
+from models.result_models import GeoJSONResult
+from pydantic import TypeAdapter
 
 load_dotenv()
 PYGEOAPI_URL = os.getenv("PYGEOAPI_URL", "http://localhost:5000")
@@ -13,6 +16,9 @@ if PYGEOAPI_URL == "http://localhost:5000":
     warnings.warn("PYGEOAPI_URL is not set, using default: ", UserWarning)
 
 mcp = FastMCP(name="geometry")
+
+# Use TypeAdapter to safely parse dictionary responses into the Geometry Union
+geometry_adapter = TypeAdapter(Geometry)
 
 @mcp.tool(
     name="buffer_geometry",
@@ -33,18 +39,13 @@ mcp = FastMCP(name="geometry")
         "}"
     )
 )
-async def buffer_geometry(geometry: dict, distance: float) -> dict:
-    """
-    Delegates buffering to pygeoapi OGC API Processes.
-    """
+async def buffer_geometry(geometry: Geometry, distance: float) -> ToolResult:
     payload = {
         "inputs": {
-            "geometry": geometry,
+            "geometry": geometry.model_dump(),
             "distance": distance
         }
     }
-
-    print("Sending request to pygeoapi with payload:", payload)
 
     async with httpx.AsyncClient() as client:
         response = await client.post(
@@ -55,25 +56,12 @@ async def buffer_geometry(geometry: dict, distance: float) -> dict:
         )
         response.raise_for_status()
 
-    print("STATUS:", response.status_code)
-    print("HEADERS:", response.headers)
-    print("BODY:", repr(response.text))
-
     data = response.json()
+    result_data = data.get("outputs", {}).get("result") or data.get("result")
 
-    if "outputs" in data:
-        result = data["outputs"].get("result")
-    elif "result" in data:
-        result = data["result"]
-    else:
-        raise RuntimeError(f"Unexpected pygeoapi response: {data}")
-
-    return ToolResult(
-        content=[
-            TextContent(
-                type="text",
-                text="Geometry was successfully created."
-            )
-        ],
-        structured_content=result,
+    validated_result = GeoJSONResult(
+        message="Geometry successfully created.",
+        structured_content=geometry_adapter.validate_python(result_data)
     )
+
+    return validated_result.to_tool_result()
