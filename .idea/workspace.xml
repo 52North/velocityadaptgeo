@@ -5,46 +5,9 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="804b749e-05cc-4e13-8bf1-3d12cac5a635" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/PyGeoAPI/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/PyGeoAPI/.python-version" beforeDir="false" afterPath="$PROJECT_DIR$/.python-version" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/PyGeoAPI/LangGraph/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/LangGraph/.gitignore" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/PyGeoAPI/LangGraph/.python-version" beforeDir="false" afterPath="$PROJECT_DIR$/LangGraph/.python-version" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/PyGeoAPI/LangGraph/.vscode/launch.json" beforeDir="false" afterPath="$PROJECT_DIR$/LangGraph/.vscode/launch.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/PyGeoAPI/LangGraph/Dockerfile" beforeDir="false" afterPath="$PROJECT_DIR$/LangGraph/Dockerfile" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/PyGeoAPI/LangGraph/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/LangGraph/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/PyGeoAPI/LangGraph/pyproject.toml" beforeDir="false" afterPath="$PROJECT_DIR$/LangGraph/pyproject.toml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/PyGeoAPI/LangGraph/src/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/LangGraph/src/__init__.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/PyGeoAPI/LangGraph/src/app.py" beforeDir="false" afterPath="$PROJECT_DIR$/LangGraph/src/app.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/PyGeoAPI/LangGraph/src/frontend/app.js" beforeDir="false" afterPath="$PROJECT_DIR$/LangGraph/src/frontend/app.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/PyGeoAPI/LangGraph/src/frontend/index.html" beforeDir="false" afterPath="$PROJECT_DIR$/LangGraph/src/frontend/index.html" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/PyGeoAPI/LangGraph/src/frontend/styles.css" beforeDir="false" afterPath="$PROJECT_DIR$/LangGraph/src/frontend/styles.css" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/PyGeoAPI/LangGraph/src/helper/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/LangGraph/src/helper/__init__.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/PyGeoAPI/LangGraph/src/helper/helper.py" beforeDir="false" afterPath="$PROJECT_DIR$/LangGraph/src/helper/helper.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/PyGeoAPI/LangGraph/src/init/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/LangGraph/src/init/__init__.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/PyGeoAPI/LangGraph/src/llm/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/LangGraph/src/llm/__init__.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/PyGeoAPI/LangGraph/src/llm/state/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/LangGraph/src/llm/state/__init__.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/PyGeoAPI/LangGraph/src/llm/tools/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/LangGraph/src/llm/tools/__init__.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/PyGeoAPI/LangGraph/src/llm/tools/mcp_client.py" beforeDir="false" afterPath="$PROJECT_DIR$/LangGraph/src/llm/tools/mcp_client.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/PyGeoAPI/LangGraph/src/llm/tools/mcp_servers.json" beforeDir="false" afterPath="$PROJECT_DIR$/LangGraph/src/llm/tools/mcp_servers.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/PyGeoAPI/LangGraph/src/llm/workflow.py" beforeDir="false" afterPath="$PROJECT_DIR$/LangGraph/src/llm/workflow.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/PyGeoAPI/LangGraph/uv.lock" beforeDir="false" afterPath="$PROJECT_DIR$/LangGraph/uv.lock" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/PyGeoAPI/app/Dockerfile" beforeDir="false" afterPath="$PROJECT_DIR$/mcp/Dockerfile" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/PyGeoAPI/app/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/mcp/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/PyGeoAPI/app/app.py" beforeDir="false" afterPath="$PROJECT_DIR$/mcp/app.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/PyGeoAPI/app/models/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/mcp/models/__init__.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/PyGeoAPI/app/models/result_models.py" beforeDir="false" afterPath="$PROJECT_DIR$/mcp/models/result_models.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/PyGeoAPI/app/pyproject.toml" beforeDir="false" afterPath="$PROJECT_DIR$/mcp/pyproject.toml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/PyGeoAPI/app/tools/buffer.py" beforeDir="false" afterPath="$PROJECT_DIR$/mcp/tools/buffer.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/PyGeoAPI/app/tools/geocoder.py" beforeDir="false" afterPath="$PROJECT_DIR$/mcp/tools/geocoder.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/PyGeoAPI/app/uv.lock" beforeDir="false" afterPath="$PROJECT_DIR$/mcp/uv.lock" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/PyGeoAPI/docker-compose.yml" beforeDir="false" afterPath="$PROJECT_DIR$/docker-compose.yml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/PyGeoAPI/ollama/.env" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/PyGeoAPI/ollama/Dockerfile" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/PyGeoAPI/ollama/ollama-model-pull.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/PyGeoAPI/pygeoapi_instance/processes/buffer.py" beforeDir="false" afterPath="$PROJECT_DIR$/pygeoapi_instance/processes/buffer.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/PyGeoAPI/pygeoapi_instance/pygeoapi-config.yml" beforeDir="false" afterPath="$PROJECT_DIR$/pygeoapi_instance/pygeoapi-config.yml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/PyGeoAPI/pygeoapi_instance/toolings/example-requests.http" beforeDir="false" afterPath="$PROJECT_DIR$/pygeoapi_instance/toolings/example-requests.http" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/curl" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/LangGraph/src/llm/tools/mcp_servers.json" beforeDir="false" afterPath="$PROJECT_DIR$/LangGraph/src/llm/tools/mcp_servers.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/LangGraph/src/llm/workflow.py" beforeDir="false" afterPath="$PROJECT_DIR$/LangGraph/src/llm/workflow.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -145,7 +108,7 @@
       <workItem from="1768479780638" duration="11196000" />
       <workItem from="1777461135734" duration="5982000" />
       <workItem from="1777468610542" duration="5565000" />
-      <workItem from="1777484710472" duration="568000" />
+      <workItem from="1777484710472" duration="3608000" />
     </task>
     <servers />
   </component>

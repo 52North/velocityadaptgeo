@@ -9,6 +9,8 @@ import json
 
 from langchain_anthropic import ChatAnthropic
 import os
+import json
+import re
 
 from dotenv import load_dotenv
 
@@ -151,13 +153,23 @@ async def management_node(state: WorkflowState) -> WorkflowState:
     resp = await llm.ainvoke(prompt)
 
     text = resp.content.strip()
-    try:
-        data = json.loads(text)
-        plan = data.get("plan", [])
-        if not isinstance(plan, list):
-            plan = []
-    except json.JSONDecodeError:
-        plan = []
+    def parse_llm_json(text: str):
+        text = text.strip()
+
+        # remove any markdown fences
+        text = re.sub(r"```json", "", text)
+        text = re.sub(r"```", "", text)
+
+        # extract JSON object only
+        match = re.search(r"\{.*\}", text, re.DOTALL)
+        if not match:
+            return None
+
+        return json.loads(match.group(0))
+
+
+    data = parse_llm_json(resp.content)
+    plan = data.get("plan", []) if data else []
 
     decision_history = state.get("decision_history", [])
     decision_history.append({
@@ -193,17 +205,10 @@ async def agent_node(state: WorkflowState) -> WorkflowState:
     tool_names = [t.name for t in mcp_tools]
     print(f"[AGENT_NODE] Available tools: {tool_names}")
 
-    # IMPORTANT: agent must follow the manager step and execute only that step.
-
-
-    tool_msgs = serialize_tool_messages(messages)
-    print(f"[AGENT_NODE]tool messages: {tool_msgs}, step instruction: {step_instruction}")
-
-
-    SYSTEM_MESSAGE = f"""You are a geospatial analysis assistant.
+    AGENT_SYSTEM_MESSAGE = f"""You are a geospatial analysis assistant.
         You MUST execute ONLY the current step described below.
 
-        Data and tool output: {tool_msgs}
+        Available tools: {[t.name for t in mcp_tools]}
         Current step instruction: {step_instruction}
 
         Rules:
@@ -218,10 +223,19 @@ async def agent_node(state: WorkflowState) -> WorkflowState:
         Make sure that the provided dictionary content is correctly formatted for tool calls (e.g. correct keys/values as per tool schema).
         """
 
-    agent = create_agent(llm, mcp_tools, system_prompt=SYSTEM_MESSAGE, )
+    agent = create_agent(llm, mcp_tools, system_prompt=AGENT_SYSTEM_MESSAGE, )
     print(f"[AGENT_NODE] Invoking agent with current_instruction: {step_instruction}")
 
-    result = await agent.ainvoke({"messages": tool_msgs})
+    agent_input = [
+        SystemMessage(content=AGENT_SYSTEM_MESSAGE),
+        *messages,
+        HumanMessage(content=step_instruction),
+    ]
+
+    result = await agent.ainvoke({
+        "messages": agent_input
+    })
+
     print(f"[AGENT_NODE] Agent result: {result}")
     # collect tool calls made in this step (for logging)
     tool_calls_made = []
@@ -266,7 +280,7 @@ graph.add_conditional_edges(
     router,
     {
         "run_step": "agent",
-        "end": END,
+        "end": END
     },
 )
 
