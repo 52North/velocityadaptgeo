@@ -6,8 +6,8 @@ from langchain_core.messages import HumanMessage
 from pathlib import Path
 import json
 from fastapi.responses import StreamingResponse
-from llm.workflow import compiled_graph
-from helper.helper import pretty_print_messages
+from src.llm.workflow import compiled_graph
+from src.helper.helper import pretty_print_messages
 
 BASE_DIR = Path(__file__).resolve().parent
 FRONTEND_DIR = BASE_DIR / "frontend"

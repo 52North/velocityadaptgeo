@@ -17,9 +17,6 @@ if PYGEOAPI_URL == "http://localhost:5000":
 
 mcp = FastMCP(name="geometry")
 
-# Use TypeAdapter to safely parse dictionary responses into the Geometry Union
-geometry_adapter = TypeAdapter(Geometry)
-
 @mcp.tool(
     name="buffer_geometry",
     description=(
@@ -39,11 +36,13 @@ geometry_adapter = TypeAdapter(Geometry)
         "}"
     )
 )
-async def buffer_geometry(geometry: Geometry, distance: float) -> ToolResult:
+async def buffer_geometry(geometry: dict, distance: float) -> ToolResult:
+    print("RAW geometry:", geometry)
+
     payload = {
         "inputs": {
-            "geometry": geometry.model_dump(),
-            "distance": distance
+            "geometry": geometry,
+            "distance": float(distance)
         }
     }
 
@@ -59,9 +58,10 @@ async def buffer_geometry(geometry: Geometry, distance: float) -> ToolResult:
     data = response.json()
     result_data = data.get("outputs", {}).get("result") or data.get("result")
 
-    validated_result = GeoJSONResult(
-        message="Geometry successfully created.",
-        structured_content=geometry_adapter.validate_python(result_data)
-    )
+    import json
+    print("Geometry result_data:", json.dumps(result_data, indent=2))
 
-    return validated_result.to_tool_result()
+    return GeoJSONResult(
+        message="Geometry successfully created.",
+        structured_content=result_data
+    ).to_tool_result()

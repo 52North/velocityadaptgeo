@@ -3,12 +3,25 @@ from langgraph.graph.message import add_messages
 from langchain_ollama import ChatOllama
 from langchain_core.messages import SystemMessage, HumanMessage,  ToolMessage
 from langchain.agents import create_agent
-from llm.tools.mcp_client import load_mcp_tools
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-
-
+from src.llm.tools.mcp_client import load_mcp_tools
 from typing import TypedDict, Sequence, Annotated, Optional, Any
 import json
+
+from langchain_anthropic import ChatAnthropic
+import os
+
+from dotenv import load_dotenv
+
+# override=True forces reloading of variables from the .env file
+load_dotenv(override=True)
+
+llm = ChatAnthropic(
+    model="claude-haiku-4-5-20251001",
+    temperature=0,
+    api_key=os.environ.get("ANTHROPIC_API_KEY"),
+    streaming=True,
+    max_retries=3
+)
 
 def all_tool_messages(messages):
     return [m for m in (messages or []) if isinstance(m, ToolMessage)]
@@ -42,17 +55,6 @@ class WorkflowState(TypedDict, total=False):
     decision_history: list
     tool_chain: list                 # tool calls made in latest agent run
     current_context: dict            # free-form context between steps
-
-
-llm = ChatOllama(
-    model="llama3.2:3b",
-    temperature=0,
-    base_url="http://ollama:11434",
-    streaming=True,
-    reasoning=False,
-    keep_alive="10m",
-)
-
 
 async def tool_registry_node(state: WorkflowState) -> WorkflowState:
     mcp_tools = await load_mcp_tools()
