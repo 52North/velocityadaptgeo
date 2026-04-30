@@ -9,3 +9,6 @@ wheels/
 .DS_Store
 # Virtual environments
 .venv
+# secrets
+.env
+!.env.sample
