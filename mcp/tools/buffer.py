@@ -64,4 +64,4 @@ async def buffer_geometry(geometry: dict, distance: float) -> ToolResult:
     return GeoJSONResult(
         message="Geometry successfully created.",
         structured_content=result_data
-    ).to_tool_result()
+    )

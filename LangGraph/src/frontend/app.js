@@ -21,6 +21,7 @@ form.addEventListener("submit", (e) => {
 
     let currentStep = null;
     let currentStepMessage = null;
+    let currentStepText = "";
 
     const evtSource = new EventSource(
         `/api/stream?prompt=${encodeURIComponent(prompt)}`
@@ -29,54 +30,87 @@ form.addEventListener("submit", (e) => {
     evtSource.onmessage = (event) => {
         const data = JSON.parse(event.data);
 
+        const messageType = data.type; 
         const step = data.metadata?.langgraph_step;
+        const node = data.metadata?.langgraph_node;
         const content = data.content;
 
         if (!step) return;
 
-        // Step change, now a new tool is talking.
         if (step !== currentStep) {
             currentStep = step;
             currentStepMessage = null;
+            currentStepText = "";
         }
 
         if (!currentStepMessage) {
             currentStepMessage = addMessage("assistant", "");
+            currentStepMessage.classList.add(`type-${messageType}`);
+            
+            if (node) {
+                currentStepMessage.classList.add(`node-${node}`);
+            }
+            if (node === "manager") {
+                        // Much cleaner, styling moved to CSS
+                        currentStepMessage.innerHTML = `
+                            <details class="manager-details">
+                                <summary>Manager Activity</summary>
+                                <pre class="content"></pre>
+                            </details>
+                        `;
+                    }
         }
 
-        // Streaming text for fancy output
         if (content) {
-            currentStepMessage.innerHTML += content;
-        }
+            currentStepText += content;
+            
+            const targetContainer = node === "manager" 
+                ? currentStepMessage.querySelector('.content') 
+                : currentStepMessage;
 
-        // Rendering artifact geometry on map
-        if (data.artifact?.structured_content) {
+            if (messageType === "tool") {
+                currentStepMessage.style.fontStyle = "italic";
+                currentStepMessage.style.color = "#666";
+                
+                try {
+                    const parsedContent = JSON.parse(currentStepText);
+                    
+                    if (parsedContent.message && parsedContent.structured_content) {
+                        // It's our map output
+                        targetContainer.innerHTML = `<strong>Action (${node}):</strong> ${parsedContent.message}`;
+                        
+                        const geoJsonFeature = {
+                            "type": "Feature",
+                            "geometry": parsedContent.structured_content,
+                            "properties": {}
+                        };
 
-            const geometry = data.artifact.structured_content;
-
-            console.log("Artifact received:");
-            console.log(data.artifact);
-
-            console.log("Structured geometry:");
-            console.log(geometry);
-
-            try {
-                if (currentGeometryLayer) {
-                    map.removeLayer(currentGeometryLayer);
+                        if (currentGeometryLayer) {
+                            map.removeLayer(currentGeometryLayer);
+                        }
+                        currentGeometryLayer = L.geoJSON(geoJsonFeature).addTo(map);
+                        map.fitBounds(currentGeometryLayer.getBounds());
+                        
+                    } else {
+                        // FIX: It is valid JSON, but not a map output. Render it readable.
+                        targetContainer.innerHTML = `<strong>Action (${node}):</strong><br/>
+                        <pre style="margin: 5px 0 0 0; font-size: 0.9em;">${JSON.stringify(parsedContent, null, 2)}</pre>`;
+                    }
+                    
+                } catch (e) {
+                    // It is incomplete or plain text
+                    targetContainer.innerHTML = currentStepText.replace(/\n/g, '<br>');
                 }
-
-                currentGeometryLayer = L.geoJSON(geometry).addTo(map);
-                map.fitBounds(currentGeometryLayer.getBounds());
-
-                console.log("Geometry rendered successfully.");
-            } catch (err) {
-                console.error("Failed to render geometry:", err);
+                } else if (node === "manager") {
+                // Strip the ```json and ``` backticks from the text
+                targetContainer.textContent = currentStepText.replace(/```(json)?/gi, '').trim();
+            } else {
+                targetContainer.innerHTML = currentStepText.replace(/\n/g, '<br>');
             }
         }
 
         chat.scrollTop = chat.scrollHeight;
     };
-
 
 
     evtSource.onerror = () => {

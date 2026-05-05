@@ -22,6 +22,8 @@ services:
     tty: true
 
   mcp:
+    deploy:
+      replicas: 0 # Instance to 0 to disable service
     build:
       context: mcp
       dockerfile: Dockerfile
@@ -34,6 +36,8 @@ services:
       - pygeoapi
 
   langgraph:
+    deploy:
+      replicas: 0 # Instance to 0 to disable service
     build:
       context: ./LangGraph
       dockerfile: Dockerfile
