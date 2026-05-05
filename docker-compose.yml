@@ -43,8 +43,10 @@ services:
       dockerfile: Dockerfile
     ports:
       - "8000:8000"
+    dns:
+      - 8.8.8.8
     env_file:
-      - ./langgraph/.env
+      - ./LangGraph/.env
     depends_on:
       - mcp
     restart: unless-stopped
