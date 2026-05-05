@@ -1,4 +1,25 @@
 import json
+from langchain_core.messages import ToolMessage
+
+
+def all_tool_messages(messages):
+    return [m for m in (messages or []) if isinstance(m, ToolMessage)]
+
+
+def serialize_tool_messages(messages) -> str:
+    tool_msgs = [m for m in (messages or []) if isinstance(m, ToolMessage)]
+    packed = []
+    for tm in tool_msgs:
+        item = {"tool": getattr(tm, "name", None)}
+        # Prefer structured artifacts if present
+        art = getattr(tm, "artifact", None) or {}
+        if isinstance(art, dict) and "structured_content" in art:
+            item["structured_content"] = art["structured_content"]
+        else:
+            item["content"] = tm.content
+        packed.append(item)
+
+    return json.dumps(packed, ensure_ascii=False, indent=2)
 
 
 def pretty_print_messages(messages):
