@@ -1,6 +1,9 @@
 from fastmcp import FastMCP
 import tools.buffer
 import tools.geocoder
+import tools.regbez
+import tools.point_in_polygon
+
 
 mcp = FastMCP(name="geometry")
 
@@ -10,6 +13,14 @@ mcp.add_tool(
 
 mcp.add_tool(
     tools.buffer.buffer_geometry
+)
+
+mcp.add_tool(
+   tools.regbez.search_district
+)
+
+mcp.add_tool(
+   tools.point_in_polygon.check_point_in_polygon
 )
 
 #mcp.add_tool(

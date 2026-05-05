@@ -85,9 +85,6 @@ form.addEventListener("submit", (e) => {
                             "properties": {}
                         };
 
-                        if (currentGeometryLayer) {
-                            map.removeLayer(currentGeometryLayer);
-                        }
                         currentGeometryLayer = L.geoJSON(geoJsonFeature).addTo(map);
                         map.fitBounds(currentGeometryLayer.getBounds());
                         
