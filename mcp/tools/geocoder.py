@@ -1,8 +1,10 @@
 import os
 import warnings
 from fastmcp import FastMCP
+from fastmcp.tools.tool import ToolResult
 import httpx
 from dotenv import load_dotenv
+from models.result_models import GeoJSONResult
 
 load_dotenv()
 NOMINATIM_BASE_URL = os.getenv("NOMINATIM_BASE_URL", "http://localhost:8080")
@@ -19,34 +21,48 @@ mcp = FastMCP(name="geometry")
     description=(
         "This tool is for geocoding place names into latitude and longitude coordinates. \n"
         "- Do NOT provide GeoJSON manually."
-        "- The tool returns structured geocoding results including lat/lon."
+        "- The tool returns structured geocoding results including lat/lon as a GeoJSON Point."
         "\n"
         "CORRECT USAGE EXAMPLE:\n"
         "{\n"
-        "  \"query\": \"Berlin\",\n"
+        "  \"query\": \"Berlin\"\n"
         "}"
     )
 )
-async def geocode(query: str) -> dict:
-    params = {"q": query, "format": "json", "limit": 1}  # only need the first result
+async def geocode(query: str) -> ToolResult:
+    params = {"q": query, "format": "json", "limit": 1}
     async with httpx.AsyncClient(timeout=10) as client:
         r = await client.get(f"{NOMINATIM_BASE_URL}/search", params=params)
 
     if r.status_code != 200:
-        raise RuntimeError(f"Nominatim backend error: {r.status_code}")
+        return GeoJSONResult(
+            message=f"Nominatim backend error: {r.status_code}",
+            structured_content={}
+        )
 
     data = r.json()
     print("Nominatim response data:", data)
     print("Query was:", params)
+    
     if not data:
-        return {"query": query, "lat": None, "lon": None}
+        return GeoJSONResult(
+            message=f"Location '{query}' not found.",
+            structured_content={}
+        )
 
     first = data[0]
-    return {
-        "query": query,
-        "lat": float(first.get("lat")),
-        "lon": float(first.get("lon"))
+    lon = float(first.get("lon"))
+    lat = float(first.get("lat"))
+    
+    geometry = {
+        "type": "Point",
+        "coordinates": [lon, lat]
     }
+    
+    return GeoJSONResult(
+        message=f"Successfully geocoded '{query}'.",
+        structured_content=geometry
+    )
 
 
 @mcp.tool(
@@ -59,7 +75,7 @@ async def geocode(query: str) -> dict:
         "- `lon` MUST be a plain floating-point number."
         "- Do NOT pass coordinates as strings."
         "- Do NOT wrap values in helper objects."
-        "- The tool returns structured location information."
+        "- The tool returns a GeoJSON Point representing the location."
         "\n"
         "CORRECT USAGE EXAMPLE:\n"
         "{\n"
@@ -68,30 +84,32 @@ async def geocode(query: str) -> dict:
         "}"
     )
 )
-async def reverse_geocode(lat: float, lon: float) -> dict:
+async def reverse_geocode(lat: float, lon: float) -> ToolResult:
     params = {"lat": lat, "lon": lon, "format": "json", "addressdetails": 1}
     async with httpx.AsyncClient(timeout=10) as client:
         r = await client.get(f"{NOMINATIM_BASE_URL}/reverse", params=params)
 
     if r.status_code != 200:
-        raise RuntimeError(f"Nominatim backend error: {r.status_code}")
+        return GeoJSONResult(
+            message=f"Nominatim backend error: {r.status_code}",
+            structured_content={}
+        )
 
     data = r.json()
-    address = data.get("address", {})
-
-    result = {
-        "name": data.get("display_name"),
-        "country": address.get("country"),
-        "city": address.get("city") or address.get("town") or address.get("village"),
-        "postcode": address.get("postcode"),
-        "lat": float(data.get("lat")),
-        "lon": float(data.get("lon")),
-        "raw": data
+    if "error" in data:
+         return GeoJSONResult(
+            message=f"Reverse geocode failed: {data['error']}",
+            structured_content={}
+        )
+        
+    display_name = data.get("display_name", "Unknown Location")
+    
+    geometry = {
+        "type": "Point",
+        "coordinates": [lon, lat]
     }
 
-    return {"lat": lat, "lon": lon, "count": 1, "results": [result]}
-
-# Just testing
-if __name__ == "__main__":
-    import asyncio
-    asyncio.run(geocode("Muenster Bahnhof"))
+    return GeoJSONResult(
+        message=f"Successfully reverse geocoded coordinates to: {display_name}",
+        structured_content=geometry
+    )
