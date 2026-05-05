@@ -39,14 +39,17 @@ async def chat(req: ChatRequest):
     return ChatResponse(response=assistant_message)
 
 @app.get("/api/stream")
-async def stream(prompt: str):
+async def stream(prompt: str, thread_id: str):
     async def gen():
         input_state = {
             "messages": [HumanMessage(content=prompt)]
         }
 
+        config = {"configurable": {"thread_id": thread_id}}
+
         async for path, (message_chunk, metadata) in compiled_graph.astream(
             input_state,
+            config=config,
             stream_mode="messages",
             subgraphs=True
         ):

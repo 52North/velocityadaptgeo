@@ -1,6 +1,8 @@
 const form = document.getElementById("chat-form");
 const input = document.getElementById("prompt");
 
+const threadId = crypto.randomUUID();
+
 function addMessage(role, text = "") {
     const div = document.createElement("div");
     div.classList.add("message", role);
@@ -24,7 +26,7 @@ form.addEventListener("submit", (e) => {
     let currentStepText = "";
 
     const evtSource = new EventSource(
-        `/api/stream?prompt=${encodeURIComponent(prompt)}`
+        `/api/stream?prompt=${encodeURIComponent(prompt)}&thread_id=${encodeURIComponent(threadId)}`
     );
 
     evtSource.onmessage = (event) => {
@@ -51,7 +53,6 @@ form.addEventListener("submit", (e) => {
                 currentStepMessage.classList.add(`node-${node}`);
             }
             if (node === "manager") {
-                        // Much cleaner, styling moved to CSS
                         currentStepMessage.innerHTML = `
                             <details class="manager-details">
                                 <summary>Manager Activity</summary>
@@ -76,7 +77,6 @@ form.addEventListener("submit", (e) => {
                     const parsedContent = JSON.parse(currentStepText);
                     
                     if (parsedContent.message && parsedContent.structured_content) {
-                        // It's our map output
                         targetContainer.innerHTML = `<strong>Action (${node}):</strong> ${parsedContent.message}`;
                         
                         const geoJsonFeature = {
@@ -89,17 +89,14 @@ form.addEventListener("submit", (e) => {
                         map.fitBounds(currentGeometryLayer.getBounds());
                         
                     } else {
-                        // FIX: It is valid JSON, but not a map output. Render it readable.
                         targetContainer.innerHTML = `<strong>Action (${node}):</strong><br/>
                         <pre style="margin: 5px 0 0 0; font-size: 0.9em;">${JSON.stringify(parsedContent, null, 2)}</pre>`;
                     }
                     
                 } catch (e) {
-                    // It is incomplete or plain text
                     targetContainer.innerHTML = currentStepText.replace(/\n/g, '<br>');
                 }
                 } else if (node === "manager") {
-                // Strip the ```json and ``` backticks from the text
                 targetContainer.textContent = currentStepText.replace(/```(json)?/gi, '').trim();
             } else {
                 targetContainer.innerHTML = currentStepText.replace(/\n/g, '<br>');
@@ -119,8 +116,7 @@ form.addEventListener("submit", (e) => {
     };
 });
 
-// Leaflet Map Setup
-const map = L.map("map").setView([52.52, 13.405], 13); // Muenster default
+const map = L.map("map").setView([52.52, 13.405], 13); 
 
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
     attribution: "&copy; OpenStreetMap contributors"

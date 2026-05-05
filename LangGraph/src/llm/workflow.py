@@ -1,5 +1,6 @@
 from langgraph.graph import StateGraph, END
 from langchain_anthropic import ChatAnthropic
+from langgraph.checkpoint.memory import MemorySaver
 import os
 from dotenv import load_dotenv
 from src.llm.state.state import WorkflowState
@@ -52,4 +53,6 @@ graph.add_conditional_edges(
     },
 )
 
-compiled_graph = graph.compile()
+memory = MemorySaver()
+
+compiled_graph = graph.compile(checkpointer=memory)

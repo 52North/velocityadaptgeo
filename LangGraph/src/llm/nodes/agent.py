@@ -45,14 +45,18 @@ async def agent_node(state: WorkflowState, llm) -> WorkflowState:
     print(f"[AGENT_NODE] Invoking agent with current_instruction: {step_instruction}")
 
     agent_input = [
-        SystemMessage(content=AGENT_SYSTEM_MESSAGE),
         *messages,
         HumanMessage(content=step_instruction),
     ]
 
-    result = await agent.ainvoke({
-        "messages": agent_input
-    })
+    try:
+        result = await agent.ainvoke({
+            "messages": agent_input
+        })
+    except Exception as e:
+        print("ANTHROPIC API ERROR CAUGHT:")
+        print(str(e)) 
+        raise e
 
     print(f"[AGENT_NODE] Agent result: {result}")
     # collect tool calls made in this step (for logging)
