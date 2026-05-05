@@ -217,7 +217,6 @@ async def agent_node(state: WorkflowState) -> WorkflowState:
         - Do NOT plan additional future steps. Do NOT execute other steps.
         - Use prior tool outputs already present in the conversation messages/state.
         - After completing this step, respond with the minimal necessary result for this step.
-        - If this step is "answer", provide the final user-facing answer.
 
         Ignore structured content when answering to the user, but use it when calling tools.
         Make sure that the provided dictionary content is correctly formatted for tool calls (e.g. correct keys/values as per tool schema).
