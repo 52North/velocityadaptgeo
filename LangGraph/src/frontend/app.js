@@ -115,8 +115,8 @@ form.addEventListener("submit", (e) => {
         }
     };
 });
-
-const map = L.map("map").setView([52.52, 13.405], 13); 
+//Münster coords
+const map = L.map("map").setView([51.9607, 7.621], 13);
 
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
     attribution: "&copy; OpenStreetMap contributors"
