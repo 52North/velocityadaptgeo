@@ -31,8 +31,17 @@ mcp = FastMCP(name="geometry")
 )
 async def geocode(query: str) -> ToolResult:
     params = {"q": query, "format": "json", "limit": 1}
-    async with httpx.AsyncClient(timeout=10) as client:
-        r = await client.get(f"{NOMINATIM_BASE_URL}/search", params=params)
+    # async with httpx.AsyncClient(timeout=10) as client:
+    #     r = await client.get(f"{NOMINATIM_BASE_URL}/search", params=params)
+
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            r = await client.get(f"{NOMINATIM_BASE_URL}/search", params=params)
+    except httpx.RequestError as e:
+        return GeoJSONResult(
+            message=f"Nominatim network error: {str(e)}",
+            structured_content={}
+        )
 
     if r.status_code != 200:
         return GeoJSONResult(
@@ -86,8 +95,16 @@ async def geocode(query: str) -> ToolResult:
 )
 async def reverse_geocode(lat: float, lon: float) -> ToolResult:
     params = {"lat": lat, "lon": lon, "format": "json", "addressdetails": 1}
-    async with httpx.AsyncClient(timeout=10) as client:
-        r = await client.get(f"{NOMINATIM_BASE_URL}/reverse", params=params)
+    # async with httpx.AsyncClient(timeout=10) as client:
+    #     r = await client.get(f"{NOMINATIM_BASE_URL}/reverse", params=params)
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            r = await client.get(f"{NOMINATIM_BASE_URL}/search", params=params)
+    except httpx.RequestError as e:
+        return GeoJSONResult(
+            message=f"Nominatim network error: {str(e)}",
+            structured_content={}
+        )
 
     if r.status_code != 200:
         return GeoJSONResult(
