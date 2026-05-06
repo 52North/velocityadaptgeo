@@ -36,6 +36,11 @@ async def load_mcp_tools():
     config_path = os.path.join(os.path.dirname(__file__), "mcp_servers.json")
     with open(config_path, "r") as f:
         mcp_config = json.load(f)
+
+    env_url = os.getenv("MCP_CLIENT_URL", "http://localhost:8001/mcp")
+    if env_url and "geometry" in mcp_config:
+        mcp_config["geometry"]["url"] = env_url
+
     client = MultiServerMCPClient(mcp_config)
 
     # Get all MCP tools from the configured servers
