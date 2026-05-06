@@ -15,5 +15,7 @@ class GeoJSONResult(BaseModel):
     @field_validator("structured_content", mode="before")
     @classmethod
     def validate_geometry(cls, v):
+        if not v:  # Catch {} or None
+            return {}
         geom = geometry_adapter.validate_python(v)
         return json.loads(json.dumps(geom.model_dump(mode="json")))
