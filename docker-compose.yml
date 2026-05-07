@@ -48,9 +48,6 @@ services:
       - 8.8.8.8
     env_file:
       - ./LangGraph/.env
-    environment:
-      - MCP_CLIENT_URL=http://mcp:8001/mcp
-#      - ANTHROPIC_API_KEY=
     depends_on:
       - mcp
     restart: unless-stopped

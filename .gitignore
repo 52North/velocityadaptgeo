@@ -7,6 +7,9 @@ wheels/
 *.egg-info
 
 .DS_Store
+# ide settings
+.vscode
+.idea
 # Virtual environments
 .venv
 # secrets
