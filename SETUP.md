@@ -5,7 +5,9 @@ create `.env` in `LangGraph/` and paste the LLM key there
 cp LangGraph/.env.sample LangGraph/.env
 ```
 ## dev-setup
-within `docker-compose.yml` set `replicas` to `0` for `LangGraph` and `mcp` services
+```bash
+docker compose up
+```
 
 start them locally from their respective dirs:
 ```bash
