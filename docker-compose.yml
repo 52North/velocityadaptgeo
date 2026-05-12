@@ -22,12 +22,11 @@ services:
     tty: true
 
   mcp:
-    deploy:
-      replicas: 1 # Instance to 0 to disable service
     build:
       context: mcp
       dockerfile: Dockerfile
     container_name: fastmcp
+    profiles: [ "mcp" ]
     environment:
       - PYGEOAPI_URL=http://pygeoapi:80
       - NOMINATIM_BASE_URL=http://nominatim:8080
@@ -37,8 +36,7 @@ services:
       - pygeoapi
 
   langgraph:
-    deploy:
-      replicas: 1 # Instance to 0 to disable service
+    profiles: [ "langgraph" ]
     build:
       context: ./LangGraph
       dockerfile: Dockerfile
