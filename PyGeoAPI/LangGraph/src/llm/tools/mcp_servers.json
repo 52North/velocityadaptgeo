@@ -1,6 +1,0 @@
-{
-    "geometry": {
-        "transport": "http",
-        "url": "http://mcp:8001/mcp"
-    }
-}

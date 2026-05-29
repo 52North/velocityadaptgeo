@@ -1,0 +1,15 @@
+[project]
+name = "mcp-pygeoapi"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.128.0",
+    "fastmcp==3.0.0b2",
+    "geojson-pydantic>=2.1.1",
+    "httpx>=0.28.1",
+    "pygeoapi>=0.22.0",
+    "shapely>=2.1.2",
+    "uvicorn>=0.40.0",
+]
