@@ -1,13 +1,14 @@
 from src.llm.state.state import WorkflowState
 from src.llm.tools.mcp_client import load_mcp_tools
-
+# After
+from src.llm.tools.ogc_tools import load_ogc_tools
 
 async def tool_registry_node(state: WorkflowState) -> WorkflowState:
-    mcp_tools = await load_mcp_tools()
+    tools = await load_mcp_tools() #old MCP-based tool loading
 
     # Keep only metadata that helps planning (no executable objects stored in state)
     tools_meta = []
-    for t in mcp_tools:
+    for t in tools:
         # Try to capture args schema where possible (varies by tool implementation)
         args_schema = None
         if hasattr(t, "args_schema") and t.args_schema:

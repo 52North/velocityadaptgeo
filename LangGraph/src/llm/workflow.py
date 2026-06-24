@@ -1,12 +1,21 @@
-from langgraph.graph import StateGraph, END
+import os
+from functools import partial
+
+from dotenv import load_dotenv
 from langchain_anthropic import ChatAnthropic
 from langgraph.checkpoint.memory import MemorySaver
-import os
-from dotenv import load_dotenv
-from src.llm.state.state import WorkflowState
-from src.llm.nodes import tool_registry_node, management_node, agent_node, router
+from langgraph.graph import END, StateGraph
 
-# override=True forces reloading of variables from the .env file
+from src.llm.nodes import (
+    action_router,
+    builder_node,
+    management_node,
+    retriever_node,
+    tool_registry_node,
+    validator_node,
+)
+from src.llm.state.state import WorkflowState
+
 load_dotenv(override=True)
 
 llm = ChatAnthropic(
@@ -14,45 +23,33 @@ llm = ChatAnthropic(
     temperature=0,
     api_key=os.environ.get("ANTHROPIC_API_KEY"),
     streaming=True,
-    max_retries=3
+    max_retries=3,
 )
 
-
-# Wrapper functions to pass llm to nodes
-async def manager_node_wrapper(state):
-    return await management_node(state, llm)
-
-async def agent_node_wrapper(state):
-    return await agent_node(state, llm)
-
-
 graph = StateGraph(WorkflowState)
+
 graph.add_node("tool_registry", tool_registry_node)
-graph.add_node("manager", manager_node_wrapper)
-graph.add_node("agent", agent_node_wrapper)
+graph.add_node("manager",       partial(management_node, llm=llm))
+graph.add_node("retriever",     partial(retriever_node,  llm=llm))
+graph.add_node("builder",       builder_node)
+graph.add_node("validator",     validator_node)
 
 graph.set_entry_point("tool_registry")
 graph.add_edge("tool_registry", "manager")
 
 graph.add_conditional_edges(
     "manager",
-    router,
+    action_router,
     {
-        "run_step": "agent",
-        "end": END
+        "search":   "retriever",
+        "build":    "builder",
+        "validate": "validator",
+        "done":     END,
     },
 )
 
-graph.add_conditional_edges(
-    "agent",
-    router,
-    {
-        "run_step": "agent",  
-        "done": END,          
-        "end": END,
-    },
-)
+graph.add_edge("retriever", "manager")
+graph.add_edge("builder",   "manager")
+graph.add_edge("validator", "manager")
 
-memory = MemorySaver()
-
-compiled_graph = graph.compile(checkpointer=memory)
+compiled_graph = graph.compile(checkpointer=MemorySaver())

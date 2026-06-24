@@ -57,7 +57,7 @@ async def agent_node(state: WorkflowState, llm) -> WorkflowState:
         })
     except Exception as e:
         print("ANTHROPIC API ERROR CAUGHT:")
-        print(str(e)) 
+        print(str(e))
         raise e
 
     print(f"[AGENT_NODE] Agent result: {result}")

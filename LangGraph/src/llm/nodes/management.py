@@ -1,12 +1,13 @@
 import json
-import re
 import os
+import re
+
 from dotenv import load_dotenv
 from langchain_anthropic import ChatAnthropic
-from langchain_core.messages import SystemMessage, HumanMessage
+from langchain_core.messages import HumanMessage, SystemMessage
+
 from src.llm.state.state import WorkflowState
 
-# override=True forces reloading of variables from the .env file
 load_dotenv(override=True)
 
 llm = ChatAnthropic(
@@ -14,61 +15,109 @@ llm = ChatAnthropic(
     temperature=0,
     api_key=os.environ.get("ANTHROPIC_API_KEY"),
     streaming=True,
-    max_retries=3
+    max_retries=3,
 )
 
-MANAGER_SYSTEM = """You are a workflow manager for a geospatial assistant.
-You plan steps but you NEVER execute tools.
 
-A critical is the spatial correctness of the answer, so you MUST rely on the provided tools for any geospatial analysis, including geocoding, spatial queries, and geometry processing.
-The Geocoder should always be the first step.
+ALLOWED_ACTIONS = ("search", "build", "validate", "done")
+
+
+MANAGER_SYSTEM = """You are a workflow manager for a geospatial assistant.
+You plan the NEXT STEP of an iterative graph-building process. You NEVER execute tools.
+
+Your job is to build an OGC processing workflow GRAPH that, when executed, will
+satisfy the user's goal. You do this incrementally: pick ONE next action, observe
+the result, then plan again.
+
+Available actions (choose exactly one each turn):
+  - "search":   ask the retriever to query the OGC catalog for candidate
+                processes that advance the goal. Use when the graph is missing
+                a capability and you don't yet know which process provides it.
+  - "build":    apply a deterministic mutation to the workflow graph
+                (add a node, connect two nodes, remove a node). Use once you
+                have selected a concrete process_id from a prior search.
+  - "validate": run the graph validator to check for type mismatches,
+                dangling inputs, or cycles. Use before "done" or after
+                significant build steps.
+  - "done":     the graph satisfies the user's goal AND validation passes.
 
 Rules:
-- You must plan using ONLY the tools listed under AVAILABLE_TOOLS.
-- Each step must be one logical action executable in one agent pass.
-- Any step that requires geometry (buffer, intersect, distance, etc.) MUST come AFTER geometry has been produced by geocoding or provided explicitly.
-- Each step must be one logical action executable in one agent pass.
-- Prefer: geocode -> analyze/retrieve -> answer.
-- Output only valid JSON without any explanation. This is IMPORTANT and MUST be followed strictly.
-- Do not include coordinates in the plan, as they are to be taken from the message context.
+- Spatial correctness is critical. Always ensure geometry exists in the graph
+  (via a geocoding process) BEFORE adding any node that consumes geometry
+  (buffer, intersect, distance, etc.).
+- Pick exactly ONE action per turn.
+- Do not include literal coordinates or other concrete data values; those are
+  resolved at execution time.
+- Output ONLY valid JSON, no prose, no markdown fences.
 
-Output:
+Output schema:
 {
-  "plan": [
-    {
-      "name": "...",
-      "instruction": "...",
-      "expected_tools": ["..."]
-    },
-    {
-      "name": "...",
-      "instruction": "...",
-      "expected_tools": ["..."]
-    }
-  ]
+  "next_action": "search" | "build" | "validate" | "done",
+  "step": {
+    "name": "short label",
+    "instruction": <string OR object — see below>
+  },
+  "reasoning": "Short justification referencing the current graph state."
+}
+
+Instruction format per action:
+- "search":   instruction is a STRING — a focused natural-language query.
+              Example: "Find an OGC process that buffers a polygon by a distance in meters."
+- "build":    instruction is an OBJECT with `op` and `args`:
+                {"op": "add_node",    "args": {"process_id": "...", "server_url": "...", "inputs": {}}}
+                {"op": "connect",     "args": {"from_node": "node_0", "from_output": "result",
+                                               "to_node": "node_1", "to_input": "geometry"}}
+                {"op": "remove_node", "args": {"node_id": "node_2"}}
+              Use process_id and server_url values from prior search results.
+- "validate": instruction is a STRING — a short justification, e.g. "Verify wiring before finalizing."
+- "done":     "step" may be null.
+
+Examples:
+
+User goal: "Buffer the city of Munich by 500m."
+Current graph has a geocoder node producing geometry for "Munich". Next action:
+{
+  "next_action": "search",
+  "step": {"name": "find buffer", "instruction": "Find an OGC process that buffers a geometry by a distance."},
+  "reasoning": "Geometry exists; need a buffer capability."
+}
+
+After search returns a 'buffer' process:
+{
+  "next_action": "build",
+  "step": {
+    "name": "add buffer node",
+    "instruction": {"op": "add_node", "args": {"process_id": "buffer", "server_url": "https://example/ogcapi", "inputs": {"distance": 500}}}
+  },
+  "reasoning": "Add the buffer node so we can wire the geocoder output into it."
 }
 """
 
 
 def parse_llm_json(text: str):
+    """Extract a JSON object from possibly fenced/markdown-wrapped LLM output."""
     text = text.strip()
-
-    # remove any markdown fences
     text = re.sub(r"```json", "", text)
     text = re.sub(r"```", "", text)
-
-    # extract JSON object only
     match = re.search(r"\{.*\}", text, re.DOTALL)
     if not match:
         return None
+    try:
+        return json.loads(match.group(0))
+    except json.JSONDecodeError:
+        return None
 
-    return json.loads(match.group(0))
 
-
-async def management_node(state: WorkflowState, llm) -> WorkflowState:
+async def management_node(state: WorkflowState, llm) -> dict:
     messages = state.get("messages", [])
-    tools_meta = state.get("tools_meta", [])
+    workflow_graph = state.get("workflow_graph", {"nodes": [], "edges": []})
+    candidate_processes = state.get("candidate_processes", [])
+    last_validation = state.get("last_validation")
+    iteration = state.get("iteration", 0)
+    max_iterations = state.get("max_iterations", 15)
+    decision_history = list(state.get("decision_history", []))
 
+    # Find the user goal
     latest_user = None
     for m in reversed(messages):
         if isinstance(m, HumanMessage):
@@ -76,37 +125,70 @@ async def management_node(state: WorkflowState, llm) -> WorkflowState:
             break
 
     if not latest_user:
-        return {"next_action": "end", "plan": [], "current_step": 0}
+        return {"current_action": "done", "step": None, "iteration": iteration}
 
-    tools_blob = json.dumps(tools_meta, indent=2)
+    # Hard stop on runaway loops
+    if iteration >= max_iterations:
+        decision_history.append({
+            "node": "management_node",
+            "current_action": "done",
+            "reasoning": f"Reached max_iterations={max_iterations}; stopping.",
+        })
+        return {
+            "current_action": "done",
+            "step": None,
+            "iteration": iteration,
+            "decision_history": decision_history,
+        }
+
+    graph_blob = json.dumps(workflow_graph, indent=2)
+    candidates_blob = json.dumps(candidate_processes[:5], indent=2)
+    validation_blob = json.dumps(last_validation, indent=2) if last_validation else "null"
+    last_decisions = json.dumps(decision_history[-3:], indent=2)
 
     prompt = [
         SystemMessage(content=MANAGER_SYSTEM),
-        HumanMessage(content=f"""AVAILABLE_TOOLS (use only these):
-        {tools_blob}
+        HumanMessage(content=f"""USER GOAL:
+            {latest_user}
 
-        User request:
-        {latest_user}
+            CURRENT WORKFLOW GRAPH:
+            {graph_blob}
 
-        Create the plan JSON now.""")
+            RECENT CANDIDATE PROCESSES (from last search, if any):
+            {candidates_blob}
+
+            LAST VALIDATION REPORT:
+            {validation_blob}
+
+            RECENT DECISIONS (for context, avoid repeating yourself):
+            {last_decisions}
+
+            ITERATION: {iteration + 1} / {max_iterations}
+
+            Pick the single best next action and emit the JSON now.""")
     ]
 
     resp = await llm.ainvoke(prompt)
+    data = parse_llm_json(resp.content) or {}
 
-    text = resp.content.strip()
-    data = parse_llm_json(resp.content)
-    plan = data.get("plan", []) if data else []
+    next_action = data.get("next_action", "done")
+    if next_action not in ALLOWED_ACTIONS:
+        next_action = "done"
 
-    decision_history = state.get("decision_history", [])
+    step = data.get("step")
+    reasoning = data.get("reasoning", "")
+
     decision_history.append({
         "node": "management_node",
-        "plan": plan,
-        "reasoning": "Created ordered plan constrained to AVAILABLE_TOOLS."
+        "iteration": iteration + 1,
+        "current_action": next_action,
+        "step": step,
+        "reasoning": reasoning or "No reasoning provided by LLM.",
     })
 
     return {
-        "plan": plan,
-        "current_step": 0,
-        "next_action": "run_step" if plan else "end",
+        "current_action": next_action,        # "search" | "build" | "validate" | "done"
+        "step": step,                         # single step object (or None)
+        "iteration": iteration + 1,
         "decision_history": decision_history,
     }
