@@ -28,14 +28,12 @@ llm = ChatAnthropic(
 
 graph = StateGraph(WorkflowState)
 
-graph.add_node("tool_registry", tool_registry_node)
 graph.add_node("manager",       partial(management_node, llm=llm))
 graph.add_node("retriever",     partial(retriever_node,  llm=llm))
 graph.add_node("builder",       builder_node)
 graph.add_node("validator",     validator_node)
 
-graph.set_entry_point("tool_registry")
-graph.add_edge("tool_registry", "manager")
+graph.set_entry_point("manager")
 
 graph.add_conditional_edges(
     "manager",

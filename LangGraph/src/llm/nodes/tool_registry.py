@@ -1,7 +1,5 @@
 from src.llm.state.state import WorkflowState
 from src.llm.tools.mcp_client import load_mcp_tools
-# After
-from src.llm.tools.ogc_tools import load_ogc_tools
 
 async def tool_registry_node(state: WorkflowState) -> WorkflowState:
     tools = await load_mcp_tools() #old MCP-based tool loading

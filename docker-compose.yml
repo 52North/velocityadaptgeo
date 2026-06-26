@@ -57,5 +57,4 @@ services:
 
 volumes:
   ollama: {}
-  photon_data: {}
   postgres_data: {}

@@ -4,8 +4,9 @@ from langchain.agents import create_agent
 from langchain_core.messages import HumanMessage
 
 from src.llm.state.state import WorkflowState
-from src.llm.tools.ogc_tools import load_ogc_tools
 from src.llm.nodes._helpers import _log, _last_tool_result
+
+from src.llm.tools.ogc_client import load_ogc_tools
 
 RETRIEVER_SYSTEM = """You are an OGC process retrieval agent.
 
