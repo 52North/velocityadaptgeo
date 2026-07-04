@@ -2,29 +2,68 @@
 
 from functools import lru_cache
 import os
+import time
+import logging
 from typing import Any
 
 import httpx
 import psycopg
 from langchain_core.tools import tool
+from langchain_ollama import OllamaEmbeddings
 from pgvector.psycopg import register_vector
-from sentence_transformers import SentenceTransformer
 
 DB_DSN = os.environ.get(
     "DB_DSN",
-    "postgresql://postgres-vector:postgres@localhost:5432/velocityadaptgeo",
+    "postgresql://postgres:postgres@postgres-vector:5432/velocityadaptgeo",
 )
-EMBED_MODEL = os.environ.get(
-    "EMBED_MODEL",
-    "sentence-transformers/all-MiniLM-L6-v2",
-)
+OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
+OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "nomic-embed-text")
 HTTP_TIMEOUT = float(os.environ.get("HTTP_TIMEOUT", "30.0"))
+
+logger = logging.getLogger(__name__)
+
+
+def _resolve_ollama_base_url() -> str:
+    """Prefer the compose service name when running inside Docker."""
+    if OLLAMA_BASE_URL.startswith("http://localhost") and os.path.exists("/.dockerenv"):
+        return "http://ollama:11434"
+    return OLLAMA_BASE_URL
+
+
+def _get_embedding_dim(conn: psycopg.Connection) -> int | None:
+        """Return declared dimension of ogc_processes.embedding, e.g. vector(384) -> 384."""
+        row = conn.execute(
+                """
+                SELECT
+                    NULLIF(
+                        regexp_replace(
+                            pg_catalog.format_type(a.atttypid, a.atttypmod),
+                            '^vector\\((\\d+)\\)$',
+                            '\\1'
+                        ),
+                        pg_catalog.format_type(a.atttypid, a.atttypmod)
+                    )::int
+                FROM pg_catalog.pg_attribute a
+                JOIN pg_catalog.pg_class c ON c.oid = a.attrelid
+                JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+                WHERE c.relname = 'ogc_processes'
+                    AND a.attname = 'embedding'
+                    AND a.attnum > 0
+                    AND NOT a.attisdropped
+                LIMIT 1
+                """
+        ).fetchone()
+        if row and row[0] is not None:
+                return int(row[0])
+        return None
 
 
 
 @lru_cache(maxsize=1)
-def _embedder() -> SentenceTransformer:
-    return SentenceTransformer(EMBED_MODEL)
+def _embedder() -> OllamaEmbeddings:
+    resolved_base_url = _resolve_ollama_base_url()
+    logger.info("Using Ollama embeddings at %s with model %s", resolved_base_url, OLLAMA_MODEL)
+    return OllamaEmbeddings(model=OLLAMA_MODEL, base_url=resolved_base_url)
 
 @tool
 def search_ogc_processes(query: str, k: int = 5) -> list[dict]:
@@ -44,19 +83,45 @@ def search_ogc_processes(query: str, k: int = 5) -> list[dict]:
         inputs (schema), similarity.
     """
     k = max(1, min(k, 20))
-    vec = _embedder().encode(query, normalize_embeddings=True)
+    last_error: Exception | None = None
+    for attempt in range(3):
+        try:
+            vec = _embedder().embed_query(query)
+            break
+        except Exception as exc:
+            last_error = exc
+            if attempt < 2:
+                time.sleep(2)
+            else:
+                raise
+
+    vec = [float(v) for v in vec]
 
     sql = """
         SELECT server_url, process_id, title, description, metadata,
-               1 - (embedding <=> %s) AS similarity
+               1 - (embedding <=> %s::vector) AS similarity
         FROM ogc_processes
         WHERE embedding IS NOT NULL
-        ORDER BY embedding <=> %s
+        ORDER BY embedding <=> %s::vector
         LIMIT %s;
     """
     with psycopg.connect(DB_DSN) as conn:
         register_vector(conn)
-        rows = conn.execute(sql, (vec, vec, k)).fetchall()
+        db_dim = _get_embedding_dim(conn)
+        if db_dim is not None and db_dim != len(vec):
+            logger.warning(
+                "Embedding dimension mismatch (query=%d, db=%d). Resizing query vector for compatibility.",
+                len(vec),
+                db_dim,
+            )
+            if len(vec) > db_dim:
+                vec = vec[:db_dim]
+            else:
+                vec = vec + [0.0] * (db_dim - len(vec))
+
+        # Cast through text to pgvector so `<=>` compares VECTOR to VECTOR.
+        vec_param = "[" + ",".join(str(v) for v in vec) + "]"
+        rows = conn.execute(sql, (vec_param, vec_param, k)).fetchall()
 
     return [
         {

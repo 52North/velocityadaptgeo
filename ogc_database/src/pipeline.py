@@ -5,12 +5,11 @@ import logging
 from urllib.parse import urljoin
 
 import httpx
-from sentence_transformers import SentenceTransformer
 
 from .client import fetch_process_detail, list_processes
 from .config import CONCURRENT_REQUESTS, HTTP_TIMEOUT
 from .database import save_all
-from .embeddings import build_embedding_text, encode_texts
+from .embeddings import build_embedding_text, create_embedder, encode_texts
 
 log = logging.getLogger("ogc-indexer")
 
@@ -79,13 +78,15 @@ async def crawl_all_servers(
 async def run_pipeline(
     servers: list[str],
     embed_model_name: str,
+    embed_base_url: str,
     db_dsn: str,
 ) -> None:
     """Execute the full pipeline: crawl → embed → store.
 
     Args:
         servers: List of OGC server URLs to crawl
-        embed_model_name: Name of the SentenceTransformer model to use
+        embed_model_name: Name of the Ollama embedding model to use
+        embed_base_url: Base URL of the local Ollama server
         db_dsn: PostgreSQL connection string
     """
     log.info("Starting OGC crawl pipeline...")
@@ -99,9 +100,9 @@ async def run_pipeline(
 
     # Embed
     log.info("Embedding %d process descriptions...", len(all_results))
-    model = SentenceTransformer(embed_model_name)
+    embedder = create_embedder(embed_model_name, embed_base_url)
     texts = [build_embedding_text(meta) for _, _, _, meta in all_results]
-    embeddings = encode_texts(model, texts)
+    embeddings = encode_texts(embedder, texts)
 
     # Store
     save_all(db_dsn, all_results, embeddings)

@@ -31,11 +31,51 @@ services:
       - "8000:8000"
     dns:
       - 8.8.8.8
+    environment:
+      - DB_DSN=postgresql://postgres:postgres@postgres-vector:5432/velocityadaptgeo
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - OLLAMA_MODEL=nomic-embed-text
     env_file:
       - ./LangGraph/.env
     depends_on:
-      - mcp
+      mcp:
+        condition: service_started
+      postgres-vector:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+      ollama-pull:
+        condition: service_completed_successfully
     restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    environment:
+      - OLLAMA_HOST=0.0.0.0:11434
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama:/root/.ollama
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "ollama", "list" ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  ollama-pull:
+    image: ollama/ollama:latest
+    environment:
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - OLLAMA_MODEL=nomic-embed-text
+    volumes:
+      - ./scripts/pull-ollama-model.sh:/pull-ollama-model.sh:ro
+    depends_on:
+      ollama:
+        condition: service_healthy
+    entrypoint: [ "/bin/sh", "/pull-ollama-model.sh" ]
+    restart: "no"
 
   postgres-vector:
     image: pgvector/pgvector:pg16-trixie

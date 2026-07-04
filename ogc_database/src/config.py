@@ -14,7 +14,9 @@ DB_DSN = os.environ.get(
 )
 
 # Embedding model configuration
-EMBED_MODEL = "sentence-transformers/all-MiniLM-L6-v2"  # 384-dimensional
+OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
+OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "nomic-embed-text")
+EMBED_DIM = int(os.environ.get("EMBED_DIM", "768"))
 
 # HTTP client configuration
 HTTP_TIMEOUT = 30.0

@@ -2,9 +2,14 @@
 
 import logging
 
-from sentence_transformers import SentenceTransformer
+from langchain_ollama import OllamaEmbeddings
 
 log = logging.getLogger("ogc-indexer")
+
+
+def create_embedder(model_name: str, base_url: str) -> OllamaEmbeddings:
+    """Create an Ollama-backed embedding client."""
+    return OllamaEmbeddings(model=model_name, base_url=base_url)
 
 
 def build_embedding_text(meta: dict) -> str:
@@ -34,8 +39,8 @@ def build_embedding_text(meta: dict) -> str:
     return "\n".join(p for p in parts if p).strip()
 
 
-def encode_texts(model: SentenceTransformer, texts: list[str]) -> list[list[float]]:
-    """Encode a list of texts using the embedding model.
+def encode_texts(embedder: OllamaEmbeddings, texts: list[str]) -> list[list[float]]:
+    """Encode a list of texts using the Ollama embedding model.
 
     Args:
         model: Loaded SentenceTransformer model
@@ -44,5 +49,4 @@ def encode_texts(model: SentenceTransformer, texts: list[str]) -> list[list[floa
     Returns:
         List of embedding vectors
     """
-    embeddings = model.encode(texts, normalize_embeddings=True, show_progress_bar=True)
-    return embeddings.tolist()
+    return embedder.embed_documents(texts)

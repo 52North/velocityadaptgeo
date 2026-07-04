@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS ogc_processes (
     title           TEXT,
     description     TEXT,
     metadata        JSONB NOT NULL,
-    embedding       VECTOR(384),
+    embedding       VECTOR(768),
     fetched_at      TIMESTAMPTZ DEFAULT now(),
     UNIQUE (server_url, process_id)
 );

@@ -18,6 +18,9 @@ from src.llm.state.state import WorkflowState
 
 load_dotenv(override=True)
 
+WORKFLOW_RECURSION_LIMIT = int(os.environ.get("WORKFLOW_RECURSION_LIMIT", "20"))
+DEFAULT_WORKFLOW_CONFIG = {"recursion_limit": WORKFLOW_RECURSION_LIMIT}
+
 llm = ChatAnthropic(
     model="claude-haiku-4-5-20251001",
     temperature=0,
