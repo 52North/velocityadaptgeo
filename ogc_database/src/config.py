@@ -6,6 +6,9 @@ import os
 OGC_SERVERS = [
     "https://demo.pygeoapi.io/master/",
     "https://maps.ecere.com/ogcapi/",
+    # Local pygeoapi instance (see ./pygeoapi_instance), exposed via docker-compose
+    # on host port 5000 (pygeoapi:80 -> localhost:5000).
+    os.environ.get("LOCAL_PYGEOAPI_URL", "http://localhost:5000/"),
 ]
 
 DB_DSN = os.environ.get(

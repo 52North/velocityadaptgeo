@@ -15,7 +15,7 @@ services:
     build:
       context: mcp
       dockerfile: Dockerfile
-    profiles: [ "mcp" ]
+    #profiles: [ "mcp" ]
     environment:
       - PYGEOAPI_URL=http://pygeoapi:80
       - NOMINATIM_BASE_URL=http://nominatim:8080
@@ -23,7 +23,7 @@ services:
       - "8001:8001"
 
   langgraph:
-    profiles: [ "langgraph" ]
+    #profiles: [ "langgraph" ]
     build:
       context: ./LangGraph
       dockerfile: Dockerfile
