@@ -8,7 +8,9 @@ from langgraph.graph import END, StateGraph
 
 from src.llm.nodes import (
     action_router,
+    auto_build_node,
     builder_node,
+    chat_node,
     management_node,
     responder_node,
     retriever_node,
@@ -34,9 +36,11 @@ graph = StateGraph(WorkflowState)
 
 graph.add_node("manager",       partial(management_node, llm=llm))
 graph.add_node("retriever",     partial(retriever_node,  llm=llm))
+graph.add_node("auto_build",    partial(auto_build_node, llm=llm))
 graph.add_node("builder",       builder_node)
 graph.add_node("validator",     validator_node)
 graph.add_node("responder",     partial(responder_node,  llm=llm))
+graph.add_node("chat",          partial(chat_node,       llm=llm))
 
 graph.set_entry_point("manager")
 
@@ -47,13 +51,22 @@ graph.add_conditional_edges(
         "search":   "retriever",
         "build":    "builder",
         "validate": "validator",
+        "chat":     "chat",
         "done":     "responder",
     },
 )
 
-graph.add_edge("retriever", "responder")
+# A successful search is immediately turned into a graph node + validation
+# report in one step, then summarized for the user - no extra manager turn.
+graph.add_edge("retriever",  "auto_build")
+graph.add_edge("auto_build", "responder")
+
+# "build"/"validate" stay available for manual follow-up edits (connecting or
+# removing nodes, re-validating after a manual edit).
 graph.add_edge("builder",   "manager")
 graph.add_edge("validator", "manager")
+
 graph.add_edge("responder", END)
+graph.add_edge("chat",      END)
 
 compiled_graph = graph.compile(checkpointer=MemorySaver())

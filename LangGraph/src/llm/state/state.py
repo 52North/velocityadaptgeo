@@ -10,7 +10,8 @@ class WorkflowState(TypedDict, total=False):
     # New for iterative graph building
     workflow_graph: dict           # {"nodes": [...], "edges": [...]}
     candidate_processes: list[dict]
-    current_action: str            # "search" | "build" | "validate" | "done"
+    last_validation: dict | None   # {"valid": bool, "errors": [...]}
+    current_action: str            # "search" | "build" | "validate" | "chat" | "done"
     step: dict | None              # the single planned step
     step_tools_meta: list[dict]    # narrowed tools for current action
     iteration: int
