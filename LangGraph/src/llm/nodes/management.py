@@ -77,11 +77,15 @@ Instruction format per action:
 - "search":   instruction is a STRING — a focused natural-language query.
               Example: "Find an OGC process that buffers a polygon by a distance in meters."
 - "build":    instruction is an OBJECT with `op` and `args`:
-                {"op": "add_node",    "args": {"process_id": "...", "server_url": "...", "inputs": {}}}
-                {"op": "connect",     "args": {"from_node": "node_0", "from_output": "result",
-                                               "to_node": "node_1", "to_input": "geometry"}}
-                {"op": "remove_node", "args": {"node_id": "node_2"}}
+                {"op": "add_node",         "args": {"process_id": "...", "server_url": "...", "inputs": {}}}
+                {"op": "add_top_candidate", "args": {}}
+                {"op": "connect",          "args": {"from_node": "node_0", "from_output": "result",
+                                                     "to_node": "node_1", "to_input": "geometry"}}
+                {"op": "remove_node",      "args": {"node_id": "node_2"}}
               Use process_id and server_url values from prior search results.
+              "add_top_candidate" needs no process_id/server_url - it deterministically
+              adds the #1 ranked result from the most recent search (RECENT CANDIDATE
+              PROCESSES below) as a new node.
 - "validate": instruction is a STRING — a short justification, e.g. "Verify wiring before finalizing."
 - "chat":     "step" may be null; the chat node answers from the conversation directly.
 - "done":     "step" may be null.

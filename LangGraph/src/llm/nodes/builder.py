@@ -6,20 +6,47 @@ Used by the manual "build" action (see management.py's MANAGER_SYSTEM for the
 """
 
 from src.llm.state.state import WorkflowState
+from src.llm.state.graph import new_graph_node, NodePosition
 from src.llm.nodes._helpers import _log
 
 
-def add_node(graph: dict, process_id: str, server_url: str, inputs: dict | None = None, node_id: str | None = None) -> dict:
+def add_node(
+    graph: dict,
+    process_id: str,
+    server_url: str,
+    inputs: dict | None = None,
+    node_id: str | None = None,
+    position: NodePosition | None = None,
+    config: dict | None = None,
+) -> dict:
     nodes = list(graph.get("nodes", []))
     node_id = node_id or f"{process_id}_{len(nodes)}"
     nodes = [n for n in nodes if n.get("id") != node_id]
-    nodes.append({
-        "id": node_id,
-        "process_id": process_id,
-        "server_url": server_url,
-        "inputs": inputs or {},
-    })
+    nodes.append(new_graph_node(
+        node_id, process_id, server_url,
+        inputs=inputs, position=position, config=config,
+        node_index=len(nodes),
+    ))
     return {"nodes": nodes, "edges": graph.get("edges", [])}
+
+
+def add_top_candidate(graph: dict, candidates: list[dict], node_id: str | None = None) -> dict:
+    """Deterministically add the #1 ranked search result as a graph node.
+
+    Unlike `add_node`, the process is not named by the caller - it is always
+    `candidates[0]`, i.e. the top-searched process from the most recent
+    `search_ogc_processes` ranking. No LLM selection involved.
+    """
+    if not candidates:
+        raise ValueError("No candidate processes to build from.")
+
+    top = candidates[0]
+    process_id = top.get("process_id")
+    server_url = top.get("server_url")
+    if not process_id or not server_url:
+        raise ValueError("Top candidate is missing process_id or server_url.")
+
+    return add_node(graph, process_id, server_url, node_id=node_id)
 
 
 def remove_node(graph: dict, node_id: str) -> dict:
@@ -43,7 +70,12 @@ def connect(graph: dict, from_node: str, to_node: str, from_output: str | None =
     return {"nodes": graph.get("nodes", []), "edges": edges}
 
 
-_OPS = {"add_node": add_node, "remove_node": remove_node, "connect": connect}
+_OPS = {
+    "add_node": add_node,
+    "remove_node": remove_node,
+    "connect": connect,
+    "add_top_candidate": add_top_candidate,
+}
 
 
 def apply_build_op(graph: dict, op: str, args: dict) -> dict:
@@ -59,7 +91,12 @@ async def builder_node(state: WorkflowState) -> dict:
     graph = state.get("workflow_graph") or {"nodes": [], "edges": []}
 
     op = instruction.get("op") if isinstance(instruction, dict) else None
-    args = instruction.get("args", {}) if isinstance(instruction, dict) else {}
+    args = dict(instruction.get("args", {})) if isinstance(instruction, dict) else {}
+
+    if op == "add_top_candidate":
+        # Always use the actual ranked search results from state - never let
+        # the LLM invent or reorder candidates for this deterministic op.
+        args["candidates"] = state.get("candidate_processes") or []
 
     try:
         new_graph = apply_build_op(graph, op, args)

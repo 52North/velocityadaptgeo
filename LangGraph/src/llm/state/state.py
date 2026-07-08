@@ -1,6 +1,8 @@
 from typing import TypedDict, Sequence, Annotated
 from langchain_core.messages import BaseMessage
 
+from src.llm.state.graph import WorkflowGraph
+
 
 class WorkflowState(TypedDict, total=False):
     messages: list[BaseMessage]
@@ -8,7 +10,7 @@ class WorkflowState(TypedDict, total=False):
     decision_history: list[dict]
 
     # New for iterative graph building
-    workflow_graph: dict           # {"nodes": [...], "edges": [...]}
+    workflow_graph: WorkflowGraph  # {"nodes": [GraphNode, ...], "edges": [GraphEdge, ...]}
     candidate_processes: list[dict]
     last_validation: dict | None   # {"valid": bool, "errors": [...]}
     current_action: str            # "search" | "build" | "validate" | "chat" | "done"
