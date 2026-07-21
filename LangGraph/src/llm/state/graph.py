@@ -1,20 +1,35 @@
-"""Reusable workflow-graph node/edge data structures.
+"""Workflow-graph node/edge data structures.
 
-Canonical node shape produced by every build op (matches the process-graph
-format expected downstream, e.g.):
+Explicitly mirrors the VelocityAdapt `NodeGraph` JSON Schema
+(https://velocityadapt.de/schemas/workflow-graph.schema.json):
 
     {
-      "id": "n2",
-      "type": "microclimate_sim",
-      "position": {"x": 400, "y": 200},
-      "config": {"timeout_seconds": 1800},
-      "inputs": [],
-      "outputs": []
+      "nodes": [
+        {
+          "id": "n2",
+          "type": "microclimate_sim",
+          "label": "",
+          "position": {"x": 400, "y": 200},
+          "config": {"timeout_seconds": 1800},
+          "inputs": [],
+          "outputs": []
+        }
+      ],
+      "edges": [
+        {"source": "n1", "target": "n2", "source_output": "default", "target_input": "default"}
+      ]
     }
+
+One deliberate deviation from the schema: `type` is kept as an open string
+rather than the schema's fixed 9-value enum, since it holds a live
+`process_id` discovered at runtime from the pgvector-backed OGC process
+catalog (see src/llm/tools/ogc_client.py) rather than a closed, hardcoded
+set of node kinds.
 """
 
 import logging
-from typing import TypedDict
+
+from pydantic import BaseModel, ConfigDict, Field
 
 logger = logging.getLogger(__name__)
 
@@ -22,36 +37,55 @@ DEFAULT_TIMEOUT_SECONDS = 300
 NODE_X_SPACING = 200
 NODE_Y = 200
 
-
-class NodePosition(TypedDict):
-    x: float
-    y: float
+NODE_ID_PATTERN = r"^[a-zA-Z0-9_\-]+$"
 
 
-class GraphNode(TypedDict):
-    id: str
-    type: str            # the OGC process_id this node represents
-    position: NodePosition
-    config: dict          # e.g. {"server_url": ..., "timeout_seconds": ...}
-    inputs: list
-    outputs: list
+class NodePosition(BaseModel):
+    """Canvas position for the frontend; auto-laid-out (per category column) when omitted."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    x: float = 0
+    y: float = 0
 
 
-class GraphEdge(TypedDict):
-    from_node: str
-    to_node: str
-    from_output: str | None
-    to_input: str | None
+class NodeDefinition(BaseModel):
+    """A node in the workflow DAG."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(min_length=1, pattern=NODE_ID_PATTERN)
+    type: str  # live OGC process_id from the catalog - see module docstring
+    label: str = ""
+    position: NodePosition = Field(default_factory=NodePosition)
+    config: dict = Field(default_factory=dict)
+    inputs: list[str] = Field(default_factory=list)
+    outputs: list[str] = Field(default_factory=list)
 
 
-class WorkflowGraph(TypedDict):
-    nodes: list[GraphNode]
-    edges: list[GraphEdge]
+class EdgeDefinition(BaseModel):
+    """A directed edge between two named ports. `source`/`target` reference node ids."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    source: str
+    target: str
+    source_output: str = "default"
+    target_input: str = "default"
+
+
+class WorkflowGraph(BaseModel):
+    """The full DAG, i.e. the `NodeGraph` per the schema linked above."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    nodes: list[NodeDefinition] = Field(default_factory=list)
+    edges: list[EdgeDefinition] = Field(default_factory=list)
 
 
 def default_position(node_index: int) -> NodePosition:
     """Simple left-to-right auto-layout for newly added nodes."""
-    return {"x": NODE_X_SPACING * node_index, "y": NODE_Y}
+    return NodePosition(x=NODE_X_SPACING * node_index, y=NODE_Y)
 
 
 def new_graph_node(
@@ -59,23 +93,31 @@ def new_graph_node(
     process_id: str,
     server_url: str,
     inputs: dict | None = None,
-    position: NodePosition | None = None,
+    position: NodePosition | dict | None = None,
     config: dict | None = None,
     node_index: int = 0,
-) -> GraphNode:
-    """Build a GraphNode representing one OGC process instance in the graph."""
+    label: str = "",
+) -> dict:
+    """Build a node dict representing one OGC process instance in the graph.
+
+    `inputs` holds concrete static parameter values (e.g. {"distance": 500});
+    these are folded into `config`, while the node's `inputs` list only
+    records the corresponding port keys, per the schema.
+    """
     resolved_config = {"server_url": server_url, "timeout_seconds": DEFAULT_TIMEOUT_SECONDS}
+    resolved_config.update(inputs or {})
     resolved_config.update(config or {})
 
-    node: GraphNode = {
-        "id": node_id,
-        "type": process_id,
-        "position": position or default_position(node_index),
-        "config": resolved_config,
-        "inputs": [{"name": k, "value": v} for k, v in (inputs or {}).items()],
-        "outputs": [],
-    }
+    node = NodeDefinition(
+        id=node_id,
+        type=process_id,
+        label=label,
+        position=position or default_position(node_index),
+        config=resolved_config,
+        inputs=list((inputs or {}).keys()),
+        outputs=[],
+    )
 
-    logger.info("Graph-node produced: %s", node)
+    logger.info("Graph-node produced: %s", node.model_dump())
 
-    return node
+    return node.model_dump()

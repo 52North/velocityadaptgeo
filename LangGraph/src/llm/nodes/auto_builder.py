@@ -86,12 +86,12 @@ Pick one candidate and decide how to wire it in."""),
         new_node_id = new_graph["nodes"][-1]["id"]
 
         if decision.connect_from_node:
-            new_graph = apply_build_op(new_graph, "connect", {
-                "from_node": decision.connect_from_node,
-                "to_node": new_node_id,
-                "from_output": decision.connect_from_output,
-                "to_input": decision.connect_to_input,
-            })
+            connect_args = {"source": decision.connect_from_node, "target": new_node_id}
+            if decision.connect_from_output:
+                connect_args["source_output"] = decision.connect_from_output
+            if decision.connect_to_input:
+                connect_args["target_input"] = decision.connect_to_input
+            new_graph = apply_build_op(new_graph, "connect", connect_args)
     except (ValueError, TypeError) as exc:
         logger.exception("Auto-build failed to apply graph op")
         return {

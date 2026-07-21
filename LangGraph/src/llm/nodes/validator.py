@@ -4,25 +4,33 @@
 Used by the manual "validate" action and by auto_builder.py's automatic build step.
 """
 
+from pydantic import ValidationError
+
+from src.llm.state.graph import WorkflowGraph
 from src.llm.state.state import WorkflowState
 from src.llm.nodes._helpers import _log
 
 
 def validate_graph(graph: dict) -> dict:
-    nodes = graph.get("nodes", [])
-    edges = graph.get("edges", [])
     errors = []
 
-    node_ids = {n.get("id") for n in nodes if n.get("id")}
+    try:
+        parsed = WorkflowGraph.model_validate(graph)
+    except ValidationError as exc:
+        for e in exc.errors():
+            loc = ".".join(str(p) for p in e["loc"])
+            errors.append(f"Schema error at '{loc}': {e['msg']}")
+        return {"valid": False, "errors": errors}
+
+    node_ids = {n.id for n in parsed.nodes}
     if not node_ids:
         errors.append("Graph has no nodes.")
 
-    for i, edge in enumerate(edges):
-        src, tgt = edge.get("from_node"), edge.get("to_node")
-        if src not in node_ids:
-            errors.append(f"Edge {i}: unknown from_node '{src}'.")
-        if tgt not in node_ids:
-            errors.append(f"Edge {i}: unknown to_node '{tgt}'.")
+    for i, edge in enumerate(parsed.edges):
+        if edge.source not in node_ids:
+            errors.append(f"Edge {i}: unknown source '{edge.source}'.")
+        if edge.target not in node_ids:
+            errors.append(f"Edge {i}: unknown target '{edge.target}'.")
 
     return {"valid": not errors, "errors": errors}
 

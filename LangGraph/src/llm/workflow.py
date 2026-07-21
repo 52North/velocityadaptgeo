@@ -14,7 +14,6 @@ from src.llm.nodes import (
     management_node,
     responder_node,
     retriever_node,
-    tool_registry_node,
     validator_node,
 )
 from src.llm.state.state import WorkflowState

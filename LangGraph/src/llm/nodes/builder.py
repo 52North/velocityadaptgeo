@@ -53,19 +53,19 @@ def remove_node(graph: dict, node_id: str) -> dict:
     nodes = [n for n in graph.get("nodes", []) if n.get("id") != node_id]
     edges = [
         e for e in graph.get("edges", [])
-        if e.get("from_node") != node_id and e.get("to_node") != node_id
+        if e.get("source") != node_id and e.get("target") != node_id
     ]
     return {"nodes": nodes, "edges": edges}
 
 
-def connect(graph: dict, from_node: str, to_node: str, from_output: str | None = None, to_input: str | None = None) -> dict:
+def connect(graph: dict, source: str, target: str, source_output: str = "default", target_input: str = "default") -> dict:
     edges = list(graph.get("edges", []))
-    if not any(e.get("from_node") == from_node and e.get("to_node") == to_node for e in edges):
+    if not any(e.get("source") == source and e.get("target") == target for e in edges):
         edges.append({
-            "from_node": from_node,
-            "to_node": to_node,
-            "from_output": from_output,
-            "to_input": to_input,
+            "source": source,
+            "target": target,
+            "source_output": source_output,
+            "target_input": target_input,
         })
     return {"nodes": graph.get("nodes", []), "edges": edges}
 

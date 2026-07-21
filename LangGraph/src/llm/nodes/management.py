@@ -79,8 +79,8 @@ Instruction format per action:
 - "build":    instruction is an OBJECT with `op` and `args`:
                 {"op": "add_node",         "args": {"process_id": "...", "server_url": "...", "inputs": {}}}
                 {"op": "add_top_candidate", "args": {}}
-                {"op": "connect",          "args": {"from_node": "node_0", "from_output": "result",
-                                                     "to_node": "node_1", "to_input": "geometry"}}
+                {"op": "connect",          "args": {"source": "node_0", "source_output": "result",
+                                                     "target": "node_1", "target_input": "geometry"}}
                 {"op": "remove_node",      "args": {"node_id": "node_2"}}
               Use process_id and server_url values from prior search results.
               "add_top_candidate" needs no process_id/server_url - it deterministically
