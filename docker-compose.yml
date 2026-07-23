@@ -1,6 +1,7 @@
 services:
   pygeoapi:
-    image: geopython/pygeoapi:latest
+    build: ./pygeoapi_instance
+#    image: geopython/pygeoapi:latest
     container_name: pygeoapi
     volumes:
       - ./pygeoapi_instance/pygeoapi-config.yml:/pygeoapi/local.config.yml
