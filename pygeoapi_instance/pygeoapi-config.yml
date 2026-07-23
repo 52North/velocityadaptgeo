@@ -357,3 +357,8 @@ resources:
       terrainModel:
         schema:
           type: object
+
+  cool_spots:
+    type: process
+    processor:
+      name: processes.cool_spots.CoolSpotsProcessor
