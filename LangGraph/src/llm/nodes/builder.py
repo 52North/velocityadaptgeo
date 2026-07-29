@@ -59,6 +59,19 @@ def remove_node(graph: dict, node_id: str) -> dict:
 
 
 def connect(graph: dict, source: str, target: str, source_output: str = "default", target_input: str = "default") -> dict:
+    """Add an edge between two nodes that must both already exist.
+
+    Unknown endpoints are rejected rather than written, since a dangling edge makes the
+    whole graph invalid and the id is typically an LLM's near-miss on a real node id.
+    """
+    node_ids = {n.get("id") for n in graph.get("nodes", [])}
+    for role, node_id in (("source", source), ("target", target)):
+        if node_id not in node_ids:
+            raise ValueError(
+                f"Cannot connect: {role} '{node_id}' is not a node in the graph. "
+                f"Known nodes: {sorted(i for i in node_ids if i)}"
+            )
+
     edges = list(graph.get("edges", []))
     if not any(e.get("source") == source and e.get("target") == target for e in edges):
         edges.append({

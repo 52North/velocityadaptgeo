@@ -16,11 +16,18 @@ from src.llm.nodes import (
     retriever_node,
     validator_node,
 )
+from src.llm.nodes.management import MAX_WORKFLOW_ITERATIONS
 from src.llm.state.state import WorkflowState
 
 load_dotenv(override=True)
 
-WORKFLOW_RECURSION_LIMIT = int(os.environ.get("WORKFLOW_RECURSION_LIMIT", "20"))
+_SUPERSTEPS_PER_ITERATION = 3
+_TRAILING_SUPERSTEPS = 5
+
+WORKFLOW_RECURSION_LIMIT = int(os.environ.get(
+    "WORKFLOW_RECURSION_LIMIT",
+    str(MAX_WORKFLOW_ITERATIONS * _SUPERSTEPS_PER_ITERATION + _TRAILING_SUPERSTEPS),
+))
 DEFAULT_WORKFLOW_CONFIG = {"recursion_limit": WORKFLOW_RECURSION_LIMIT}
 
 llm = ChatAnthropic(
@@ -55,13 +62,9 @@ graph.add_conditional_edges(
     },
 )
 
-# A successful search is immediately turned into a graph node + validation
-# report in one step, then summarized for the user - no extra manager turn.
 graph.add_edge("retriever",  "auto_build")
-graph.add_edge("auto_build", "responder")
+graph.add_edge("auto_build", "manager")
 
-# "build"/"validate" stay available for manual follow-up edits (connecting or
-# removing nodes, re-validating after a manual edit).
 graph.add_edge("builder",   "manager")
 graph.add_edge("validator", "manager")
 

@@ -23,9 +23,12 @@ Rules:
 
 
 async def retriever_node(state: WorkflowState, llm) -> dict:
+    """Query the OGC catalog for the manager's search step and record the candidates.
+
+    Returns only the newly produced status message; `messages` is an appending channel.
+    """
     step = state.get("step") or {}
     instruction = step.get("instruction", "")
-    messages = list(state.get("messages", []))
 
     query = instruction if isinstance(instruction, str) and instruction else str(instruction)
     logger.info("Retriever query: %s", query)
@@ -33,9 +36,8 @@ async def retriever_node(state: WorkflowState, llm) -> dict:
         candidates = await search_ogc_processes.ainvoke({"query": query})
     except Exception as exc:
         logger.exception("Retriever search failed for query: %s", query)
-        messages.append(AIMessage(content=f"Retriever failed: {exc}"))
         return {
-            "messages": messages,
+            "messages": [AIMessage(content=f"Retriever failed: {exc}")],
             "candidate_processes": [],
             "decision_history": _log(state, "retriever", instruction, error=str(exc)),
         }
@@ -59,12 +61,12 @@ async def retriever_node(state: WorkflowState, llm) -> dict:
                 title = candidate.get("title", "")
                 sim = candidate.get("similarity")
                 summary.append(f"{i}. {pid} | {title} | similarity={sim}")
-        messages.append(AIMessage(content="\n".join(summary)))
+        status = AIMessage(content="\n".join(summary))
     else:
-        messages.append(AIMessage(content="Retriever returned no matching OGC processes."))
+        status = AIMessage(content="Retriever returned no matching OGC processes.")
 
     return {
-        "messages": messages,
+        "messages": [status],
         "candidate_processes": candidates,
         "decision_history": _log(state, "retriever", instruction, candidates),
     }

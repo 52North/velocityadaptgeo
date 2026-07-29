@@ -1,9 +1,10 @@
-from typing import TypedDict, Sequence, Annotated
+from typing import TypedDict, Annotated
 from langchain_core.messages import BaseMessage
+from langgraph.graph.message import add_messages
 
 
 class WorkflowState(TypedDict, total=False):
-    messages: list[BaseMessage]
+    messages: Annotated[list[BaseMessage], add_messages]
     tools_meta: list[dict]
     decision_history: list[dict]
 

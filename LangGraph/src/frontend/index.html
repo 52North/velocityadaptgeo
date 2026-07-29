@@ -7,7 +7,6 @@
 
     <meta charset="UTF-8" />
     <title>Geometry Assistant</title>
-    <link rel="stylesheet" href="styles.css" />
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 
@@ -27,17 +26,15 @@
             </form>
         </div>
 
-        <!-- RIGHT SIDE MAP -->
+        <!-- RIGHT SIDE EXECUTION GRAPH -->
         <div class="right-panel">
-            <div id="map"></div>
+            <header class="header graph-header">
+                <span>Execution Graph</span>
+                <span id="graph-status" class="graph-status">empty</span>
+            </header>
+            <div id="graph" class="graph-canvas"></div>
         </div>
     </div>
-
-    <!-- Leaflet CSS + JS -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
-    <script src="/static/app.js"></script>
 </body>
 
 

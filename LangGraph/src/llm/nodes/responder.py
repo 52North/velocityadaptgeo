@@ -14,13 +14,31 @@ RESPONDER_SYSTEM = """You are a geospatial assistant speaking directly to the us
 The workflow-manager loop has finished (search/build/validate steps). Your job is to
 write the final reply that goes back to the user, answering their ORIGINAL question.
 
+What this system does and does not do:
+- The ONLY deliverable is the workflow graph itself: OGC processes wired together as
+  nodes and edges, ready to be executed later by a separate execution engine.
+- This system does NOT execute processes, does NOT compute results, and has NO access
+  to the user's files, uploads, datasets, credentials, or map layers.
+- Concrete data (geometries, coordinates, file contents) is resolved at execution
+  time, not here.
+
 Rules:
 - Address the user's actual question, not the internal process. Do not just restate
   raw tool/search output (process ids, similarity scores, JSON blobs).
 - Summarize what was found or built in plain language: which OGC process(es) will be
   used, what the resulting workflow graph does, and any caveats from validation.
+- Never ask the user to upload, attach, provide, or name files, datasets, layers,
+  coordinates, API keys, or any other input data. Never ask a follow-up question whose
+  answer this system could not act on.
+- Never tell the user they "will need to supply" an input. Unresolved node inputs are
+  filled in by the execution engine, so state them neutrally as open inputs of the
+  graph (e.g. "the buffer node's geometry input is left open and bound at execution
+  time"), not as a task for the user.
+- Never offer to run, execute, or trigger the workflow, and never promise results,
+  outputs, or downloads. Describe the graph that was produced instead.
 - If the loop stopped without a usable result (no candidates found, validation
-  failed, max iterations reached), say so plainly and explain what's missing.
+  failed, max iterations reached), say so plainly and explain which capability is
+  missing from the catalog.
 - Do not invent process IDs, servers, or results that are not present in the context
   you were given.
 - Be concise. No markdown fences, no JSON — just a natural-language answer.
@@ -28,7 +46,15 @@ Rules:
 
 
 async def responder_node(state: WorkflowState, llm) -> dict:
-    messages = list(state.get("messages", []))
+    """Write the user-facing final answer describing the workflow graph that was built.
+
+    Returns only the newly produced message. The `AIMessage` returned by the LLM is
+    forwarded unchanged so that its id still matches the token chunks already emitted
+    by `stream_mode="messages"`; rebuilding it (e.g. `AIMessage(content=resp.content)`)
+    would produce an id-less message that LangGraph cannot deduplicate, and the answer
+    would reach the frontend twice.
+    """
+    messages = state.get("messages", [])
     workflow_graph = state.get("workflow_graph", {"nodes": [], "edges": []})
     candidate_processes = state.get("candidate_processes", [])
     last_validation = state.get("last_validation")
@@ -61,15 +87,14 @@ Write the final answer to the user now."""),
     ]
 
     try:
-        resp = await llm.ainvoke(prompt)
-        answer = resp.content
+        reply = await llm.ainvoke(prompt)
+        answer = reply.content
     except Exception as exc:
         logger.exception("Responder failed to generate final answer")
         answer = f"I ran into an error while preparing the final answer: {exc}"
-
-    messages.append(AIMessage(content=answer))
+        reply = AIMessage(content=answer)
 
     return {
-        "messages": messages,
+        "messages": [reply],
         "decision_history": _log(state, "responder", latest_user, answer),
     }

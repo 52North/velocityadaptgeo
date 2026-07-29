@@ -21,6 +21,8 @@ llm = ChatAnthropic(
 
 ALLOWED_ACTIONS = ("search", "build", "validate", "chat", "done")
 
+MAX_WORKFLOW_ITERATIONS = int(os.environ.get("MAX_WORKFLOW_ITERATIONS", "8"))
+
 
 MANAGER_SYSTEM = """You are a workflow manager for a geospatial assistant.
 You plan the NEXT STEP of an iterative graph-building process. You NEVER execute tools.
@@ -34,9 +36,12 @@ Available actions (choose exactly one each turn):
                 processes that advance the goal. Use when the graph is missing
                 a capability and you don't yet know which process provides it.
                 NOTE: a successful search automatically adds the best-matching
-                candidate to the workflow graph and validates it for you in the
-                same turn - you do NOT need a separate "build"/"validate" step
-                right after a search.
+                candidate to the workflow graph, wires it to the upstream node
+                that feeds it, and validates it for you - you do NOT need a
+                separate "build"/"validate" step right after a search.
+                Control then returns to you, so search ONE capability per turn
+                and keep searching on later turns until every capability the
+                goal needs is present in the graph.
   - "build":    apply a deterministic mutation to the workflow graph
                 (add another node, connect two existing nodes, remove a node).
                 Use this only for manual follow-up edits on a later turn - e.g.
@@ -55,17 +60,32 @@ Available actions (choose exactly one each turn):
   - "done":     the graph satisfies the user's goal AND validation passes.
 
 Rules:
+- EVERY capability in the graph is an OGC process found in the catalog - including
+  geocoding. There are no built-in or implicit steps: if the goal names a place
+  ("Munich", "the city centre") rather than supplying geometry, the graph needs a
+  geocoding process node, and you find it with "search" exactly like any other.
 - Spatial correctness is critical. Always ensure geometry exists in the graph
-  (via a geocoding process) BEFORE adding any node that consumes geometry
-  (buffer, intersect, distance, etc.).
+  (via a geocoding process node) BEFORE adding any node that consumes geometry
+  (buffer, intersect, distance, etc.). So for a goal like "buffer Munich by 500m"
+  the first search is for geocoding, and only the next one for buffering.
+- Build the graph one capability at a time and only answer "done" once every
+  capability the goal needs is present as a node.
+- If the graph is UNCHANGED since your previous decision, do not repeat that
+  decision - the capability was either already added or is not in the catalog.
+  Search for a different capability, or answer "done" and let the final reply
+  explain what is missing.
 - Pick exactly ONE action per turn.
 - Do not include literal coordinates or other concrete data values; those are
   resolved at execution time.
+- The pipeline ENDS with the finished graph. Nothing here executes a process, and
+  there is no access to user files, uploads, datasets or credentials. Never plan a
+  step that needs data from the user; if a required value is unknown, leave the
+  input unset and let it be resolved at execution time.
 - Output ONLY valid JSON, no prose, no markdown fences.
 
 Output schema:
 {
-  "next_action": "search" | "build" | "validate" | "done",
+  "next_action": "search" | "build" | "validate" | "chat" | "done",
   "step": {
     "name": "short label",
     "instruction": <string OR object — see below>
@@ -90,24 +110,29 @@ Instruction format per action:
 - "chat":     "step" may be null; the chat node answers from the conversation directly.
 - "done":     "step" may be null.
 
-Examples:
+Examples - one goal, across consecutive turns:
 
 User goal: "Buffer the city of Munich by 500m."
-Current graph has a geocoder node producing geometry for "Munich". Next action:
+
+Turn 1, graph is empty. The goal names a place, so geometry must be produced first:
 {
   "next_action": "search",
-  "step": {"name": "find buffer", "instruction": "Find an OGC process that buffers a geometry by a distance."},
-  "reasoning": "Geometry exists; need a buffer capability."
+  "step": {"name": "find geocoder", "instruction": "Find an OGC process that geocodes a place name into a geometry."},
+  "reasoning": "Graph is empty and the goal names 'Munich'; geometry must exist before buffering."
 }
 
-After search returns a 'buffer' process:
+Turn 2, the graph now holds a geocoding node (the search added and wired it):
 {
-  "next_action": "build",
-  "step": {
-    "name": "add buffer node",
-    "instruction": {"op": "add_node", "args": {"process_id": "buffer", "server_url": "https://example/ogcapi", "inputs": {"distance": 500}}}
-  },
-  "reasoning": "Add the buffer node so we can wire the geocoder output into it."
+  "next_action": "search",
+  "step": {"name": "find buffer", "instruction": "Find an OGC process that buffers a geometry by a distance in meters."},
+  "reasoning": "Geocoding node provides geometry; the buffer capability is still missing."
+}
+
+Turn 3, the graph holds the geocoding node feeding a buffer node and validation passed:
+{
+  "next_action": "done",
+  "step": null,
+  "reasoning": "Every capability the goal needs is present and wired, and validation reported no errors."
 }
 """
 
@@ -132,7 +157,7 @@ async def management_node(state: WorkflowState, llm) -> dict:
     candidate_processes = state.get("candidate_processes", [])
     last_validation = state.get("last_validation")
     iteration = state.get("iteration", 0)
-    max_iterations = state.get("max_iterations", 15)
+    max_iterations = state.get("max_iterations", MAX_WORKFLOW_ITERATIONS)
     decision_history = list(state.get("decision_history", []))
 
     # Find the user goal
