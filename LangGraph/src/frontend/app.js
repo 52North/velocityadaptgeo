@@ -2,6 +2,7 @@ const form = document.getElementById("chat-form");
 const input = document.getElementById("prompt");
 const graphCanvas = document.getElementById("graph");
 const graphStatus = document.getElementById("graph-status");
+const runButton = document.getElementById("run-graph");
 
 const threadId = crypto.randomUUID();
 
@@ -15,6 +16,8 @@ const HIDDEN_CONFIG_KEYS = ["server_url", "timeout_seconds"];
 
 let executionGraph = { nodes: [], edges: [] };
 let lastValidation = null;
+let nodeRuns = {};
+let running = false;
 
 function addMessage(role, text = "") {
     const div = document.createElement("div");
@@ -78,13 +81,23 @@ function configSummary(node) {
 }
 
 function drawNode(svg, node, x, y) {
-    const group = svgEl("g", { class: "gnode", transform: `translate(${x}, ${y})` });
+    const run = nodeRuns[node.id];
+    const state = run ? run.state : "idle";
+    const group = svgEl("g", {
+        class: `gnode gnode-${state}`, transform: `translate(${x}, ${y})`,
+    });
     group.appendChild(svgEl("rect", {
         width: NODE_W, height: NODE_H, rx: 10, class: "gnode-box",
     }));
     group.appendChild(svgEl("rect", {
         width: 4, height: NODE_H, rx: 2, class: "gnode-accent",
     }));
+
+    if (run) {
+        const badge = svgEl("text", { x: NODE_W - 12, y: 27, class: "gnode-run", "text-anchor": "end" });
+        badge.textContent = run.label;
+        group.appendChild(badge);
+    }
 
     const title = svgEl("text", { x: 16, y: 27, class: "gnode-title" });
     title.textContent = truncate(node.type, 24);
@@ -153,6 +166,9 @@ function renderGraph() {
     graphStatus.className = "graph-status" +
         (nodes.length && lastValidation ? (lastValidation.valid ? " ok" : " bad") : "");
 
+    runButton.disabled = running || !nodes.length;
+    runButton.textContent = running ? "Running…" : "Run";
+
     graphCanvas.innerHTML = "";
 
     if (!nodes.length) {
@@ -218,6 +234,91 @@ function renderGraph() {
     }
 }
 
+/**
+ * Append one line to the execution log shown beneath the graph.
+ * Output payloads arrive pre-summarised from the server, never as raw geometry. The log
+ * lives outside the graph canvas, which `renderGraph` rebuilds on every progress event.
+ */
+function logRun(kind, text, detail) {
+    const log = document.getElementById("run-log");
+    log.hidden = false;
+    const row = document.createElement("div");
+    row.className = `run-row run-${kind}`;
+    row.textContent = text;
+    if (detail) {
+        const pre = document.createElement("pre");
+        pre.textContent = detail;
+        row.appendChild(pre);
+    }
+    log.appendChild(row);
+    log.scrollTop = log.scrollHeight;
+}
+
+/**
+ * Execute the graph the assistant built for this thread, streaming per-node progress.
+ * Node states are mirrored onto the diagram so the run is visible where the graph is.
+ */
+function runGraph() {
+    if (running || !(executionGraph.nodes || []).length) return;
+
+    running = true;
+    nodeRuns = {};
+    const log = document.getElementById("run-log");
+    log.innerHTML = "";
+    log.hidden = true;
+    renderGraph();
+
+    const started = Date.now();
+    const source = new EventSource(`/api/execute?thread_id=${encodeURIComponent(threadId)}`);
+
+    const finish = () => {
+        source.close();
+        running = false;
+        renderGraph();
+    };
+
+    source.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+
+        if (data.event === "graph-start") {
+            logRun("info", `Running ${data.order.length} node(s)…`);
+        } else if (data.event === "node-start") {
+            nodeRuns[data.node] = { state: "running", label: "…" };
+            logRun("start", `▶ ${data.process}`,
+                Object.entries(data.inputs || {}).map(([k, v]) => `${k} = ${v}`).join("\n"));
+            renderGraph();
+        } else if (data.event === "node-done") {
+            nodeRuns[data.node] = { state: "done", label: `${(data.ms / 1000).toFixed(1)}s` };
+            logRun("done", `✓ ${data.process} — ${(data.ms / 1000).toFixed(1)}s`,
+                Object.entries(data.outputs || {}).map(([k, v]) => `${k} = ${v}`).join("\n"));
+            renderGraph();
+        } else if (data.event === "node-error") {
+            nodeRuns[data.node] = { state: "failed", label: "failed" };
+            logRun("error", `✗ ${data.process}`, data.error);
+            renderGraph();
+        } else if (data.event === "node-skipped") {
+            nodeRuns[data.node] = { state: "skipped", label: "skipped" };
+            logRun("skip", `– ${data.process} skipped`, data.reason);
+            renderGraph();
+        } else if (data.event === "graph-done") {
+            const secs = ((Date.now() - started) / 1000).toFixed(1);
+            logRun(data.ok ? "done" : "error",
+                `${data.ok ? "Finished" : "Finished with errors"} — ${data.ran} ran, ${data.failed} failed, ${secs}s total`);
+            finish();
+        } else if (data.event === "graph-error") {
+            logRun("error", "Cannot execute graph", data.error);
+            finish();
+        }
+    };
+
+    source.onerror = () => {
+        if (running) logRun("error", "Connection to the execution stream was lost.");
+        finish();
+    };
+}
+
+runButton.addEventListener("click", runGraph);
+
 form.addEventListener("submit", (e) => {
     e.preventDefault();
 
@@ -239,7 +340,10 @@ form.addEventListener("submit", (e) => {
         const data = JSON.parse(event.data);
 
         if (data.event === "graph") {
-            if (data.workflow_graph) executionGraph = data.workflow_graph;
+            if (data.workflow_graph) {
+                executionGraph = data.workflow_graph;
+                nodeRuns = {};
+            }
             if (data.last_validation) lastValidation = data.last_validation;
             renderGraph();
             return;

@@ -357,3 +357,123 @@ resources:
       terrainModel:
         schema:
           type: object
+
+  city-boundary:
+    type: process
+    processor:
+      name: processes.city_boundary.CityBoundaryProcessor
+
+    inputs:
+      place:
+        schema:
+          type: string
+      bbox:
+        schema:
+          type: array
+
+    outputs:
+      boundary:
+        schema:
+          type: object
+      bbox:
+        schema:
+          type: array
+      utmCrs:
+        schema:
+          type: string
+      areaSqm:
+        schema:
+          type: number
+
+  osm-green-areas:
+    type: process
+    processor:
+      name: processes.osm_green_areas.OsmGreenAreasProcessor
+
+    inputs:
+      area:
+        schema:
+          type: object
+      tags:
+        schema:
+          type: object
+
+    outputs:
+      features:
+        schema:
+          type: object
+      count:
+        schema:
+          type: integer
+
+  min-area-filter:
+    type: process
+    processor:
+      name: processes.min_area_filter.MinAreaFilterProcessor
+
+    inputs:
+      features:
+        schema:
+          type: object
+      minArea:
+        schema:
+          type: number
+
+    outputs:
+      features:
+        schema:
+          type: object
+      count:
+        schema:
+          type: integer
+      removed:
+        schema:
+          type: integer
+
+  multi-ring-buffer:
+    type: process
+    processor:
+      name: processes.multi_ring_buffer.MultiRingBufferProcessor
+
+    inputs:
+      features:
+        schema:
+          type: object
+      distances:
+        schema:
+          type: array
+
+    outputs:
+      rings:
+        schema:
+          type: object
+      coverage:
+        schema:
+          type: object
+      maxDistance:
+        schema:
+          type: number
+
+  geometry-difference:
+    type: process
+    processor:
+      name: processes.geometry_difference.GeometryDifferenceProcessor
+
+    inputs:
+      subject:
+        schema:
+          type: object
+      subtrahend:
+        schema:
+          type: object
+
+    outputs:
+      result:
+        schema:
+          type: object
+      areaSqm:
+        schema:
+          type: number
+      shareOfSubject:
+        schema:
+          type: number

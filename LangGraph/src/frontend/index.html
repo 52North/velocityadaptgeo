@@ -30,9 +30,13 @@
         <div class="right-panel">
             <header class="header graph-header">
                 <span>Execution Graph</span>
-                <span id="graph-status" class="graph-status">empty</span>
+                <span class="graph-header-right">
+                    <span id="graph-status" class="graph-status">empty</span>
+                    <button id="run-graph" class="run-button" type="button" disabled>Run</button>
+                </span>
             </header>
             <div id="graph" class="graph-canvas"></div>
+            <div id="run-log" class="run-log" hidden></div>
         </div>
     </div>
 </body>

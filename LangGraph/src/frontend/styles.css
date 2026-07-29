@@ -152,10 +152,71 @@ button:hover {
     color: #f87171;
 }
 
+.graph-header-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.run-button {
+    margin-left: 0;
+    padding: 6px 14px;
+    font-size: 13px;
+}
+
+.run-button:disabled {
+    background: #1e293b;
+    color: #64748b;
+    cursor: not-allowed;
+}
+
 .graph-canvas {
     flex: 1;
     overflow: auto;
     padding: 8px;
+    min-height: 0;
+}
+
+.run-log {
+    flex: 0 0 auto;
+    max-height: 38%;
+    overflow-y: auto;
+    border-top: 1px solid #1e293b;
+    background: #020617;
+    padding: 10px 14px;
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.run-row {
+    padding: 3px 0;
+    color: #94a3b8;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.run-row pre {
+    margin: 2px 0 6px 14px;
+    color: #64748b;
+    white-space: pre-wrap;
+    font-size: 11px;
+}
+
+.run-done { color: #4ade80; }
+.run-error { color: #f87171; }
+.run-skip { color: #fbbf24; }
+.run-start { color: #e5e7eb; }
+
+.gnode-running .gnode-box { stroke: #38bdf8; }
+.gnode-running .gnode-accent { fill: #38bdf8; }
+.gnode-done .gnode-accent { fill: #4ade80; }
+.gnode-failed .gnode-box { stroke: #f87171; }
+.gnode-failed .gnode-accent { fill: #f87171; }
+.gnode-skipped .gnode-accent { fill: #fbbf24; }
+
+.gnode-run {
+    fill: #94a3b8;
+    font-size: 10px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 .graph-empty {

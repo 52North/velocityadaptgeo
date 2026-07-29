@@ -22,15 +22,26 @@ def validate_graph(graph: dict) -> dict:
             errors.append(f"Schema error at '{loc}': {e['msg']}")
         return {"valid": False, "errors": errors}
 
-    node_ids = {n.id for n in parsed.nodes}
-    if not node_ids:
+    ports = {n.id: (set(n.inputs), set(n.outputs)) for n in parsed.nodes}
+    if not ports:
         errors.append("Graph has no nodes.")
 
     for i, edge in enumerate(parsed.edges):
-        if edge.source not in node_ids:
+        if edge.source not in ports:
             errors.append(f"Edge {i}: unknown source '{edge.source}'.")
-        if edge.target not in node_ids:
+        elif (declared := ports[edge.source][1]) and edge.source_output not in declared:
+            errors.append(
+                f"Edge {i}: '{edge.source}' has no output '{edge.source_output}' "
+                f"(declared outputs: {sorted(declared)})."
+            )
+
+        if edge.target not in ports:
             errors.append(f"Edge {i}: unknown target '{edge.target}'.")
+        elif (declared := ports[edge.target][0]) and edge.target_input not in declared:
+            errors.append(
+                f"Edge {i}: '{edge.target}' has no input '{edge.target_input}' "
+                f"(declared inputs: {sorted(declared)})."
+            )
 
     return {"valid": not errors, "errors": errors}
 

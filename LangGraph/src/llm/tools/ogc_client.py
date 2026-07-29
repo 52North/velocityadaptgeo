@@ -80,7 +80,9 @@ def search_ogc_processes(query: str, k: int = 5) -> list[dict]:
 
     Returns:
         A list of dicts with keys: process_id, server_url, title, description,
-        inputs (schema), similarity.
+        inputs (schema), outputs (schema), similarity. The port names in `inputs`
+        and `outputs` are the only valid endpoints for wiring this process into a
+        workflow graph.
     """
     k = max(1, min(k, 20))
     last_error: Exception | None = None
@@ -130,6 +132,7 @@ def search_ogc_processes(query: str, k: int = 5) -> list[dict]:
             "title": r[2] or "",
             "description": (r[3] or "")[:500],
             "inputs": (r[4] or {}).get("inputs", {}),
+            "outputs": (r[4] or {}).get("outputs", {}),
             "similarity": round(float(r[5]), 3),
         }
         for r in rows

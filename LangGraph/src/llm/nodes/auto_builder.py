@@ -38,6 +38,10 @@ Rules:
   Leave them null only when the graph is empty or no existing node can feed this one.
 - Node ids in the graph look like "<process_id>_<n>"; connect_from_node must be one of
   the ids actually present in the current graph.
+- Port names are NOT free text. connect_from_output must be one of the source node's
+  declared "outputs" keys, and connect_to_input one of this candidate's declared
+  "inputs" keys, spelled exactly as given. Never reuse the input's name for the output
+  or invent a port: a graph wired to a port that does not exist cannot be executed.
 - Do not invent process ids, servers, or node ids that are not present in the given
   candidates or graph.
 """
@@ -113,11 +117,19 @@ Pick one candidate and decide how to wire it in."""),
             ),
         }
 
+    chosen = next(
+        (c for c in candidates
+         if c.get("process_id") == decision.process_id and c.get("server_url") == decision.server_url),
+        {},
+    )
+
     try:
         new_graph = apply_build_op(graph, "add_node", {
             "process_id": decision.process_id,
             "server_url": decision.server_url,
             "inputs": decision.inputs,
+            "input_ports": list((chosen.get("inputs") or {}).keys()),
+            "output_ports": list((chosen.get("outputs") or {}).keys()),
         })
         new_node_id = new_graph["nodes"][-1]["id"]
     except (ValueError, TypeError) as exc:

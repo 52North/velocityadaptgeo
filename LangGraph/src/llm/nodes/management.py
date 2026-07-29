@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import re
 
@@ -7,6 +8,8 @@ from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from src.llm.state.state import WorkflowState
+
+logger = logging.getLogger(__name__)
 
 load_dotenv(override=True)
 
@@ -21,7 +24,7 @@ llm = ChatAnthropic(
 
 ALLOWED_ACTIONS = ("search", "build", "validate", "chat", "done")
 
-MAX_WORKFLOW_ITERATIONS = int(os.environ.get("MAX_WORKFLOW_ITERATIONS", "8"))
+MAX_WORKFLOW_ITERATIONS = int(os.environ.get("MAX_WORKFLOW_ITERATIONS", "12"))
 
 
 MANAGER_SYSTEM = """You are a workflow manager for a geospatial assistant.
@@ -51,12 +54,19 @@ Available actions (choose exactly one each turn):
   - "validate": run the graph validator to check for type mismatches,
                 dangling inputs, or cycles. Use after a manual "build" edit, or
                 before "done" if the graph was changed by hand.
-  - "chat":     the user is making conversation, asking a general question,
-                or asking for clarification/explanation that does NOT require
-                searching the OGC catalog or building a workflow (e.g. "hi",
-                "what can you do?", "what does a buffer process do?", follow-up
-                questions about a previous answer). Answer directly instead of
-                starting a search/build cycle.
+  - "chat":     ONLY for messages that ask for nothing to be built: greetings
+                ("hi"), questions about your own abilities ("what can you do?"),
+                or a question purely about a previous answer ("why did you pick
+                that one?"). Nothing else belongs here.
+                If the newest user message describes a problem, task, outcome or
+                analysis they want - in ANY phrasing, however plain, informal or
+                non-technical, and even if it arrives as a follow-up in a long
+                conversation - it is a GOAL, not chat: plan "search" and build
+                the graph. Users describe problems in everyday words ("figure
+                out the best spots for a project", "flag anything unusual in
+                these ship tracks"); it is your job to recognise the geospatial
+                capabilities behind that wording. NEVER answer a goal by
+                describing in prose which process would suit it - build it.
   - "done":     the graph satisfies the user's goal AND validation passes.
 
 Rules:
@@ -70,6 +80,12 @@ Rules:
   the first search is for geocoding, and only the next one for buffering.
 - Build the graph one capability at a time and only answer "done" once every
   capability the goal needs is present as a node.
+- Judge whether the newest user message continues the graph already built or starts
+  a fresh problem, and report it in "goal_scope". A graph must only ever contain the
+  capabilities of ONE problem: if the user has moved on to a different task, answer
+  "new" so the old nodes are cleared, then build the new graph from scratch. Answer
+  "continue" only when the message extends or corrects the current graph ("now also
+  buffer that result", "drop the second step").
 - If the graph is UNCHANGED since your previous decision, do not repeat that
   decision - the capability was either already added or is not in the catalog.
   Search for a different capability, or answer "done" and let the final reply
@@ -86,6 +102,7 @@ Rules:
 Output schema:
 {
   "next_action": "search" | "build" | "validate" | "chat" | "done",
+  "goal_scope": "new" | "continue",
   "step": {
     "name": "short label",
     "instruction": <string OR object — see below>
@@ -152,6 +169,14 @@ def parse_llm_json(text: str):
 
 
 async def management_node(state: WorkflowState, llm) -> dict:
+    """Plan the next action for the current user goal.
+
+    On the first planning step of a turn the manager also judges whether the newest
+    message starts a fresh problem; if so the previously built graph is cleared, so a
+    graph never mixes the capabilities of two unrelated problems. Later steps of the
+    same turn skip that check - the graph they are midway through building is the one
+    being asked about.
+    """
     messages = state.get("messages", [])
     workflow_graph = state.get("workflow_graph", {"nodes": [], "edges": []})
     candidate_processes = state.get("candidate_processes", [])
@@ -220,18 +245,29 @@ async def management_node(state: WorkflowState, llm) -> dict:
 
     step = data.get("step")
     reasoning = data.get("reasoning", "")
+    starts_new_goal = iteration == 0 and data.get("goal_scope") == "new" and workflow_graph.get("nodes")
 
     decision_history.append({
         "node": "management_node",
         "iteration": iteration + 1,
         "current_action": next_action,
         "step": step,
+        "goal_scope": "new" if starts_new_goal else "continue",
         "reasoning": reasoning or "No reasoning provided by LLM.",
     })
 
-    return {
+    update = {
         "current_action": next_action,        # "search" | "build" | "validate" | "done"
         "step": step,                         # single step object (or None)
         "iteration": iteration + 1,
         "decision_history": decision_history,
     }
+
+    if starts_new_goal:
+        logger.info("New goal detected; clearing the %d-node graph from the previous problem.",
+                    len(workflow_graph.get("nodes", [])))
+        update["workflow_graph"] = {"nodes": [], "edges": []}
+        update["candidate_processes"] = []
+        update["last_validation"] = None
+
+    return update

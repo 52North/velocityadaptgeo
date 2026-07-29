@@ -18,6 +18,8 @@ def add_node(
     node_id: str | None = None,
     position: NodePosition | None = None,
     config: dict | None = None,
+    input_ports: list[str] | None = None,
+    output_ports: list[str] | None = None,
 ) -> dict:
     nodes = list(graph.get("nodes", []))
     node_id = node_id or f"{process_id}_{len(nodes)}"
@@ -26,6 +28,7 @@ def add_node(
         node_id, process_id, server_url,
         inputs=inputs, position=position, config=config,
         node_index=len(nodes),
+        input_ports=input_ports, output_ports=output_ports,
     ))
     return {"nodes": nodes, "edges": graph.get("edges", [])}
 
