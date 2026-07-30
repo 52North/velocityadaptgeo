@@ -477,3 +477,8 @@ resources:
       shareOfSubject:
         schema:
           type: number
+
+  cool_spots:
+    type: process
+    processor:
+      name: processes.cool_spots.CoolSpotsProcessor
