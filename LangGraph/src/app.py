@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
@@ -7,9 +7,18 @@ from pathlib import Path
 from uuid import uuid4
 import json
 import logging
+import os
 from fastapi.responses import StreamingResponse
 from src.llm.workflow import compiled_graph, DEFAULT_WORKFLOW_CONFIG, MAX_WORKFLOW_ITERATIONS
-from src.execution.runner import ExecutionError, execute_graph, run_graph, summarise
+from src.execution import store
+from src.execution.runner import (
+    ExecutionError,
+    as_feature_collection,
+    execute_graph,
+    mappable_outputs,
+    run_graph,
+    summarise,
+)
 from src.helper.helper import pretty_print_messages
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
@@ -164,10 +173,17 @@ async def execute(thread_id: str):
     """
     async def gen():
         graph = graph_for_thread(thread_id)
+        store.start_run(thread_id)
         try:
             async for event in run_graph(graph):
                 if "outputs" in event:
-                    event = {**event, "outputs": summarise(event["outputs"])}
+                    produced = event["outputs"]
+                    store.save_node_result(thread_id, event["node"], produced)
+                    event = {
+                        **event,
+                        "outputs": summarise(produced),
+                        "geo": mappable_outputs(produced),
+                    }
                 if "inputs" in event:
                     event = {**event, "inputs": summarise(event["inputs"])}
                 event.pop("results", None)
@@ -176,6 +192,36 @@ async def execute(thread_id: str):
             yield f"data: {json.dumps({'event': 'graph-error', 'error': str(exc)})}\n\n"
 
     return StreamingResponse(gen(), media_type="text/event-stream")
+
+
+MAX_MAP_FEATURES = int(os.environ.get("MAX_MAP_FEATURES", "3000"))
+
+
+@app.get("/api/result")
+async def result_layer(thread_id: str, node: str, output: str, limit: int = MAX_MAP_FEATURES):
+    """Return one execution output as a FeatureCollection for the results map.
+
+    Only fetched when a layer is actually switched on, and capped so a run that produced
+    thousands of polygons cannot lock up the browser. Truncation is reported rather than
+    hidden, so a partial layer is never mistaken for the whole result.
+    """
+    value = store.get_node_output(thread_id, node, output)
+    if value is None:
+        raise HTTPException(status_code=404, detail=f"no result for {node}.{output}")
+
+    try:
+        collection = as_feature_collection(value)
+    except ExecutionError as exc:
+        raise HTTPException(status_code=415, detail=str(exc))
+
+    features = collection.get("features") or []
+    truncated = len(features) > limit
+    return {
+        "type": "FeatureCollection",
+        "features": features[:limit],
+        "truncated": truncated,
+        "total": len(features),
+    }
 
 
 class ExecuteRequest(BaseModel):

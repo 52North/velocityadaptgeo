@@ -7,11 +7,12 @@ const runButton = document.getElementById("run-graph");
 const threadId = crypto.randomUUID();
 
 const SVG_NS = "http://www.w3.org/2000/svg";
-const NODE_W = 200;
+const NODE_W = 186;
 const NODE_H = 78;
-const COL_GAP = 124;
+const COL_GAP = 104;
 const ROW_GAP = 30;
-const PAD = 26;
+const BAND_GAP = 62;
+const PAD = 22;
 const HIDDEN_CONFIG_KEYS = ["server_url", "timeout_seconds"];
 
 let executionGraph = { nodes: [], edges: [] };
@@ -57,6 +58,16 @@ function columnOf(nodes, edges) {
     return column;
 }
 
+/**
+ * Width actually available for the diagram: the canvas content box, excluding its
+ * padding and any vertical scrollbar, so the drawing can never force sideways scrolling.
+ */
+function canvasContentWidth() {
+    const style = getComputedStyle(graphCanvas);
+    const padding = parseFloat(style.paddingLeft || 0) + parseFloat(style.paddingRight || 0);
+    return Math.max(0, (graphCanvas.clientWidth || 0) - padding);
+}
+
 function svgEl(name, attrs = {}) {
     const el = document.createElementNS(SVG_NS, name);
     Object.entries(attrs).forEach(([k, v]) => el.setAttribute(k, String(v)));
@@ -75,7 +86,10 @@ function truncate(text, max) {
 function configSummary(node) {
     const entries = Object.entries(node.config || {})
         .filter(([k]) => !HIDDEN_CONFIG_KEYS.includes(k))
-        .map(([k, v]) => `${k}=${typeof v === "object" ? "{…}" : v}`);
+        .map(([k, v]) => {
+            if (Array.isArray(v)) return `${k}=[${v.join(",")}]`;
+            return `${k}=${v !== null && typeof v === "object" ? "{…}" : v}`;
+        });
     if (entries.length) return entries.join(", ");
     return (node.inputs || []).length ? `inputs: ${node.inputs.join(", ")}` : "no static inputs";
 }
@@ -128,6 +142,15 @@ function portLabel(edge) {
     return out === into ? out : `${out}→${into}`;
 }
 
+function edgeLabel(svg, edge, x, y) {
+    const label = svgEl("text", {
+        x, y, class: "gedge-label", "text-anchor": "middle",
+    });
+    label.textContent = truncate(portLabel(edge), 18);
+    svg.appendChild(label);
+}
+
+/** Draw an edge between two nodes on the same band as a left-to-right curve. */
 function drawEdge(svg, edge, from, to) {
     const x1 = from.x + NODE_W;
     const y1 = from.y + NODE_H / 2;
@@ -140,15 +163,29 @@ function drawEdge(svg, edge, from, to) {
         class: "gedge",
         "marker-end": "url(#arrow)",
     }));
+    edgeLabel(svg, edge, (x1 + x2) / 2, (y1 + y2) / 2 - 8);
+}
 
-    const label = svgEl("text", {
-        x: (x1 + x2) / 2,
-        y: (y1 + y2) / 2 - 8,
-        class: "gedge-label",
-        "text-anchor": "middle",
-    });
-    label.textContent = truncate(portLabel(edge), 18);
-    svg.appendChild(label);
+/**
+ * Draw an edge whose target wrapped onto a later band: out to the right, down through
+ * the gap between bands, then back left into the target. Routed orthogonally and dashed
+ * so a line running right-to-left reads as a continuation rather than a reversed arrow.
+ * `laneY` is assigned by the caller, which stacks edges sharing a gap onto separate lanes
+ * so neither the routes nor their port labels overprint.
+ */
+function drawWrapEdge(svg, edge, from, to, laneY) {
+    const x1 = from.x + NODE_W;
+    const y1 = from.y + NODE_H / 2;
+    const x2 = to.x;
+    const y2 = to.y + NODE_H / 2;
+    const stub = 20;
+
+    svg.appendChild(svgEl("path", {
+        d: `M ${x1} ${y1} H ${x1 + stub} V ${laneY} H ${x2 - stub} V ${y2} H ${x2}`,
+        class: "gedge gedge-wrap",
+        "marker-end": "url(#arrow)",
+    }));
+    edgeLabel(svg, edge, (x1 + stub + x2 - stub) / 2, laneY - 7);
 }
 
 /**
@@ -180,21 +217,40 @@ function renderGraph() {
     }
 
     const column = columnOf(nodes, edges);
+    const available = Math.max(canvasContentWidth(), NODE_W + PAD * 2);
+    const perBand = Math.max(1, Math.floor(
+        (available - PAD * 2 + COL_GAP) / (NODE_W + COL_GAP)
+    ));
+
     const rowCursor = new Map();
+    const bandRows = new Map();
     const placed = new Map();
 
     nodes.forEach((node) => {
         const col = column.get(node.id) || 0;
         const row = rowCursor.get(col) || 0;
         rowCursor.set(col, row + 1);
-        placed.set(node.id, {
-            x: PAD + col * (NODE_W + COL_GAP),
-            y: PAD + row * (NODE_H + ROW_GAP),
-        });
+        const band = Math.floor(col / perBand);
+        bandRows.set(band, Math.max(bandRows.get(band) || 0, row + 1));
+        placed.set(node.id, { col, band, row, colInBand: col % perBand });
     });
 
-    const width = PAD * 2 + (Math.max(...column.values()) + 1) * (NODE_W + COL_GAP) - COL_GAP;
-    const height = PAD * 2 + Math.max(...rowCursor.values()) * (NODE_H + ROW_GAP) - ROW_GAP;
+    const bands = [...bandRows.keys()].sort((a, b) => a - b);
+    const bandTop = new Map();
+    let cursorY = PAD;
+    bands.forEach((band) => {
+        bandTop.set(band, cursorY);
+        cursorY += bandRows.get(band) * (NODE_H + ROW_GAP) - ROW_GAP + BAND_GAP;
+    });
+
+    placed.forEach((slot) => {
+        slot.x = PAD + slot.colInBand * (NODE_W + COL_GAP);
+        slot.y = bandTop.get(slot.band) + slot.row * (NODE_H + ROW_GAP);
+    });
+
+    const usedCols = Math.min(perBand, Math.max(...column.values()) + 1);
+    const width = Math.max(PAD * 2 + usedCols * (NODE_W + COL_GAP) - COL_GAP, available);
+    const height = cursorY - BAND_GAP + PAD;
 
     const svg = svgEl("svg", {
         width, height, viewBox: `0 0 ${width} ${height}`, class: "graph-svg",
@@ -209,10 +265,20 @@ function renderGraph() {
     defs.appendChild(marker);
     svg.appendChild(defs);
 
+    const laneUsage = new Map();
     edges.forEach((edge) => {
         const from = placed.get(edge.source);
         const to = placed.get(edge.target);
-        if (from && to) drawEdge(svg, edge, from, to);
+        if (!from || !to) return;
+        if (to.band === from.band && to.x > from.x) {
+            drawEdge(svg, edge, from, to);
+            return;
+        }
+        const laneBand = Math.max(from.band, to.band);
+        const taken = laneUsage.get(laneBand) || 0;
+        laneUsage.set(laneBand, taken + 1);
+        const laneY = bandTop.get(laneBand) - BAND_GAP / 2 - taken * 15;
+        drawWrapEdge(svg, edge, from, to, laneY);
     });
 
     nodes.forEach((node) => {
@@ -232,6 +298,20 @@ function renderGraph() {
         });
         graphCanvas.appendChild(errors);
     }
+}
+
+/**
+ * Forget the layers of a previous run, so the results window never mixes the outputs of
+ * two runs or of a graph that has since been rebuilt.
+ */
+function resetResultLayers() {
+    if (leafletMap) {
+        layerCache.forEach((layer) => leafletMap.removeLayer(layer));
+    }
+    layerCache.clear();
+    mapLayers = [];
+    resultsButton.disabled = true;
+    if (resultsWindow && !resultsWindow.hidden) renderLayerList();
 }
 
 /**
@@ -263,6 +343,7 @@ function runGraph() {
 
     running = true;
     nodeRuns = {};
+    resetResultLayers();
     const log = document.getElementById("run-log");
     log.innerHTML = "";
     log.hidden = true;
@@ -291,6 +372,7 @@ function runGraph() {
             nodeRuns[data.node] = { state: "done", label: `${(data.ms / 1000).toFixed(1)}s` };
             logRun("done", `✓ ${data.process} — ${(data.ms / 1000).toFixed(1)}s`,
                 Object.entries(data.outputs || {}).map(([k, v]) => `${k} = ${v}`).join("\n"));
+            registerLayers(data.node, data.process, data.geo);
             renderGraph();
         } else if (data.event === "node-error") {
             nodeRuns[data.node] = { state: "failed", label: "failed" };
@@ -319,6 +401,158 @@ function runGraph() {
 
 runButton.addEventListener("click", runGraph);
 
+const LAYER_COLORS = ["#22c55e", "#38bdf8", "#f472b6", "#a78bfa", "#f87171", "#facc15"];
+const DISTANCE_RAMP = ["#bbf7d0", "#86efac", "#4ade80", "#22c55e", "#15803d"];
+
+const resultsWindow = document.getElementById("results-window");
+const resultsLayers = document.getElementById("results-layers");
+const resultsButton = document.getElementById("show-results");
+
+let mapLayers = [];
+let leafletMap = null;
+let baseLayer = null;
+const layerCache = new Map();
+
+/**
+ * Register the drawable outputs a finished node reported, so they can be offered as
+ * map layers. Non-GeoJSON outputs (counts, areas, CRS codes) are simply absent here.
+ */
+function registerLayers(nodeId, process, geo) {
+    Object.entries(geo || {}).forEach(([port, info]) => {
+        mapLayers.push({
+            key: `${nodeId}.${port}`, node: nodeId, process, port,
+            kind: info.kind, count: info.features, index: mapLayers.length,
+        });
+    });
+    resultsButton.disabled = mapLayers.length === 0;
+}
+
+/** Style one feature, shading multi-ring bands by distance when they carry one. */
+function styleFor(entry, distances) {
+    const color = LAYER_COLORS[entry.index % LAYER_COLORS.length];
+    return (feature) => {
+        const distance = feature.properties && feature.properties.outerDistance;
+        if (distances.length > 1 && typeof distance === "number") {
+            const rank = distances.indexOf(distance);
+            return {
+                color: DISTANCE_RAMP[Math.min(rank, DISTANCE_RAMP.length - 1)],
+                weight: 1, opacity: 0.9, fillOpacity: 0.5,
+            };
+        }
+        return { color, weight: 1.5, opacity: 0.95, fillOpacity: 0.2 };
+    };
+}
+
+function describeProperties(properties) {
+    const rows = Object.entries(properties || {})
+        .filter(([, v]) => v !== null && typeof v !== "object")
+        .map(([k, v]) => `<strong>${k}</strong>: ${v}`);
+    return rows.length ? rows.join("<br>") : "no attributes";
+}
+
+/** Fit the map to everything currently switched on. */
+function fitToVisible() {
+    let bounds = null;
+    mapLayers.forEach((entry) => {
+        const layer = layerCache.get(entry.key);
+        if (!layer || !leafletMap.hasLayer(layer)) return;
+        bounds = bounds ? bounds.extend(layer.getBounds()) : layer.getBounds();
+    });
+    if (bounds && bounds.isValid()) leafletMap.fitBounds(bounds, { padding: [24, 24] });
+}
+
+async function toggleLayer(entry, on, noteEl) {
+    if (!on) {
+        const existing = layerCache.get(entry.key);
+        if (existing) leafletMap.removeLayer(existing);
+        fitToVisible();
+        return;
+    }
+
+    if (!layerCache.has(entry.key)) {
+        noteEl.textContent = "loading…";
+        const url = `/api/result?thread_id=${encodeURIComponent(threadId)}` +
+            `&node=${encodeURIComponent(entry.node)}&output=${encodeURIComponent(entry.port)}`;
+        const response = await fetch(url);
+        if (!response.ok) {
+            noteEl.textContent = `failed (${response.status})`;
+            return;
+        }
+        const collection = await response.json();
+        const distances = [...new Set((collection.features || [])
+            .map((f) => f.properties && f.properties.outerDistance)
+            .filter((v) => typeof v === "number"))].sort((a, b) => a - b);
+
+        const layer = L.geoJSON(collection, {
+            style: styleFor(entry, distances),
+            pointToLayer: (feature, latlng) => L.circleMarker(latlng, { radius: 5 }),
+            onEachFeature: (feature, lyr) => lyr.bindPopup(describeProperties(feature.properties)),
+        });
+        layerCache.set(entry.key, layer);
+        noteEl.textContent = collection.truncated
+            ? `showing ${collection.features.length} of ${collection.total}`
+            : `${collection.features.length} feature(s)`;
+    }
+
+    layerCache.get(entry.key).addTo(leafletMap);
+    fitToVisible();
+}
+
+/** Build the layer switcher for the outputs of the last run. */
+function renderLayerList() {
+    resultsLayers.innerHTML = "";
+    if (!mapLayers.length) {
+        resultsLayers.innerHTML = '<p class="results-empty">Run the graph to produce results.</p>';
+        return;
+    }
+
+    mapLayers.forEach((entry, i) => {
+        const row = document.createElement("label");
+        row.className = "layer-row";
+
+        const box = document.createElement("input");
+        box.type = "checkbox";
+        const note = document.createElement("span");
+        note.className = "layer-note";
+        note.textContent = `${entry.kind}${entry.count > 1 ? ` · ${entry.count}` : ""}`;
+
+        const swatch = document.createElement("span");
+        swatch.className = "layer-swatch";
+        swatch.style.background = LAYER_COLORS[entry.index % LAYER_COLORS.length];
+
+        const title = document.createElement("span");
+        title.className = "layer-title";
+        title.textContent = `${entry.process}.${entry.port}`;
+
+        box.addEventListener("change", () => toggleLayer(entry, box.checked, note));
+
+        row.append(box, swatch, title, note);
+        resultsLayers.appendChild(row);
+
+        if (i === mapLayers.length - 1) {
+            box.checked = true;
+            toggleLayer(entry, true, note);
+        }
+    });
+}
+
+function openResults() {
+    resultsWindow.hidden = false;
+    if (!leafletMap) {
+        leafletMap = L.map("results-map", { preferCanvas: true }).setView([51.96, 7.62], 11);
+        baseLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+            attribution: "&copy; OpenStreetMap contributors", maxZoom: 19,
+        }).addTo(leafletMap);
+    }
+    renderLayerList();
+    leafletMap.invalidateSize();
+}
+
+resultsButton.addEventListener("click", openResults);
+document.getElementById("close-results").addEventListener("click", () => {
+    resultsWindow.hidden = true;
+});
+
 form.addEventListener("submit", (e) => {
     e.preventDefault();
 
@@ -343,6 +577,7 @@ form.addEventListener("submit", (e) => {
             if (data.workflow_graph) {
                 executionGraph = data.workflow_graph;
                 nodeRuns = {};
+                resetResultLayers();
             }
             if (data.last_validation) lastValidation = data.last_validation;
             renderGraph();
@@ -416,5 +651,13 @@ form.addEventListener("submit", (e) => {
         }
     };
 });
+
+let lastCanvasWidth = 0;
+new ResizeObserver(() => {
+    const width = graphCanvas.clientWidth;
+    if (Math.abs(width - lastCanvasWidth) < 8) return;
+    lastCanvasWidth = width;
+    renderGraph();
+}).observe(graphCanvas);
 
 renderGraph();

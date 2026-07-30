@@ -21,6 +21,11 @@ logger = logging.getLogger(__name__)
 CONFIG_KEYS = ("server_url", "timeout_seconds")
 DEFAULT_TIMEOUT_SECONDS = 300.0
 
+GEOJSON_TYPES = frozenset({
+    "Feature", "FeatureCollection", "Point", "MultiPoint", "LineString",
+    "MultiLineString", "Polygon", "MultiPolygon", "GeometryCollection",
+})
+
 
 class ExecutionError(Exception):
     """Raised when a graph cannot be executed at all, before any node runs."""
@@ -123,6 +128,46 @@ def summarise(payload: dict) -> dict:
     if not isinstance(payload, dict):
         return {"value": _summarise_value(payload)}
     return {key: _summarise_value(value) for key, value in payload.items()}
+
+
+def geojson_kind(value) -> str | None:
+    """Return the GeoJSON type of a value, or None when it is not drawable.
+
+    This is what makes a result "interpretable" for the map: any output whose shape is
+    recognisable GeoJSON can be rendered, whatever process produced it.
+    """
+    if isinstance(value, dict) and value.get("type") in GEOJSON_TYPES:
+        return value["type"]
+    return None
+
+
+def as_feature_collection(value) -> dict:
+    """Normalise any GeoJSON value into a FeatureCollection for uniform rendering."""
+    kind = geojson_kind(value)
+    if kind is None:
+        raise ExecutionError("value is not GeoJSON and cannot be mapped")
+    if kind == "FeatureCollection":
+        return value
+    if kind == "Feature":
+        return {"type": "FeatureCollection", "features": [value]}
+    return {
+        "type": "FeatureCollection",
+        "features": [{"type": "Feature", "geometry": value, "properties": {}}],
+    }
+
+
+def mappable_outputs(payload: dict) -> dict:
+    """Report which entries of an output map can be drawn, and how large they are."""
+    if not isinstance(payload, dict):
+        return {}
+    found = {}
+    for key, value in payload.items():
+        kind = geojson_kind(value)
+        if kind is None:
+            continue
+        count = len(value.get("features") or []) if kind == "FeatureCollection" else 1
+        found[key] = {"kind": kind, "features": count}
+    return found
 
 
 async def _post_execution(client: httpx.AsyncClient, node: dict, inputs: dict) -> dict:

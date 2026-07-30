@@ -32,6 +32,7 @@
                 <span>Execution Graph</span>
                 <span class="graph-header-right">
                     <span id="graph-status" class="graph-status">empty</span>
+                    <button id="show-results" class="run-button ghost" type="button" disabled>Results</button>
                     <button id="run-graph" class="run-button" type="button" disabled>Run</button>
                 </span>
             </header>
@@ -39,6 +40,23 @@
             <div id="run-log" class="run-log" hidden></div>
         </div>
     </div>
+
+    <!-- RESULTS WINDOW -->
+    <div id="results-window" class="results-window" hidden>
+        <div class="results-dialog">
+            <header class="header results-header">
+                <span>Results</span>
+                <button id="close-results" class="run-button ghost" type="button">Close</button>
+            </header>
+            <div class="results-body">
+                <aside id="results-layers" class="results-layers"></aside>
+                <div id="results-map" class="results-map"></div>
+            </div>
+        </div>
+    </div>
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 </body>
 
 
