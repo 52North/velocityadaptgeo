@@ -1,0 +1,51 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "codebase-guide"
+version = "0.1.0"
+description = "An agent that explains a codebase from its doc comments and structure"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "PyYAML>=6.0",
+]
+
+
+[project.optional-dependencies]
+agent = [
+    "langgraph>=1.0.2",
+    "langchain-core>=1.0.2",
+    "langchain-anthropic>=1.4.2",
+    "python-dotenv>=1.2.1",
+]
+vector = [
+    "langchain-ollama>=1.0.1",
+    "psycopg[binary]>=3.3.4",
+]
+
+serve = [
+    "fastapi>=0.120.4",
+    "pydantic>=2.0",
+    "uvicorn[standard]>=0.38.0",
+]
+
+dev = [
+    "pytest>=8.0",
+]
+
+[project.scripts]
+codebase-guide = "codebase_guide.app:main"
+
+[tool.setuptools]
+package-dir = { codebase_guide = "." }
+packages = [
+    "codebase_guide",
+    "codebase_guide.src",
+    "codebase_guide.src.extractors",
+    "codebase_guide.src.detectors",
+]
+
+[tool.setuptools.package-data]
+codebase_guide = ["sql/*.sql"]

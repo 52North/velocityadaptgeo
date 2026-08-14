@@ -15,3 +15,7 @@ wheels/
 # secrets
 .env
 !.env.sample
+# personal Claude Code overrides; .claude/settings.json IS committed
+.claude/settings.local.json
+# generated code map of the codebase guide - rebuilt from source by `codebase-guide index`
+.codebase-guide/

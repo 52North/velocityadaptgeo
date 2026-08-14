@@ -1,0 +1,9 @@
+{
+  "repo_name": "north52",
+  "roots": [
+    "LangGraph",
+    "ogc_database",
+    "pygeoapi_instance",
+    "codebase_guide"
+  ]
+}
