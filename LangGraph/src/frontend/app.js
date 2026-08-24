@@ -5,19 +5,20 @@ const graphCanvas = document.getElementById("graph");
 const graphStatus = document.getElementById("graph-status");
 const graphLegend = document.getElementById("graph-legend");
 const runButton = document.getElementById("run-graph");
+const deleteButton = document.getElementById("delete-mode");
 
 const threadId = crypto.randomUUID();
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const NODE_W = 186;
 const NODE_H = 78;
-const COL_GAP = 104;
+const COL_GAP_MIN = 104;  // floor for the space between columns; widened to fit port labels
 const ROW_GAP = 30;
 const BAND_GAP = 62;
 const PAD = 22;
 const PORT_GAP = 15;
 const PORT_R = 3.5;
-const PORT_LABEL_W = 78;
+const CHAR_W = 6;  // advance width of one character in the 10px monospace port labels
 const HOP_R = 6;
 const HIDDEN_CONFIG_KEYS = ["server_url", "timeout_seconds"];
 
@@ -25,6 +26,8 @@ let executionGraph = { nodes: [], edges: [] };
 let lastValidation = null;
 let nodeRuns = {};
 let running = false;
+let deleting = false;
+let picked = null;
 let nodeH = NODE_H;
 let nodePorts = new Map();
 
@@ -52,6 +55,101 @@ function renderMarkdown(el, text) {
             }
         });
     });
+}
+
+const MANAGER_ACTIONS = { search: "Search", build: "Build", validate: "Validate", chat: "Chat", done: "Done" };
+
+/** Pull one string field out of manager JSON that may still be mid-stream. */
+function jsonField(text, key) {
+    const m = text.match(new RegExp('"' + key + '"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)'));
+    return m && m[1].replace(/\\(.)/g, (_, c) => (c === "n" ? "\n" : c));
+}
+
+function planRow(parent, cls, text) {
+    const el = document.createElement("div");
+    el.className = cls;
+    el.textContent = text;
+    parent.appendChild(el);
+    return el;
+}
+
+/**
+ * Render a manager decision as a plan card rather than the raw JSON it streams.
+ *
+ * The text arrives token by token, so a real parse only succeeds on the last chunk;
+ * until then the fields that have already streamed in are picked out one at a time and
+ * the card fills up as it goes. Everything is set as text, never markup: this is model
+ * output that can echo whatever the user typed.
+ */
+function renderManagerPlan(el, raw) {
+    const text = raw.replace(/```(json)?/gi, "").trim();
+    let data = null;
+    try { data = JSON.parse(text.slice(text.indexOf("{"))); } catch (e) { /* still streaming */ }
+
+    const action = data?.next_action || jsonField(text, "next_action");
+    const name = data?.step?.name || jsonField(text, "name");
+    const reasoning = data?.reasoning || jsonField(text, "reasoning");
+    const scope = data?.goal_scope || jsonField(text, "goal_scope");
+    const instruction = data ? data.step?.instruction : jsonField(text, "instruction");
+
+    el.textContent = "";
+    if (!action && !name && !reasoning) {
+        planRow(el, "plan-wait", "planning…");
+        return;
+    }
+
+    const head = planRow(el, "plan-head", "");
+    if (action) planRow(head, `plan-action action-${action}`, MANAGER_ACTIONS[action] || action);
+    if (name) planRow(head, "plan-name", name);
+    if (scope === "new") planRow(head, "plan-scope", "new goal");
+
+    if (typeof instruction === "string" && instruction) {
+        planRow(el, "plan-instruction", instruction);
+    } else if (instruction && typeof instruction === "object") {
+        const box = planRow(el, "plan-op", "");
+        if (instruction.op) planRow(box, "plan-op-name", instruction.op);
+        Object.entries(instruction.args || {}).forEach(([key, value]) => {
+            const row = planRow(box, "plan-arg", "");
+            planRow(row, "plan-arg-key", key);
+            planRow(row, "plan-arg-val", typeof value === "object" ? JSON.stringify(value) : String(value));
+        });
+    }
+    if (reasoning) planRow(el, "plan-reason", reasoning);
+}
+
+/**
+ * Render the retriever's catalog hits as ranked rows instead of the raw
+ * `N. process_id | title | similarity=0.83` lines it emits. Anything that does not
+ * match that shape (the "no matching processes" case) is kept as plain text.
+ */
+function renderCandidates(el, raw) {
+    el.textContent = "";
+    const head = planRow(el, "plan-head", "");
+    planRow(head, "plan-action action-search", "Catalog");
+    planRow(head, "plan-name", /^Top retrieved/.test(raw.trim()) ? "Top retrieved processes" : "No match");
+
+    let rows = 0;
+    raw.split("\n").forEach((line) => {
+        const m = line.match(/^\s*(\d+)\.\s*(.*?)\s*\|\s*(.*?)\s*\|\s*similarity=(.*)$/);
+        if (!m) return;
+        rows += 1;
+        const [, rank, pid, title, sim] = m;
+        const score = Number(sim);
+        const strength = !Number.isFinite(score) ? "" : score >= 0.7 ? " score-strong" : score <= 0.55 ? " score-weak" : "";
+
+        const row = planRow(el, "candidate", "");
+        planRow(row, "candidate-rank", rank);
+        const body = planRow(row, "candidate-body", "");
+        planRow(body, "candidate-id", pid);
+        if (title) planRow(body, "candidate-title", title);
+
+        const meter = planRow(row, `candidate-score${strength}`, "");
+        planRow(meter, "candidate-score-value", Number.isFinite(score) ? score.toFixed(2) : sim);
+        const fill = planRow(planRow(meter, "candidate-bar", ""), "candidate-bar-fill", "");
+        fill.style.width = `${Math.round(Math.min(1, Math.max(0, score || 0)) * 100)}%`;
+    });
+
+    if (!rows) planRow(el, "plan-instruction", raw.trim());
 }
 
 function addMessage(role, text = "") {
@@ -93,28 +191,32 @@ function columnOf(nodes, edges) {
 }
 
 /**
- * Collect, per node, the port names that actually carry an edge, so every parameter gets
- * its own anchor on the node border instead of all arrows meeting at one midpoint.
- * Ports keep the order the catalog declares them in, so a node's parameters always stack
- * in the same order as the process signature.
+ * Collect, per node, every port the process declares - not only the wired ones - so an
+ * unconnected parameter shows up as an empty socket instead of being invisible. Ports keep
+ * the order the catalog declares them in, so a node's parameters always stack in the same
+ * order as the process signature. A port named only by an edge is appended rather than
+ * dropped: a graph wired to an undeclared name should be visible, not silently centred.
  */
 function portsOf(nodes, edges) {
-    const map = new Map(nodes.map((n) => [n.id, { in: [], out: [] }]));
-    const add = (id, side, name) => {
-        const list = map.get(id) && map.get(id)[side];
-        if (list && !list.includes(name)) list.push(name);
-    };
-    edges.forEach((e) => {
-        add(e.source, "out", e.source_output || "default");
-        add(e.target, "in", e.target_input || "default");
-    });
-    const byDeclared = (declared) => (a, b) =>
-        (declared.indexOf(a) + 1 || 99) - (declared.indexOf(b) + 1 || 99);
-    nodes.forEach((n) => {
-        const p = map.get(n.id);
-        p.in.sort(byDeclared(n.inputs || []));
-        p.out.sort(byDeclared(n.outputs || []));
-    });
+    const map = new Map(nodes.map((n) => [n.id, {
+        in: [...(n.inputs || [])], out: [...(n.outputs || [])], wired: new Set(),
+        values: Object.fromEntries(Object.entries(n.config || {})
+            .filter(([k]) => !HIDDEN_CONFIG_KEYS.includes(k))
+            .map(([k, v]) => [k, formatValue(v)])),
+    }]));
+    // A value set on a port the catalog never declared is still a parameter of this node,
+    // so it gets a socket like any other rather than disappearing with the box summary.
+    map.forEach((p) => Object.keys(p.values).forEach((k) => {
+        if (!p.in.includes(k)) p.in.push(k);
+    }));
+    edges.forEach((e) => [["out", e.source, e.source_output], ["in", e.target, e.target_input]]
+        .forEach(([side, id, port]) => {
+            const p = map.get(id);
+            if (!p) return;
+            const name = port || "default";
+            if (!p[side].includes(name)) p[side].push(name);
+            p.wired.add(`${side}:${name}`);
+        }));
     return map;
 }
 
@@ -146,19 +248,28 @@ function truncate(text, max) {
     return value.length > max ? `${value.slice(0, max - 1)}…` : value;
 }
 
+/** One static value, short enough to print beside its socket. */
+function formatValue(v) {
+    if (Array.isArray(v)) return `[${v.join(",")}]`;
+    return v !== null && typeof v === "object" ? "{…}" : String(v);
+}
+
 /**
- * Summarise the static inputs of a node, hiding transport details that are the same
- * for every node and say nothing about what the step does.
+ * What one port prints beside its socket: its name, and its static value when it has one.
+ *
+ * The values used to be summarised inside the box in `config` order, which is not the
+ * order the sockets stack in - so a node listed its parameters twice and the two lists
+ * disagreed. Printing each value on the port it belongs to leaves one place to read it.
+ * A wired input shows no value: an edge overrides `config` at run time, so the label
+ * would be naming something that will not be used.
  */
-function configSummary(node) {
-    const entries = Object.entries(node.config || {})
-        .filter(([k]) => !HIDDEN_CONFIG_KEYS.includes(k))
-        .map(([k, v]) => {
-            if (Array.isArray(v)) return `${k}=[${v.join(",")}]`;
-            return `${k}=${v !== null && typeof v === "object" ? "{…}" : v}`;
-        });
-    if (entries.length) return entries.join(", ");
-    return (node.inputs || []).length ? `inputs: ${node.inputs.join(", ")}` : "no static inputs";
+function portLabel(nodeId, side, name) {
+    const ports = nodePorts.get(nodeId);
+    const value = side === "in" && ports && !ports.wired.has(`in:${name}`)
+        ? ports.values[name] : undefined;
+    return value === undefined
+        ? truncate(name, 14)
+        : `${truncate(name, 14)}=${truncate(value, 12)}`;
 }
 
 function drawNode(svg, node, x, y) {
@@ -166,6 +277,7 @@ function drawNode(svg, node, x, y) {
     const state = run ? run.state : "idle";
     const group = svgEl("g", {
         class: `gnode gnode-${state}`, transform: `translate(${x}, ${y})`,
+        "data-node": node.id,
     });
     group.appendChild(svgEl("rect", {
         width: NODE_W, height: nodeH, rx: 10, class: "gnode-box",
@@ -188,27 +300,44 @@ function drawNode(svg, node, x, y) {
     id.textContent = truncate(node.id, 28);
     group.appendChild(id);
 
-    const cfg = svgEl("text", { x: 16, y: 64, class: "gnode-config" });
-    cfg.textContent = truncate(configSummary(node), 28);
-    group.appendChild(cfg);
-
-    const ports = nodePorts.get(node.id) || { in: [], out: [] };
+    const ports = nodePorts.get(node.id) || { in: [], out: [], wired: new Set(), values: {} };
     [["in", 0, "end", -7, 13], ["out", NODE_W, "start", 7, -7]].forEach(
         ([side, cx, anchor, dx, dy]) => {
             ports[side].forEach((name) => {
+                // An unwired port is drawn hollow and its name dimmed, so the sockets still
+                // free to be connected read as offers rather than as part of the pipeline.
+                const kind = ports.wired.has(`${side}:${name}`) ? "-wired" : "-open";
                 const cy = portY(node.id, side, name);
-                group.appendChild(svgEl("circle", { cx, cy, r: PORT_R, class: "gport" }));
-                const label = svgEl("text", {
-                    x: cx + dx, y: cy + dy, class: "gport-label", "text-anchor": anchor,
+                // One group per port: the dot, an oversized transparent grab area so a
+                // wire can be started without pixel-hunting, and the name. It carries the
+                // port's identity and its absolute anchor, which is all the drag handlers
+                // need to know about the drawing.
+                const port = svgEl("g", {
+                    class: "gport-group", "data-node": node.id, "data-side": side,
+                    "data-port": name, "data-ax": x + cx, "data-ay": y + cy,
                 });
-                label.textContent = truncate(name, 12);
-                group.appendChild(label);
+                port.appendChild(svgEl("circle", { cx, cy, r: PORT_R, class: `gport gport${kind}` }));
+                port.appendChild(svgEl("circle", { cx, cy, r: 8, class: "gport-hit" }));
+                const label = svgEl("text", {
+                    x: cx + dx, y: cy + dy,
+                    class: `gport-label gport-label${kind}`, "text-anchor": anchor,
+                });
+                label.textContent = portLabel(node.id, side, name);
+                port.appendChild(label);
+                group.appendChild(port);
             });
         },
     );
 
+    // Port labels are truncated to fit beside their socket; the tooltip spells the
+    // values out in full, in the same order the sockets stack.
     const full = svgEl("title");
-    full.textContent = `${node.id}\nprocess: ${node.type}\nserver: ${(node.config || {}).server_url || "?"}\n${configSummary(node)}`;
+    full.textContent = [
+        node.id, `process: ${node.type}`,
+        `server: ${(node.config || {}).server_url || "?"}`,
+        ...ports.in.filter((name) => ports.values[name] !== undefined)
+            .map((name) => `${name} = ${ports.values[name]}`),
+    ].join("\n");
     group.appendChild(full);
 
     svg.appendChild(group);
@@ -311,7 +440,7 @@ function atLen(pts, cum, s) {
  * a dashed semicircular hop. The bump plus the dashes make it unambiguous which of two
  * lines meeting at a point actually continues through it.
  */
-function drawRoute(svg, pts, others) {
+function drawRoute(svg, pts, others, edge) {
     const cum = lengths(pts);
     const r = (n) => Math.round(n * 10) / 10;
     let line = `M ${r(pts[0].x)} ${r(pts[0].y)}`, hops = "", i = 1;
@@ -327,6 +456,15 @@ function drawRoute(svg, pts, others) {
 
     svg.appendChild(svgEl("path", { d: line, class: "gedge", "marker-end": "url(#arrow)" }));
     if (hops) svg.appendChild(svgEl("path", { d: hops.trim(), class: "gedge gedge-hop" }));
+    // A fat transparent copy on top: a 1.5px line is not something to ask anyone to aim
+    // at, and the four fields are what `disconnect` needs to remove this edge and no other.
+    svg.appendChild(svgEl("path", {
+        d: line, class: "gedge-hit",
+        "data-edge": JSON.stringify([
+            edge.source, edge.source_output || "default",
+            edge.target, edge.target_input || "default",
+        ]),
+    }));
 }
 
 /**
@@ -347,7 +485,10 @@ function renderGraph() {
     graphLegend.hidden = !nodes.length;
     runButton.disabled = running || !nodes.length;
     runButton.textContent = running ? "Running…" : "Run";
+    deleteButton.disabled = running || !nodes.length;
+    if (deleteButton.disabled && deleting) armDelete(false);
 
+    clearPick();
     graphCanvas.innerHTML = "";
 
     if (!nodes.length) {
@@ -364,10 +505,21 @@ function renderGraph() {
     ));
     nodeH = Math.max(NODE_H, (maxPorts + 1) * PORT_GAP);
 
+    // Labels print outside the box - inputs into the gap left of their column, outputs into
+    // the gap right of it - so the gap is measured from the longest label actually drawn
+    // rather than fixed. A graph with no static values keeps a tight layout; a long value
+    // widens the columns instead of overprinting its neighbour.
+    const widest = (side) => CHAR_W * Math.max(0, ...[...nodePorts].flatMap(
+        ([id, p]) => p[side].map((name) => portLabel(id, side, name).length)
+    ));
+    const inW = widest("in");
+    const outW = widest("out");
+    const colGap = Math.max(COL_GAP_MIN, inW + outW + PORT_R * 4);
+
     const column = columnOf(nodes, edges);
     const available = Math.max(canvasContentWidth(), NODE_W + PAD * 2);
     const perBand = Math.max(1, Math.floor(
-        (available - PAD * 2 - PORT_LABEL_W + COL_GAP) / (NODE_W + COL_GAP)
+        (available - PAD * 2 - inW - outW + colGap) / (NODE_W + colGap)
     ));
 
     const rowCursor = new Map();
@@ -391,21 +543,21 @@ function renderGraph() {
         cursorY += bandRows.get(band) * (nodeH + ROW_GAP) - ROW_GAP + BAND_GAP;
     });
 
-    // Port labels sit outside the box, so the outermost columns need a gutter to
-    // print into - reserved only when a node there actually has labelled ports.
+    // The outermost columns have no neighbouring gap to print into, so they get a gutter -
+    // reserved only when a node there actually has labelled ports.
     const usedCols = Math.min(perBand, Math.max(...column.values()) + 1);
-    const gutter = (test) => PAD + ([...placed.entries()].some(
+    const gutter = (w, test) => PAD + ([...placed.entries()].some(
         ([id, slot]) => test(slot, nodePorts.get(id) || { in: [], out: [] })
-    ) ? PORT_LABEL_W : 0);
-    const leftPad = gutter((slot, p) => slot.colInBand === 0 && p.in.length);
-    const rightPad = gutter((slot, p) => slot.colInBand === usedCols - 1 && p.out.length);
+    ) ? w + PORT_R * 2 : 0);
+    const leftPad = gutter(inW, (slot, p) => slot.colInBand === 0 && p.in.length);
+    const rightPad = gutter(outW, (slot, p) => slot.colInBand === usedCols - 1 && p.out.length);
 
     placed.forEach((slot) => {
-        slot.x = leftPad + slot.colInBand * (NODE_W + COL_GAP);
+        slot.x = leftPad + slot.colInBand * (NODE_W + colGap);
         slot.y = bandTop.get(slot.band) + slot.row * (nodeH + ROW_GAP);
     });
 
-    const width = Math.max(leftPad + rightPad + usedCols * (NODE_W + COL_GAP) - COL_GAP, available);
+    const width = Math.max(leftPad + rightPad + usedCols * (NODE_W + colGap) - colGap, available);
     const height = cursorY - BAND_GAP + PAD;
 
     const svg = svgEl("svg", {
@@ -434,11 +586,11 @@ function renderGraph() {
             laneUsage.set(laneBand, taken + 1);
             laneY = bandTop.get(laneBand) - BAND_GAP / 2 - taken * 15;
         }
-        return [edgeRoute(edge, from, to, laneY)];
+        return [{ edge, pts: edgeRoute(edge, from, to, laneY) }];
     });
     // Each route hops over the ones drawn before it, so exactly one of any two crossing
     // lines carries the bump.
-    routes.forEach((pts, i) => drawRoute(svg, pts, routes.slice(0, i)));
+    routes.forEach((r, i) => drawRoute(svg, r.pts, routes.slice(0, i).map((o) => o.pts), r.edge));
 
     nodes.forEach((node) => {
         const at = placed.get(node.id);
@@ -458,6 +610,254 @@ function renderGraph() {
         graphCanvas.appendChild(errors);
     }
 }
+
+/** Client coordinates in the SVG's own units, so a drawn line lands under the cursor. */
+function svgPoint(svg, evt) {
+    const pt = svg.createSVGPoint();
+    pt.x = evt.clientX;
+    pt.y = evt.clientY;
+    return pt.matrixTransform(svg.getScreenCTM().inverse());
+}
+
+/**
+ * Apply one hand edit through the same ops the assistant uses.
+ *
+ * The server owns the graph, so the browser never mutates its copy: it sends the op and
+ * redraws whatever comes back. That way an edit the builder would refuse (a cycle, a
+ * self-link) simply reports itself instead of leaving the panel showing a graph the
+ * assistant does not have.
+ */
+async function graphOp(op, args) {
+    try {
+        const resp = await fetch("/api/graph/op", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ thread_id: threadId, op, args }),
+        });
+        const data = await resp.json();
+        if (!resp.ok) {
+            graphStatus.textContent = data.detail || "edit refused";
+            graphStatus.className = "graph-status bad";
+            return false;
+        }
+        executionGraph = data.graph;
+        lastValidation = data.validation;
+        renderGraph();
+        return true;
+    } catch (err) {
+        graphStatus.textContent = `edit failed: ${err.message}`;
+        graphStatus.className = "graph-status bad";
+        return false;
+    }
+}
+
+/**
+ * Type a literal into an input no edge feeds.
+ *
+ * This is how a wrong value gets corrected without re-prompting the assistant. Only open
+ * inputs are offered: an output is produced, not chosen, and a wired input already has
+ * its value, so editing either would be a promise the executor does not keep. The answer
+ * is read as JSON so numbers and lists stay typed, falling back to the raw string.
+ */
+function editPort(nodeId, side, port, wired) {
+    if (side !== "in" || wired) return;
+    const node = (executionGraph.nodes || []).find((n) => n.id === nodeId);
+    const current = (node && node.config || {})[port];
+    const answer = prompt(`Value for ${port} (empty to clear):`,
+                          current === undefined ? "" : JSON.stringify(current));
+    if (answer === null) return;
+    let value = null;
+    if (answer.trim()) {
+        try { value = JSON.parse(answer); } catch { value = answer; }
+    }
+    graphOp("set_input", { node_id: nodeId, port, value });
+}
+
+/**
+ * Drag one port onto another to wire them together.
+ *
+ * A drag that ends where it started is a click, and means "edit this port's value" - the
+ * two share a target because they are the same gesture on the same thing, and telling
+ * them apart by distance costs less than a second affordance per port. Direction is
+ * normalised here rather than refused, so dragging an input onto an output works too.
+ */
+let draft = null;
+let suppressClick = false;
+
+graphCanvas.addEventListener("pointerdown", (evt) => {
+    const port = evt.target.closest(".gport-group");
+    if (!port || running || deleting || picked || evt.button !== 0) return;
+    const svg = graphCanvas.querySelector("svg");
+    if (!svg) return;
+    evt.preventDefault();
+    const path = svgEl("path", { class: "gedge-draft" });
+    svg.appendChild(path);
+    draft = { svg, path, port, moved: false, ax: +port.dataset.ax, ay: +port.dataset.ay };
+    graphCanvas.classList.add("wiring");
+});
+
+window.addEventListener("pointermove", (evt) => {
+    const live = draft || (picked && picked.kind === "edge" ? picked : null);
+    if (!live) return;
+    const at = svgPoint(live.svg, evt);
+    if (draft && Math.hypot(at.x - live.ax, at.y - live.ay) > 14) draft.moved = true;
+    live.path.setAttribute("d", `M ${live.ax} ${live.ay} L ${at.x} ${at.y}`);
+});
+
+window.addEventListener("pointerup", (evt) => {
+    if (!draft) return;
+    const { port, moved } = draft;
+    suppressClick = moved;
+    draft.path.remove();
+    graphCanvas.classList.remove("wiring");
+    draft = null;
+
+    const from = port.dataset;
+    if (!moved) return editPort(from.node, from.side, from.port,
+                                port.querySelector(".gport-wired"));
+
+    const target = document.elementFromPoint(evt.clientX, evt.clientY)?.closest(".gport-group");
+    if (!target) return;
+    const to = target.dataset;
+    if (to.node === from.node || to.side === from.side) return;
+
+    const [out, inp] = from.side === "out" ? [from, to] : [to, from];
+    graphOp("connect", {
+        source: out.node, source_output: out.port,
+        target: inp.node, target_input: inp.port,
+    });
+});
+
+/**
+ * Arm or disarm removal.
+ *
+ * Deleting is deliberately two gestures: nothing on the canvas removes anything until
+ * Delete is pressed, so a stray click can never cost a node. While armed the canvas says
+ * so - red hover on whatever is about to go - and one removal disarms it again, which is
+ * both the confirmation and the way out. Escape leaves without removing anything.
+ */
+function armDelete(on) {
+    deleting = on && !running;
+    graphCanvas.classList.toggle("deleting", deleting);
+    deleteButton.classList.toggle("armed", deleting);
+    deleteButton.textContent = deleting ? "Click to delete…" : "Delete";
+}
+
+deleteButton.addEventListener("click", () => armDelete(!deleting));
+window.addEventListener("keydown", (evt) => {
+    if (evt.key !== "Escape") return;
+    if (deleting) armDelete(false);
+    if (picked) {
+        clearPick();
+        renderGraph();
+    }
+});
+
+/** Drop whatever is held: the canvas goes back to plain clicking. */
+function clearPick() {
+    if (picked && picked.path) picked.path.remove();
+    picked = null;
+    graphCanvas.classList.remove("picking", "wiring");
+    graphCanvas.querySelectorAll(".picked").forEach((el) => el.classList.remove("picked"));
+}
+
+/**
+ * Pick something up, then click where it belongs.
+ *
+ * Two edits are really the same gesture - re-pointing a connection and trading two nodes'
+ * places - and both are corrections of an existing graph rather than additions to it, so
+ * neither is reachable by dragging from a free port. Holding the thing between two clicks
+ * is what makes them one mechanism: the first click says what moves, the second says
+ * where, and Escape drops it. Nothing changes until the second click lands.
+ */
+function pickEdge(hit) {
+    const [source, source_output] = JSON.parse(hit.dataset.edge);
+    const svg = graphCanvas.querySelector("svg");
+    const anchor = graphCanvas.querySelector(
+        `.gport-group[data-node="${source}"][data-side="out"][data-port="${source_output}"]`);
+    if (!svg || !anchor) return;
+
+    const path = svgEl("path", { class: "gedge-draft" });
+    svg.appendChild(path);
+    picked = {
+        kind: "edge", edge: JSON.parse(hit.dataset.edge), svg, path,
+        ax: +anchor.dataset.ax, ay: +anchor.dataset.ay,
+    };
+    // Every open input lights up, exactly as it does mid-drag: the loose end is looking
+    // for the same kind of home either way.
+    graphCanvas.classList.add("picking", "wiring");
+    graphStatus.textContent = `re-pointing ${source}.${source_output} — click an input`;
+    graphStatus.className = "graph-status";
+}
+
+async function dropEdge(port) {
+    const [source, source_output, target, target_input] = picked.edge;
+    clearPick();
+    if (port.node === target && port.port === target_input) return renderGraph();
+
+    // Connect first, disconnect second: if the new wiring is refused - a cycle, say - the
+    // original connection is still there, rather than lost to a half-finished move.
+    if (await graphOp("connect", {
+        source, source_output, target: port.node, target_input: port.port,
+    })) {
+        await graphOp("disconnect", { source, source_output, target, target_input });
+    }
+}
+
+async function swapWith(nodeId) {
+    const node_a = picked.id;
+    clearPick();
+    const before = (executionGraph.edges || []).length;
+    if (!await graphOp("swap_nodes", { node_a, node_b: nodeId })) return;
+
+    const lost = before - (executionGraph.edges || []).length;
+    if (lost > 0) {
+        graphStatus.textContent +=
+            ` · ${lost} connection${lost === 1 ? "" : "s"} could not carry over`;
+        graphStatus.className = "graph-status bad";
+    }
+}
+
+graphCanvas.addEventListener("click", (evt) => {
+    if (suppressClick) return void (suppressClick = false);
+    if (running) return;
+
+    const hit = evt.target.closest("[data-edge]");
+    const port = evt.target.closest(".gport-group");
+    const node = evt.target.closest(".gnode");
+
+    if (deleting) {
+        if (!hit && !node) return;
+        armDelete(false);
+        if (hit) {
+            const [source, source_output, target, target_input] = JSON.parse(hit.dataset.edge);
+            graphOp("disconnect", { source, source_output, target, target_input });
+        } else {
+            graphOp("remove_node", { node_id: node.dataset.node });
+        }
+        return;
+    }
+
+    if (picked) {
+        if (picked.kind === "edge" && port && port.dataset.side === "in") return dropEdge(port.dataset);
+        if (picked.kind === "node" && node && node.dataset.node !== picked.id) return swapWith(node.dataset.node);
+        clearPick();
+        return renderGraph();
+    }
+
+    if (hit) return pickEdge(hit);
+    // Only a wired node offers a swap: trading places with nothing to trade is a no-op,
+    // and a port click is the port's own gesture, not the node's.
+    if (!node || port) return;
+    const id = node.dataset.node;
+    if (!(executionGraph.edges || []).some((e) => e.source === id || e.target === id)) return;
+
+    picked = { kind: "node", id };
+    node.classList.add("picked");
+    graphCanvas.classList.add("picking");
+    graphStatus.textContent = `swapping ${id} — click the node to trade places with`;
+    graphStatus.className = "graph-status";
+});
 
 /**
  * Forget the layers of a previous run, so the results window never mixes the outputs of
@@ -764,21 +1164,15 @@ form.addEventListener("submit", (e) => {
                 currentStepMessage.classList.add(`node-${node}`);
             }
             if (node === "manager") {
-                currentStepMessage.innerHTML = `
-                            <details class="manager-details">
-                                <summary>Manager Activity</summary>
-                                <pre class="content"></pre>
-                            </details>
-                        `;
+                currentStepMessage.classList.add("manager-plan");
+            }
+            if (node === "retriever" && messageType !== "tool") {
+                currentStepMessage.classList.add("candidate-list");
             }
         }
 
         if (content) {
             currentStepText += content;
-
-            const targetContainer = node === "manager"
-                ? currentStepMessage.querySelector('.content')
-                : currentStepMessage;
 
             if (messageType === "tool") {
                 currentStepMessage.style.fontStyle = "italic";
@@ -786,15 +1180,17 @@ form.addEventListener("submit", (e) => {
 
                 try {
                     const parsedContent = JSON.parse(currentStepText);
-                    targetContainer.innerHTML = `<strong>Action (${node}):</strong><br/>
+                    currentStepMessage.innerHTML = `<strong>Action (${node}):</strong><br/>
                         <pre style="margin: 5px 0 0 0; font-size: 0.9em;">${JSON.stringify(parsedContent, null, 2)}</pre>`;
                 } catch (e) {
-                    renderMarkdown(targetContainer, currentStepText);
+                    renderMarkdown(currentStepMessage, currentStepText);
                 }
             } else if (node === "manager") {
-                targetContainer.textContent = currentStepText.replace(/```(json)?/gi, '').trim();
+                renderManagerPlan(currentStepMessage, currentStepText);
+            } else if (node === "retriever") {
+                renderCandidates(currentStepMessage, currentStepText);
             } else {
-                renderMarkdown(targetContainer, currentStepText);
+                renderMarkdown(currentStepMessage, currentStepText);
             }
         }
 

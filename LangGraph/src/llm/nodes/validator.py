@@ -6,7 +6,7 @@ Used by the manual "validate" action and by auto_builder.py's automatic build st
 
 from pydantic import ValidationError
 
-from src.llm.state.graph import WorkflowGraph
+from src.llm.state.graph import WorkflowGraph, find_cycle
 from src.llm.state.state import WorkflowState
 from src.llm.nodes._helpers import _log
 
@@ -42,6 +42,9 @@ def validate_graph(graph: dict) -> dict:
                 f"Edge {i}: '{edge.target}' has no input '{edge.target_input}' "
                 f"(declared inputs: {sorted(declared)})."
             )
+
+    if cycle := find_cycle(graph):
+        errors.append(f"Graph contains a cycle through: {', '.join(cycle)}.")
 
     return {"valid": not errors, "errors": errors}
 

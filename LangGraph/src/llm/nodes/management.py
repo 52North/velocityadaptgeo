@@ -46,7 +46,9 @@ Available actions (choose exactly one each turn):
                 and keep searching on later turns until every capability the
                 goal needs is present in the graph.
   - "build":    apply a deterministic mutation to the workflow graph
-                (add another node, connect two existing nodes, remove a node).
+                (add or remove a node, connect or disconnect two ports, set a
+                literal value on one input port, or swap two nodes' places in
+                the chain).
                 Use this only for manual follow-up edits on a later turn - e.g.
                 wiring two already-built nodes together, or removing one -
                 using process_id/server_url values already present in
@@ -125,6 +127,10 @@ Instruction format per action:
                 {"op": "connect",          "args": {"source": "node_0", "source_output": "result",
                                                      "target": "node_1", "target_input": "geometry"}}
                 {"op": "remove_node",      "args": {"node_id": "node_2"}}
+                {"op": "disconnect",       "args": {"source": "node_0", "source_output": "result",
+                                                     "target": "node_1", "target_input": "geometry"}}
+                {"op": "set_input",        "args": {"node_id": "node_1", "port": "distance", "value": 500}}
+                {"op": "swap_nodes",       "args": {"node_a": "node_1", "node_b": "node_2"}}
               Use process_id and server_url values from prior search results.
               "add_top_candidate" needs no process_id/server_url - it deterministically
               adds the #1 ranked result from the most recent search (RECENT CANDIDATE

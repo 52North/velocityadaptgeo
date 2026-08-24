@@ -10,6 +10,8 @@ import logging
 import os
 from fastapi.responses import StreamingResponse
 from src.llm.workflow import compiled_graph, DEFAULT_WORKFLOW_CONFIG, MAX_WORKFLOW_ITERATIONS
+from src.llm.nodes.builder import apply_build_op
+from src.llm.nodes.validator import validate_graph
 from src.execution import store
 from src.execution.runner import (
     ExecutionError,
@@ -243,6 +245,47 @@ async def execute_sync(req: ExecuteRequest):
         return await execute_graph(graph)
     except ExecutionError as exc:
         return {"ok": False, "error": str(exc)}
+
+
+class GraphOpRequest(BaseModel):
+    thread_id: str
+    op: str
+    args: dict = {}
+
+
+@app.post("/api/graph/op")
+async def graph_op(req: GraphOpRequest):
+    """Apply one hand edit to a thread's graph, through the same ops the assistant uses.
+
+    Writing back into the conversation checkpoint - rather than into a copy owned by the
+    browser - is what makes a manual edit real: the next chat turn plans from the edited
+    graph, so the user and the assistant never end up describing different graphs. The
+    validation report is returned but not enforced, since a graph is legitimately
+    incomplete while it is being wired by hand.
+    """
+    config = turn_config(req.thread_id)
+    state = compiled_graph.get_state(config).values
+    graph = state.get("workflow_graph") or {"nodes": [], "edges": []}
+
+    try:
+        graph = apply_build_op(graph, req.op, req.args)
+    except (ValueError, TypeError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    validation = validate_graph(graph)
+    compiled_graph.update_state(config, {
+        "workflow_graph": graph,
+        "last_validation": validation,
+        # Recorded so the assistant's next reply accounts for the edit instead of
+        # narrating the graph it last built itself.
+        "decision_history": list(state.get("decision_history", [])) + [{
+            "node": "manual_edit",
+            "instruction": {"op": req.op, "args": req.args},
+            "result_summary": f"{len(graph['nodes'])} nodes, {len(graph['edges'])} edges",
+            "error": None,
+        }],
+    })
+    return {"graph": graph, "validation": validation}
 
 
 @app.get("/api/test-prompts")

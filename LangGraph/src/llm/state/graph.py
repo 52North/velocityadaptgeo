@@ -34,6 +34,10 @@ from pydantic import BaseModel, ConfigDict, Field
 logger = logging.getLogger(__name__)
 
 DEFAULT_TIMEOUT_SECONDS = 300
+
+# Config keys that carry transport settings rather than a process parameter, so nothing
+# should offer them for editing or resolve them as an input.
+CONFIG_KEYS = ("server_url", "timeout_seconds")
 NODE_X_SPACING = 200
 NODE_Y = 200
 
@@ -81,6 +85,24 @@ class WorkflowGraph(BaseModel):
 
     nodes: list[NodeDefinition] = Field(default_factory=list)
     edges: list[EdgeDefinition] = Field(default_factory=list)
+
+
+def find_cycle(graph: dict) -> list[str]:
+    """The node ids left on a cycle, or [] when the graph is a DAG.
+
+    Kahn's algorithm leaves exactly the cyclic nodes unresolved - the same way
+    `src.execution.runner.execution_order` detects the problem at run time - so a graph
+    that passes here is one the executor will accept. Edges pointing at unknown nodes are
+    ignored: that is a dangling-edge error, reported separately by the validator.
+    """
+    pending = {
+        n.get("id"): {e.get("source") for e in graph.get("edges", []) if e.get("target") == n.get("id")}
+        for n in graph.get("nodes", [])
+    }
+    while (ready := [i for i, deps in pending.items() if not deps & pending.keys()]):
+        for i in ready:
+            del pending[i]
+    return sorted(pending)
 
 
 def default_position(node_index: int) -> NodePosition:

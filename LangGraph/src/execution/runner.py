@@ -17,9 +17,10 @@ from collections.abc import AsyncIterator
 
 import httpx
 
+from src.llm.state.graph import CONFIG_KEYS
+
 logger = logging.getLogger(__name__)
 
-CONFIG_KEYS = ("server_url", "timeout_seconds")
 DEFAULT_TIMEOUT_SECONDS = 300.0
 LOCAL_PYGEOAPI_HOST = os.environ.get("LOCAL_PYGEOAPI_HOST", "localhost:5000")
 LOCAL_PYGEOAPI_INTERNAL = os.environ.get("LOCAL_PYGEOAPI_INTERNAL", "pygeoapi:80")

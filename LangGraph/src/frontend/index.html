@@ -34,6 +34,7 @@
                 <span>Execution Graph</span>
                 <span class="graph-header-right">
                     <span id="graph-status" class="graph-status">empty</span>
+                    <button id="delete-mode" class="run-button ghost" type="button" disabled>Delete</button>
                     <button id="show-results" class="run-button ghost" type="button" disabled>Results</button>
                     <button id="run-graph" class="run-button" type="button" disabled>Run</button>
                 </span>
@@ -42,15 +43,24 @@
             <div id="graph-legend" class="graph-legend" hidden>
                 <span class="legend-item">
                     <i class="legend-port"></i>
-                    one anchor per parameter, labelled with its port name
+                    connected
+                </span>
+                <span class="legend-item">
+                    <i class="legend-port legend-port-open"></i>
+                    open
                 </span>
                 <span class="legend-item">
                     <svg width="26" height="9" aria-hidden="true"><path d="M1 4.5 H25" class="gedge"/></svg>
-                    output feeds the next step's input
+                    link
                 </span>
                 <span class="legend-item">
                     <svg width="26" height="14" aria-hidden="true"><path d="M1 11 H7" class="gedge"/><path d="M7 11 A5 5 0 0 1 17 11" class="gedge gedge-hop"/><path d="M17 11 H25" class="gedge"/></svg>
-                    a hop: this line crosses another, it does not join it
+                    crossing
+                </span>
+                <span class="legend-sep"></span>
+                <span class="legend-item">
+                    drag to connect · click to set a value · click a line then an input to
+                    re-point it · click two wired nodes to swap them · Delete to remove
                 </span>
                 <span class="legend-sep"></span>
                 <span class="legend-item"><i class="legend-dot dot-running"></i>running</span>

@@ -186,7 +186,8 @@ body {
 }
 
 .user {
-    background: #2563eb;
+    background: #1e3a8a;
+    color: #dbeafe;
     align-self: flex-end;
 }
 
@@ -349,8 +350,13 @@ button:hover {
     width: 7px;
     height: 7px;
     border-radius: 50%;
+    background: #64748b;
+    box-shadow: 0 0 0 1.5px #94a3b8;
+}
+
+.legend-port-open {
     background: #0f172a;
-    box-shadow: 0 0 0 1.5px #64748b;
+    box-shadow: 0 0 0 1.5px #475569;
 }
 
 .dot-running { background: #38bdf8; }
@@ -552,12 +558,6 @@ button:hover {
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
-.gnode-config {
-    fill: #64748b;
-    font-size: 11px;
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-}
-
 .gedge {
     fill: none;
     stroke: #475569;
@@ -576,9 +576,19 @@ button:hover {
 }
 
 .gport {
-    fill: #0f172a;
-    stroke: #64748b;
     stroke-width: 1.5;
+}
+
+/* A port carrying an edge is filled; one still free is hollow and dimmed, so a node
+   advertises its unused parameters without them competing with the actual pipeline. */
+.gport-wired {
+    fill: #64748b;
+    stroke: #94a3b8;
+}
+
+.gport-open {
+    fill: #0f172a;
+    stroke: #475569;
 }
 
 .gport-label {
@@ -591,6 +601,84 @@ button:hover {
     stroke: #0f172a;
     stroke-width: 3px;
     stroke-linejoin: round;
+}
+
+.gport-label-open { fill: #64748b; }
+
+/* Invisible but generous: a 3.5px dot is not a target anyone should have to hit, and
+   `transparent` still receives the pointer where `none` would let it pass through. */
+.gport-hit {
+    fill: transparent;
+}
+
+.gport-group {
+    cursor: crosshair;
+}
+
+/* Mid-drag every free socket lights up, so the places a wire can actually land are
+   visible while the wire is being dragged rather than only after it is dropped. */
+.wiring .gport-open {
+    fill: #38bdf8;
+    stroke: #38bdf8;
+}
+
+.gedge-draft {
+    fill: none;
+    stroke: #38bdf8;
+    stroke-width: 1.5;
+    stroke-dasharray: 4 3;
+}
+
+/* A fat transparent overlay on each edge, so right-clicking a connection does not
+   require hitting a hairline. */
+.gedge-hit {
+    fill: none;
+    stroke: transparent;
+    stroke-width: 12;
+    cursor: pointer;
+}
+
+.gnode {
+    cursor: pointer;
+}
+
+/* Something is held between two clicks: the node or connection that moves is outlined,
+   and the cursor says the next click places it. */
+.picking {
+    cursor: crosshair;
+}
+
+.gnode.picked .gnode-box {
+    stroke: #38bdf8;
+    stroke-width: 2;
+}
+
+/* Armed for removal: the canvas says so, and whatever the cursor is over turns red
+   before it is clicked, so what a click would cost is visible first. */
+.deleting {
+    cursor: crosshair;
+}
+
+.deleting .gport-group {
+    cursor: crosshair;
+}
+
+.deleting .gnode:hover .gnode-box {
+    stroke: #f87171;
+    stroke-width: 2;
+}
+
+.deleting .gedge-hit:hover {
+    stroke: rgba(248, 113, 113, 0.35);
+}
+
+.run-button.armed {
+    background: #7f1d1d;
+    color: #fee2e2;
+}
+
+.run-button.armed:hover:enabled {
+    background: #991b1b;
 }
 
 .graph-errors {
@@ -685,23 +773,173 @@ button:hover {
     font-weight: bold;
 }
 
-.manager-details summary {
-    cursor: pointer;
-    font-weight: 600;
-    color: #666;
-    font-size: 0.85em;
-    user-select: none;
+/* MANAGER PLAN CARD
+   The manager streams a JSON decision; `renderManagerPlan` turns it into these rows. */
+
+.message.manager-plan,
+.message.candidate-list {
+    white-space: normal;
+    max-width: 85%;
+    padding: 10px 12px;
+    background: #0f172a;
+    border: 1px solid #1e293b;
+    border-left: 3px solid #334155;
+    font-size: 13px;
 }
 
-.manager-details .content {
-    white-space: pre-wrap;
-    font-family: monospace;
-    background-color: #2b2b2b; 
-    color: #e4e4e4;            
-    padding: 12px;
-    border-radius: 6px;
-    font-size: 0.8em;
-    margin: 8px 0 0 0;
-    line-height: 1.4;
-    overflow-x: auto;         
+.plan-head {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
 }
+
+.plan-action {
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: #94a3b8;
+    color: #0f172a;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.action-search { background: #38bdf8; }
+.action-build { background: #a78bfa; }
+.action-validate { background: #fbbf24; }
+.action-done { background: #4ade80; }
+
+.plan-name {
+    color: #e2e8f0;
+    font-weight: 600;
+}
+
+.plan-scope {
+    padding: 1px 7px;
+    border: 1px solid #78350f;
+    border-radius: 999px;
+    color: #fbbf24;
+    font-size: 11px;
+}
+
+.plan-instruction {
+    margin-top: 8px;
+    white-space: pre-wrap;
+    color: #cbd5e1;
+    line-height: 1.45;
+}
+
+.plan-op {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    margin-top: 8px;
+}
+
+.plan-op-name {
+    color: #a78bfa;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12px;
+}
+
+.plan-arg {
+    display: flex;
+    gap: 8px;
+    font-size: 12px;
+}
+
+.plan-arg-key {
+    min-width: 96px;
+    color: #64748b;
+}
+
+.plan-arg-val {
+    color: #cbd5e1;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    word-break: break-all;
+}
+
+.plan-reason {
+    margin-top: 8px;
+    padding-top: 6px;
+    white-space: pre-wrap;
+    border-top: 1px solid #1e293b;
+    color: #94a3b8;
+    font-size: 12px;
+    line-height: 1.45;
+}
+
+.plan-wait {
+    color: #64748b;
+    font-size: 12px;
+}
+
+/* RETRIEVER CANDIDATES
+   Same card shell as the manager plan; one row per catalog hit with its score. */
+
+.candidate {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 0;
+    border-top: 1px solid #1e293b;
+}
+
+.candidate:first-of-type {
+    margin-top: 6px;
+}
+
+.candidate-rank {
+    width: 16px;
+    flex: 0 0 auto;
+    color: #475569;
+    font-size: 11px;
+    text-align: right;
+}
+
+.candidate-body {
+    flex: 1;
+    min-width: 0;
+}
+
+.candidate-id {
+    color: #e2e8f0;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12px;
+    overflow-wrap: anywhere;
+}
+
+.candidate-title {
+    color: #94a3b8;
+    font-size: 12px;
+    line-height: 1.35;
+}
+
+.candidate-score {
+    flex: 0 0 auto;
+    width: 58px;
+    color: #94a3b8;
+}
+
+.candidate-score-value {
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+}
+
+.candidate-bar {
+    height: 3px;
+    margin-top: 3px;
+    border-radius: 999px;
+    background: #1e293b;
+}
+
+.candidate-bar-fill {
+    height: 100%;
+    border-radius: 999px;
+    background: currentColor;
+}
+
+.score-strong { color: #4ade80; }
+.score-weak { color: #fbbf24; }
