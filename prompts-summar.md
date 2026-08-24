@@ -2,3 +2,7 @@ CoolSpots:
 
 
 In Muenster I want to find out which parts of the city are too far from any decent shady green area to escape the summer heat. Only count parks or woods that are big enough to actually sit in, and treat anything more than a 300 metre walk as too far. Show me the leftover areas and how the distance builds up in steps.
+
+CoolSpots parallel:
+
+In Muenster I want to know which parts of the city have nothing nearby to escape the summer heat in. Gather two things independently of each other: the shady green areas, and the lakes, ponds and rivers, since open water cools the air just as much. Only count green patches big enough to actually sit in. For those patches also tell me how much genuinely sheltered interior each one has rather than just a thin edge, and work that out alongside the distance analysis rather than after it. Then combine the green and the blue into one set of refuges, treat anything more than a 300 metre walk from any of them as too far, and show me the leftover areas plus how the distance builds up in steps.

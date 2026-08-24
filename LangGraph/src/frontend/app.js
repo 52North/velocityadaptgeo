@@ -489,6 +489,7 @@ function renderGraph() {
     if (deleteButton.disabled && deleting) armDelete(false);
 
     clearPick();
+    closeEditor();
     graphCanvas.innerHTML = "";
 
     if (!nodes.length) {
@@ -659,18 +660,51 @@ async function graphOp(op, args) {
  * its value, so editing either would be a promise the executor does not keep. The answer
  * is read as JSON so numbers and lists stay typed, falling back to the raw string.
  */
+/** Take down the value editor, if one is open. */
+function closeEditor() {
+    if (editor) editor.remove();
+    editor = null;
+}
+
 function editPort(nodeId, side, port, wired) {
     if (side !== "in" || wired) return;
+    closeEditor();
     const node = (executionGraph.nodes || []).find((n) => n.id === nodeId);
     const current = (node && node.config || {})[port];
-    const answer = prompt(`Value for ${port} (empty to clear):`,
-                          current === undefined ? "" : JSON.stringify(current));
-    if (answer === null) return;
-    let value = null;
-    if (answer.trim()) {
-        try { value = JSON.parse(answer); } catch { value = answer; }
-    }
-    graphOp("set_input", { node_id: nodeId, port, value });
+    const socket = graphCanvas.querySelector(
+        `.gport-group[data-node="${nodeId}"][data-side="in"][data-port="${port}"]`);
+    if (!socket) return;
+    const at = socket.getBoundingClientRect();
+
+    // A form, so Enter commits for free.
+    editor = document.createElement("form");
+    editor.className = "port-editor";
+    editor.style.left = `${at.left}px`;
+    editor.style.top = `${at.bottom + 6}px`;
+    const name = document.createElement("label");
+    name.textContent = port;
+    const field = document.createElement("input");
+    Object.assign(field, { type: "text", autocomplete: "off", placeholder: "empty clears" });
+    field.value = current === undefined ? "" : JSON.stringify(current);
+    const hint = document.createElement("span");
+    hint.textContent = "Enter applies · Esc cancels";
+    editor.append(name, field, hint);
+
+    editor.addEventListener("submit", (evt) => {
+        evt.preventDefault();
+        const raw = field.value.trim();
+        let value = null;
+        if (raw) {
+            try { value = JSON.parse(raw); } catch { value = raw; }
+        }
+        closeEditor();
+        graphOp("set_input", { node_id: nodeId, port, value });
+    });
+    field.addEventListener("blur", closeEditor);
+
+    document.body.appendChild(editor);
+    field.focus();
+    field.select();
 }
 
 /**
@@ -683,6 +717,10 @@ function editPort(nodeId, side, port, wired) {
  */
 let draft = null;
 let suppressClick = false;
+let editor = null;
+
+// Scrolling slides the drawing out from under a field pinned to one of its sockets.
+graphCanvas.addEventListener("scroll", closeEditor);
 
 graphCanvas.addEventListener("pointerdown", (evt) => {
     const port = evt.target.closest(".gport-group");
@@ -746,6 +784,7 @@ function armDelete(on) {
 deleteButton.addEventListener("click", () => armDelete(!deleting));
 window.addEventListener("keydown", (evt) => {
     if (evt.key !== "Escape") return;
+    if (editor) return closeEditor();
     if (deleting) armDelete(false);
     if (picked) {
         clearPick();

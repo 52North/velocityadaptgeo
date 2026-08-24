@@ -478,6 +478,78 @@ resources:
         schema:
           type: number
 
+  osm-water-bodies:
+    type: process
+    processor:
+      name: processes.osm_water_bodies.OsmWaterBodiesProcessor
+
+    inputs:
+      area:
+        schema:
+          type: object
+      tags:
+        schema:
+          type: object
+
+    outputs:
+      features:
+        schema:
+          type: object
+      count:
+        schema:
+          type: integer
+
+  feature-merge:
+    type: process
+    processor:
+      name: processes.feature_merge.FeatureMergeProcessor
+
+    inputs:
+      features:
+        schema:
+          type: object
+      otherFeatures:
+        schema:
+          type: object
+      dissolve:
+        schema:
+          type: boolean
+
+    outputs:
+      features:
+        schema:
+          type: object
+      count:
+        schema:
+          type: integer
+
+  core-area-metrics:
+    type: process
+    processor:
+      name: processes.core_area_metrics.CoreAreaMetricsProcessor
+
+    inputs:
+      features:
+        schema:
+          type: object
+      edgeWidth:
+        schema:
+          type: number
+
+    outputs:
+      cores:
+        schema:
+          type: object
+      features:
+        schema:
+          type: object
+      coreAreaSqm:
+        schema:
+          type: number
+      withCore:
+        schema:
+          type: integer
+
   cool_spots:
     type: process
     processor:
