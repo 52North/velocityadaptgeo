@@ -36,6 +36,7 @@ services:
       - DB_DSN=postgresql://postgres:postgres@postgres-vector:5432/velocityadaptgeo
       - OLLAMA_BASE_URL=http://ollama:11434
       - OLLAMA_MODEL=nomic-embed-text
+      - MAX_WORKFLOW_ITERATIONS=16
     env_file:
       - ./LangGraph/.env
     volumes:

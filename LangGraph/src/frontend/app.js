@@ -899,6 +899,23 @@ graphCanvas.addEventListener("click", (evt) => {
 });
 
 /**
+ * Right-click a line to cut it.
+ *
+ * Losing a node costs the work that built it, so removing one stays behind the armed
+ * Delete button; a connection is one drag to put back, and cheap enough to give the
+ * gesture the browser already reserves for acting on the thing under the cursor.
+ */
+graphCanvas.addEventListener("contextmenu", (evt) => {
+    const hit = evt.target.closest("[data-edge]");
+    if (!hit || running) return;
+    evt.preventDefault();
+    if (picked) clearPick();
+    if (deleting) armDelete(false);
+    const [source, source_output, target, target_input] = JSON.parse(hit.dataset.edge);
+    graphOp("disconnect", { source, source_output, target, target_input });
+});
+
+/**
  * Forget the layers of a previous run, so the results window never mixes the outputs of
  * two runs or of a graph that has since been rebuilt.
  */
