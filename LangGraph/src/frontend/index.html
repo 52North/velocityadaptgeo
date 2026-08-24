@@ -37,6 +37,21 @@
                 </span>
             </header>
             <div id="graph" class="graph-canvas"></div>
+            <div id="graph-legend" class="graph-legend" hidden>
+                <span class="legend-item">
+                    <svg width="26" height="9" aria-hidden="true"><path d="M1 4.5 H25" class="gedge"/></svg>
+                    output feeds the next step
+                </span>
+                <span class="legend-item">
+                    <svg width="26" height="9" aria-hidden="true"><path d="M1 4.5 H25" class="gedge gedge-wrap"/></svg>
+                    the same, routed back to a step on the row below
+                </span>
+                <span class="legend-sep"></span>
+                <span class="legend-item"><i class="legend-dot dot-running"></i>running</span>
+                <span class="legend-item"><i class="legend-dot dot-done"></i>done</span>
+                <span class="legend-item"><i class="legend-dot dot-failed"></i>failed</span>
+                <span class="legend-item"><i class="legend-dot dot-skipped"></i>skipped</span>
+            </div>
             <div id="run-log" class="run-log" hidden></div>
         </div>
     </div>

@@ -90,6 +90,12 @@ Rules:
   decision - the capability was either already added or is not in the catalog.
   Search for a different capability, or answer "done" and let the final reply
   explain what is missing.
+- UNMET CAPABILITIES below lists capabilities the catalog was already searched for
+  and cannot supply; nothing was added to the graph for them. Never search one of
+  those again, and never substitute a different process for one. Move on to the
+  remaining capabilities, and answer "done" once only unmet ones are left - even if
+  that leaves the graph empty. An honest "this cannot be built" is the correct
+  outcome; a graph padded with processes that do something else is not.
 - Pick exactly ONE action per turn.
 - Do not include literal coordinates or other concrete data values; those are
   resolved at execution time.
@@ -181,6 +187,7 @@ async def management_node(state: WorkflowState, llm) -> dict:
     workflow_graph = state.get("workflow_graph", {"nodes": [], "edges": []})
     candidate_processes = state.get("candidate_processes", [])
     last_validation = state.get("last_validation")
+    unmet = state.get("unmet_capabilities", [])
     iteration = state.get("iteration", 0)
     max_iterations = state.get("max_iterations", MAX_WORKFLOW_ITERATIONS)
     decision_history = list(state.get("decision_history", []))
@@ -228,6 +235,9 @@ async def management_node(state: WorkflowState, llm) -> dict:
             LAST VALIDATION REPORT:
             {validation_blob}
 
+            UNMET CAPABILITIES (already searched, not in the catalog - do not retry):
+            {json.dumps(unmet, indent=2)}
+
             RECENT DECISIONS (for context, avoid repeating yourself):
             {last_decisions}
 
@@ -269,5 +279,6 @@ async def management_node(state: WorkflowState, llm) -> dict:
         update["workflow_graph"] = {"nodes": [], "edges": []}
         update["candidate_processes"] = []
         update["last_validation"] = None
+        update["unmet_capabilities"] = []
 
     return update

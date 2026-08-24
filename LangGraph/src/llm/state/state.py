@@ -12,6 +12,7 @@ class WorkflowState(TypedDict, total=False):
     workflow_graph: dict  # NodeGraph shape - see src.llm.state.graph.WorkflowGraph
     candidate_processes: list[dict]
     last_validation: dict | None   # {"valid": bool, "errors": [...]}
+    unmet_capabilities: list[dict]  # capabilities asked for that the catalog cannot supply
     current_action: str            # "search" | "build" | "validate" | "chat" | "done"
     step: dict | None              # the single planned step
     step_tools_meta: list[dict]    # narrowed tools for current action

@@ -36,6 +36,13 @@ Rules:
   time"), not as a task for the user.
 - Never offer to run, execute, or trigger the workflow, and never promise results,
   outputs, or downloads. Describe the graph that was produced instead.
+- UNMET CAPABILITIES lists operations the user asked for that the catalog cannot
+  perform. State plainly and unambiguously that these were NOT added to the graph and
+  that the system cannot do them. Never describe an unmet capability as built,
+  covered, handled or approximated, and never present the `closest_process` as a
+  substitute for it - name it only as what was found instead, if at all.
+- If the unmet list covers everything the user asked for, the honest answer is that
+  no workflow could be built. Say that; do not soften it with a partial graph.
 - If the loop stopped without a usable result (no candidates found, validation
   failed, max iterations reached), say so plainly and explain which capability is
   missing from the catalog.
@@ -58,6 +65,7 @@ async def responder_node(state: WorkflowState, llm) -> dict:
     workflow_graph = state.get("workflow_graph", {"nodes": [], "edges": []})
     candidate_processes = state.get("candidate_processes", [])
     last_validation = state.get("last_validation")
+    unmet = state.get("unmet_capabilities", [])
     decision_history = state.get("decision_history", [])
 
     latest_user = None
@@ -79,6 +87,9 @@ CANDIDATE PROCESSES CONSIDERED:
 
 LAST VALIDATION REPORT:
 {json.dumps(last_validation, indent=2) if last_validation else "null"}
+
+UNMET CAPABILITIES (asked for, but NOT in the catalog and NOT in the graph):
+{json.dumps(unmet, indent=2)}
 
 RECENT DECISIONS (for context on how we got here):
 {json.dumps(decision_history[-5:], indent=2)}

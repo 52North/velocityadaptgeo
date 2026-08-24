@@ -11,6 +11,7 @@ produce is runnable without changes here.
 
 import asyncio
 import logging
+import os
 import time
 from collections.abc import AsyncIterator
 
@@ -20,6 +21,8 @@ logger = logging.getLogger(__name__)
 
 CONFIG_KEYS = ("server_url", "timeout_seconds")
 DEFAULT_TIMEOUT_SECONDS = 300.0
+LOCAL_PYGEOAPI_HOST = os.environ.get("LOCAL_PYGEOAPI_HOST", "localhost:5000")
+LOCAL_PYGEOAPI_INTERNAL = os.environ.get("LOCAL_PYGEOAPI_INTERNAL", "pygeoapi:80")
 
 GEOJSON_TYPES = frozenset({
     "Feature", "FeatureCollection", "Point", "MultiPoint", "LineString",
@@ -170,6 +173,17 @@ def mappable_outputs(payload: dict) -> dict:
     return found
 
 
+def _resolve_server_url(url: str) -> str:
+    """Prefer the compose service name when running inside Docker.
+
+    The catalog is crawled from the host, so local processes are recorded against
+    `localhost:5000`; inside a container that port belongs to the container itself.
+    """
+    if LOCAL_PYGEOAPI_HOST in url and os.path.exists("/.dockerenv"):
+        return url.replace(LOCAL_PYGEOAPI_HOST, LOCAL_PYGEOAPI_INTERNAL)
+    return url
+
+
 async def _post_execution(client: httpx.AsyncClient, node: dict, inputs: dict) -> dict:
     """Run one node by calling its process's execution endpoint synchronously."""
     config = node.get("config") or {}
@@ -177,7 +191,7 @@ async def _post_execution(client: httpx.AsyncClient, node: dict, inputs: dict) -
     if not server_url:
         raise ExecutionError(f"node '{node['id']}' has no server_url to execute against")
 
-    url = f"{str(server_url).rstrip('/')}/processes/{node['type']}/execution"
+    url = f"{_resolve_server_url(str(server_url)).rstrip('/')}/processes/{node['type']}/execution"
     timeout = float(config.get("timeout_seconds") or DEFAULT_TIMEOUT_SECONDS)
 
     response = await client.post(

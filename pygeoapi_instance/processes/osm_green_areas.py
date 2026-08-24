@@ -1,6 +1,7 @@
 """Step 2 of the cool-spots chain: pull tagged OSM polygons inside the study area."""
 
 import os
+import time
 
 import requests
 from pygeoapi.process.base import BaseProcessor, ProcessorExecuteError
@@ -22,6 +23,12 @@ OVERPASS_ENDPOINTS = [
 ]
 USER_AGENT = os.environ.get("OSM_USER_AGENT", "north52-coolspots/1.0")
 OVERPASS_TIMEOUT = float(os.environ.get("OVERPASS_TIMEOUT", "180"))
+OVERPASS_ATTEMPTS = int(os.environ.get("OVERPASS_ATTEMPTS", "3"))
+OVERPASS_BACKOFF = float(os.environ.get("OVERPASS_BACKOFF", "2"))
+# Total wall-clock budget for all retries: must stay under the workflow runner's
+# per-node timeout (300s) so a dead upstream surfaces as this error rather than as an
+# opaque client-side timeout.
+OVERPASS_DEADLINE = float(os.environ.get("OVERPASS_DEADLINE", "240"))
 
 DEFAULT_TAGS = {"landuse": "forest", "natural": "wood", "leisure": "park"}
 
@@ -88,12 +95,31 @@ class OsmGreenAreasProcessor(BaseProcessor):
 
         super().__init__(processor_def, process_metadata)
 
+    def _fetch(self, endpoint: str, query: str, timeout: float) -> list:
+        """POST one query to one endpoint, raising RuntimeError with a short reason."""
+        response = requests.post(
+            endpoint,
+            data={"data": query},
+            headers={"User-Agent": USER_AGENT},
+            timeout=timeout,
+        )
+        if response.status_code != 200:
+            raise RuntimeError(f"HTTP {response.status_code}")
+
+        payload = response.json()
+        remark = (payload.get("remark") or "").strip()
+        if remark:
+            raise RuntimeError(remark)
+        return payload.get("elements", [])
+
     def _query(self, bounds, tags) -> list:
-        """Run a bbox Overpass query, trying each configured endpoint in turn.
+        """Run a bbox Overpass query, retrying each configured endpoint in turn.
 
         A bounding-box filter is used rather than a `poly:` filter because the public
         Overpass instances routinely time out on many-vertex polygons; the results are
-        clipped to the true study-area polygon afterwards.
+        clipped to the true study-area polygon afterwards. Those instances also drop
+        requests under load (502/504) while a sibling mirror answers fine, so every
+        endpoint is tried in several rounds with a growing pause between them.
         """
         min_lon, min_lat, max_lon, max_lat = bounds
         extent = f"({min_lat:.6f},{min_lon:.6f},{max_lat:.6f},{max_lon:.6f})"
@@ -107,22 +133,27 @@ class OsmGreenAreasProcessor(BaseProcessor):
 
         query = f"[out:json][timeout:90];({''.join(clauses)});out geom;"
 
-        errors = []
-        for endpoint in OVERPASS_ENDPOINTS:
-            try:
-                response = requests.post(
-                    endpoint,
-                    data={"data": query},
-                    headers={"User-Agent": USER_AGENT},
-                    timeout=OVERPASS_TIMEOUT,
-                )
-                if response.status_code == 200 and "json" in response.headers.get("content-type", ""):
-                    return response.json().get("elements", [])
-                errors.append(f"{endpoint} -> HTTP {response.status_code}")
-            except requests.RequestException as err:
-                errors.append(f"{endpoint} -> {type(err).__name__}")
+        attempts = max(OVERPASS_ATTEMPTS, 1)
+        deadline = time.monotonic() + OVERPASS_DEADLINE
+        errors = {}
+        for attempt in range(attempts):
+            for endpoint in OVERPASS_ENDPOINTS:
+                budget = min(OVERPASS_TIMEOUT, deadline - time.monotonic())
+                if budget <= 0:
+                    break
+                try:
+                    return self._fetch(endpoint, query, budget)
+                except (requests.RequestException, RuntimeError, ValueError) as err:
+                    errors[endpoint] = f"{endpoint} -> {err or type(err).__name__}"
+            pause = min(OVERPASS_BACKOFF * 2 ** attempt, deadline - time.monotonic())
+            if attempt + 1 == attempts or pause <= 0:
+                break
+            time.sleep(pause)
 
-        raise ProcessorExecuteError("no Overpass endpoint answered: " + "; ".join(errors))
+        raise ProcessorExecuteError(
+            "every Overpass mirror failed; the public instances are overloaded, retry "
+            f"in a few minutes: {'; '.join(errors.values())}"
+        )
 
     def _polygons(self, elements):
         """Turn Overpass way/relation elements into polygons with their tags."""

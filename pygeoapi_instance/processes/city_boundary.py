@@ -97,17 +97,20 @@ class CityBoundaryProcessor(BaseProcessor):
 
         geom = None
         source = None
+        geocode_error = None
         if place:
             try:
                 geom = self._geocode(place)
                 source = "nominatim"
-            except (requests.RequestException, ValueError, KeyError, ShapelyError):
+            except (requests.RequestException, ValueError, KeyError, ShapelyError) as err:
+                geocode_error = f"Nominatim lookup failed ({type(err).__name__}: {err})"
                 geom = None
 
         if geom is None or geom.is_empty:
             if not bbox:
                 raise ProcessorExecuteError(
                     f"could not geocode '{place}' and no fallback bbox was supplied"
+                    f"{': ' + geocode_error if geocode_error else ''}"
                 )
             if len(bbox) != 4:
                 raise ProcessorExecuteError("bbox must be [minLon, minLat, maxLon, maxLat]")
@@ -123,7 +126,7 @@ class CityBoundaryProcessor(BaseProcessor):
             "boundary": {
                 "type": "Feature",
                 "geometry": mapping(geom),
-                "properties": {"place": place, "source": source},
+                "properties": {"place": place, "source": source, "error": geocode_error},
             },
             "bbox": [round(v, 6) for v in geom.bounds],
             "utmCrs": utm_epsg,

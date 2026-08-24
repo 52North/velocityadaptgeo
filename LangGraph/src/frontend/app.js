@@ -2,6 +2,7 @@ const form = document.getElementById("chat-form");
 const input = document.getElementById("prompt");
 const graphCanvas = document.getElementById("graph");
 const graphStatus = document.getElementById("graph-status");
+const graphLegend = document.getElementById("graph-legend");
 const runButton = document.getElementById("run-graph");
 
 const threadId = crypto.randomUUID();
@@ -203,6 +204,7 @@ function renderGraph() {
     graphStatus.className = "graph-status" +
         (nodes.length && lastValidation ? (lastValidation.valid ? " ok" : " bad") : "");
 
+    graphLegend.hidden = !nodes.length;
     runButton.disabled = running || !nodes.length;
     runButton.textContent = running ? "Running…" : "Run";
 

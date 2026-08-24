@@ -28,6 +28,20 @@ def _log(
     return history
 
 
+def _unmet(state: dict, capability: Any, closest: str | None, similarity: Any) -> list[dict]:
+    """Append a capability the catalog cannot supply, and return the new list.
+
+    Recorded whenever a search finds nothing that actually performs the requested
+    operation, so the manager stops re-searching it and the final reply can say the
+    step was NOT added rather than reporting a near-miss node as a success.
+    """
+    unmet = list(state.get("unmet_capabilities", []))
+    entry = {"capability": capability, "closest_process": closest, "similarity": similarity}
+    if entry not in unmet:
+        unmet.append(entry)
+    return unmet
+
+
 def _summarize(obj: Any) -> Any:
     """Compact representation so decision_history stays readable."""
     if isinstance(obj, list):
