@@ -1,4 +1,5 @@
 const form = document.getElementById("chat-form");
+const testPrompts = document.getElementById("test-prompts");
 const input = document.getElementById("prompt");
 const graphCanvas = document.getElementById("graph");
 const graphStatus = document.getElementById("graph-status");
@@ -14,12 +15,44 @@ const COL_GAP = 104;
 const ROW_GAP = 30;
 const BAND_GAP = 62;
 const PAD = 22;
+const PORT_GAP = 15;
+const PORT_R = 3.5;
+const PORT_LABEL_W = 78;
+const HOP_R = 6;
 const HIDDEN_CONFIG_KEYS = ["server_url", "timeout_seconds"];
 
 let executionGraph = { nodes: [], edges: [] };
 let lastValidation = null;
 let nodeRuns = {};
 let running = false;
+let nodeH = NODE_H;
+let nodePorts = new Map();
+
+/**
+ * Render assistant prose as markdown into `el`.
+ *
+ * `marked` is loaded from a CDN, so fall back to plain text if it is unavailable
+ * (offline) - `.message` is `pre-wrap`, so line breaks survive either way. The parsed
+ * output is scrubbed before insertion: it is model output that can echo whatever the
+ * user typed, so scripts, embeds and event handlers must not reach the DOM.
+ */
+function renderMarkdown(el, text) {
+    if (!window.marked) {
+        el.textContent = text;
+        return;
+    }
+    el.classList.add("markdown");
+    el.innerHTML = window.marked.parse(text, { breaks: true, gfm: true });
+    el.querySelectorAll("script, style, iframe, object, embed, form").forEach((n) => n.remove());
+    el.querySelectorAll("*").forEach((n) => {
+        [...n.attributes].forEach(({ name, value }) => {
+            const isUrl = /^(href|src|xlink:href)$/i.test(name);
+            if (/^on/i.test(name) || (isUrl && /^(javascript|data):/i.test(value.trim()))) {
+                n.removeAttribute(name);
+            }
+        });
+    });
+}
 
 function addMessage(role, text = "") {
     const div = document.createElement("div");
@@ -57,6 +90,39 @@ function columnOf(nodes, edges) {
 
     nodes.forEach((n) => depth(n.id, new Set()));
     return column;
+}
+
+/**
+ * Collect, per node, the port names that actually carry an edge, so every parameter gets
+ * its own anchor on the node border instead of all arrows meeting at one midpoint.
+ * Ports keep the order the catalog declares them in, so a node's parameters always stack
+ * in the same order as the process signature.
+ */
+function portsOf(nodes, edges) {
+    const map = new Map(nodes.map((n) => [n.id, { in: [], out: [] }]));
+    const add = (id, side, name) => {
+        const list = map.get(id) && map.get(id)[side];
+        if (list && !list.includes(name)) list.push(name);
+    };
+    edges.forEach((e) => {
+        add(e.source, "out", e.source_output || "default");
+        add(e.target, "in", e.target_input || "default");
+    });
+    const byDeclared = (declared) => (a, b) =>
+        (declared.indexOf(a) + 1 || 99) - (declared.indexOf(b) + 1 || 99);
+    nodes.forEach((n) => {
+        const p = map.get(n.id);
+        p.in.sort(byDeclared(n.inputs || []));
+        p.out.sort(byDeclared(n.outputs || []));
+    });
+    return map;
+}
+
+/** Y of one port anchor relative to the node top: anchors spread evenly down the border. */
+function portY(nodeId, side, name) {
+    const list = (nodePorts.get(nodeId) || {})[side] || [];
+    if (!list.length) return nodeH / 2;
+    return (nodeH * (Math.max(0, list.indexOf(name)) + 1)) / (list.length + 1);
 }
 
 /**
@@ -102,10 +168,10 @@ function drawNode(svg, node, x, y) {
         class: `gnode gnode-${state}`, transform: `translate(${x}, ${y})`,
     });
     group.appendChild(svgEl("rect", {
-        width: NODE_W, height: NODE_H, rx: 10, class: "gnode-box",
+        width: NODE_W, height: nodeH, rx: 10, class: "gnode-box",
     }));
     group.appendChild(svgEl("rect", {
-        width: 4, height: NODE_H, rx: 2, class: "gnode-accent",
+        width: 4, height: nodeH, rx: 2, class: "gnode-accent",
     }));
 
     if (run) {
@@ -126,6 +192,21 @@ function drawNode(svg, node, x, y) {
     cfg.textContent = truncate(configSummary(node), 28);
     group.appendChild(cfg);
 
+    const ports = nodePorts.get(node.id) || { in: [], out: [] };
+    [["in", 0, "end", -7, 13], ["out", NODE_W, "start", 7, -7]].forEach(
+        ([side, cx, anchor, dx, dy]) => {
+            ports[side].forEach((name) => {
+                const cy = portY(node.id, side, name);
+                group.appendChild(svgEl("circle", { cx, cy, r: PORT_R, class: "gport" }));
+                const label = svgEl("text", {
+                    x: cx + dx, y: cy + dy, class: "gport-label", "text-anchor": anchor,
+                });
+                label.textContent = truncate(name, 12);
+                group.appendChild(label);
+            });
+        },
+    );
+
     const full = svgEl("title");
     full.textContent = `${node.id}\nprocess: ${node.type}\nserver: ${(node.config || {}).server_url || "?"}\n${configSummary(node)}`;
     group.appendChild(full);
@@ -133,60 +214,119 @@ function drawNode(svg, node, x, y) {
     svg.appendChild(group);
 }
 
-/**
- * Label an edge by its ports, kept short enough to sit inside the column gap without
- * being overlapped by the node boxes. Matching port names collapse to a single word.
- */
-function portLabel(edge) {
-    const out = edge.source_output || "default";
-    const into = edge.target_input || "default";
-    return out === into ? out : `${out}→${into}`;
-}
-
-function edgeLabel(svg, edge, x, y) {
-    const label = svgEl("text", {
-        x, y, class: "gedge-label", "text-anchor": "middle",
-    });
-    label.textContent = truncate(portLabel(edge), 18);
-    svg.appendChild(label);
-}
-
-/** Draw an edge between two nodes on the same band as a left-to-right curve. */
-function drawEdge(svg, edge, from, to) {
-    const x1 = from.x + NODE_W;
-    const y1 = from.y + NODE_H / 2;
-    const x2 = to.x;
-    const y2 = to.y + NODE_H / 2;
-    const bend = Math.max(28, (x2 - x1) / 2);
-
-    svg.appendChild(svgEl("path", {
-        d: `M ${x1} ${y1} C ${x1 + bend} ${y1}, ${x2 - bend} ${y2}, ${x2} ${y2}`,
-        class: "gedge",
-        "marker-end": "url(#arrow)",
-    }));
-    edgeLabel(svg, edge, (x1 + x2) / 2, (y1 + y2) / 2 - 8);
+/** The two endpoints of an edge, each on its own port anchor. */
+function edgeEnds(edge, from, to) {
+    return {
+        x1: from.x + NODE_W,
+        y1: from.y + portY(edge.source, "out", edge.source_output || "default"),
+        x2: to.x,
+        y2: to.y + portY(edge.target, "in", edge.target_input || "default"),
+    };
 }
 
 /**
- * Draw an edge whose target wrapped onto a later band: out to the right, down through
- * the gap between bands, then back left into the target. Routed orthogonally and dashed
- * so a line running right-to-left reads as a continuation rather than a reversed arrow.
- * `laneY` is assigned by the caller, which stacks edges sharing a gap onto separate lanes
- * so neither the routes nor their port labels overprint.
+ * Flatten one edge into a polyline: the single geometry used for crossing detection and
+ * for drawing. Same-band edges are a sampled left-to-right curve; an edge whose target
+ * wrapped onto a later band is routed orthogonally out to the right, down through
+ * `laneY` in the gap between bands, then back left into the target.
  */
-function drawWrapEdge(svg, edge, from, to, laneY) {
-    const x1 = from.x + NODE_W;
-    const y1 = from.y + NODE_H / 2;
-    const x2 = to.x;
-    const y2 = to.y + NODE_H / 2;
+function edgeRoute(edge, from, to, laneY) {
+    const { x1, y1, x2, y2 } = edgeEnds(edge, from, to);
+    if (laneY === null) {
+        const b = Math.max(28, (x2 - x1) / 2);
+        return Array.from({ length: 19 }, (_, i) => {
+            const t = i / 18, u = 1 - t;
+            return {
+                x: u ** 3 * x1 + 3 * u * u * t * (x1 + b) + 3 * u * t * t * (x2 - b) + t ** 3 * x2,
+                y: u ** 3 * y1 + 3 * u * u * t * y1 + 3 * u * t * t * y2 + t ** 3 * y2,
+            };
+        });
+    }
     const stub = 20;
+    return [
+        { x: x1, y: y1 }, { x: x1 + stub, y: y1 }, { x: x1 + stub, y: laneY },
+        { x: x2 - stub, y: laneY }, { x: x2 - stub, y: y2 }, { x: x2, y: y2 },
+    ];
+}
 
-    svg.appendChild(svgEl("path", {
-        d: `M ${x1} ${y1} H ${x1 + stub} V ${laneY} H ${x2 - stub} V ${y2} H ${x2}`,
-        class: "gedge gedge-wrap",
-        "marker-end": "url(#arrow)",
-    }));
-    edgeLabel(svg, edge, (x1 + stub + x2 - stub) / 2, laneY - 7);
+/**
+ * Where two segments genuinely cross, as a distance along the first one. Shared
+ * endpoints and collinear overlaps return null: only a real X is worth hopping over,
+ * and two edges leaving the same output port are one line splitting, not a crossing.
+ */
+function segCross(a, b, c, d) {
+    const rx = b.x - a.x, ry = b.y - a.y, sx = d.x - c.x, sy = d.y - c.y;
+    const den = rx * sy - ry * sx;
+    if (Math.abs(den) < 1e-9) return null;
+    const t = ((c.x - a.x) * sy - (c.y - a.y) * sx) / den;
+    const u = ((c.x - a.x) * ry - (c.y - a.y) * rx) / den;
+    if (t <= 0.001 || t >= 0.999 || u <= 0.001 || u >= 0.999) return null;
+    return t * Math.hypot(rx, ry);
+}
+
+/** Cumulative distance along a polyline, one entry per point. */
+function lengths(pts) {
+    return pts.reduce(
+        (acc, p, i) => (i ? [...acc, acc[i - 1] + Math.hypot(p.x - pts[i - 1].x, p.y - pts[i - 1].y)] : acc),
+        [0],
+    );
+}
+
+/**
+ * Distances along `pts` at which it crosses any of the routes in `others`, merged when
+ * closer together than one hop and kept clear of both endpoints so a bump never lands
+ * on a port anchor or under the arrowhead.
+ */
+function crossings(pts, others) {
+    const cum = lengths(pts);
+    const total = cum[cum.length - 1];
+    const found = [];
+    for (let i = 1; i < pts.length; i++) {
+        for (const o of others) {
+            for (let k = 1; k < o.length; k++) {
+                const d = segCross(pts[i - 1], pts[i], o[k - 1], o[k]);
+                if (d === null) continue;
+                const s = cum[i - 1] + d;
+                if (s > HOP_R + 4 && s < total - HOP_R - 4) found.push(s);
+            }
+        }
+    }
+    return found.sort((a, b) => a - b)
+        .filter((s, i, all) => !i || s - all[i - 1] > HOP_R * 2);
+}
+
+/** Point at distance `s` along a polyline. */
+function atLen(pts, cum, s) {
+    const i = Math.max(1, cum.findIndex((c) => c >= s));
+    const seg = cum[i] - cum[i - 1] || 1;
+    const k = (s - cum[i - 1]) / seg;
+    return {
+        x: pts[i - 1].x + (pts[i].x - pts[i - 1].x) * k,
+        y: pts[i - 1].y + (pts[i].y - pts[i - 1].y) * k,
+    };
+}
+
+/**
+ * Draw one route: a solid line that lifts off at each crossing, with the gap bridged by
+ * a dashed semicircular hop. The bump plus the dashes make it unambiguous which of two
+ * lines meeting at a point actually continues through it.
+ */
+function drawRoute(svg, pts, others) {
+    const cum = lengths(pts);
+    const r = (n) => Math.round(n * 10) / 10;
+    let line = `M ${r(pts[0].x)} ${r(pts[0].y)}`, hops = "", i = 1;
+
+    crossings(pts, others).forEach((s) => {
+        const a = atLen(pts, cum, s - HOP_R), b = atLen(pts, cum, s + HOP_R);
+        while (i < pts.length && cum[i] < s - HOP_R) line += ` L ${r(pts[i].x)} ${r(pts[i].y)}`, i++;
+        line += ` L ${r(a.x)} ${r(a.y)} M ${r(b.x)} ${r(b.y)}`;
+        hops += ` M ${r(a.x)} ${r(a.y)} A ${HOP_R} ${HOP_R} 0 0 1 ${r(b.x)} ${r(b.y)}`;
+        while (i < pts.length && cum[i] < s + HOP_R) i++;
+    });
+    for (; i < pts.length; i++) line += ` L ${r(pts[i].x)} ${r(pts[i].y)}`;
+
+    svg.appendChild(svgEl("path", { d: line, class: "gedge", "marker-end": "url(#arrow)" }));
+    if (hops) svg.appendChild(svgEl("path", { d: hops.trim(), class: "gedge gedge-hop" }));
 }
 
 /**
@@ -218,10 +358,16 @@ function renderGraph() {
         return;
     }
 
+    nodePorts = portsOf(nodes, edges);
+    const maxPorts = Math.max(0, ...[...nodePorts.values()].map(
+        (p) => Math.max(p.in.length, p.out.length)
+    ));
+    nodeH = Math.max(NODE_H, (maxPorts + 1) * PORT_GAP);
+
     const column = columnOf(nodes, edges);
     const available = Math.max(canvasContentWidth(), NODE_W + PAD * 2);
     const perBand = Math.max(1, Math.floor(
-        (available - PAD * 2 + COL_GAP) / (NODE_W + COL_GAP)
+        (available - PAD * 2 - PORT_LABEL_W + COL_GAP) / (NODE_W + COL_GAP)
     ));
 
     const rowCursor = new Map();
@@ -242,16 +388,24 @@ function renderGraph() {
     let cursorY = PAD;
     bands.forEach((band) => {
         bandTop.set(band, cursorY);
-        cursorY += bandRows.get(band) * (NODE_H + ROW_GAP) - ROW_GAP + BAND_GAP;
+        cursorY += bandRows.get(band) * (nodeH + ROW_GAP) - ROW_GAP + BAND_GAP;
     });
+
+    // Port labels sit outside the box, so the outermost columns need a gutter to
+    // print into - reserved only when a node there actually has labelled ports.
+    const usedCols = Math.min(perBand, Math.max(...column.values()) + 1);
+    const gutter = (test) => PAD + ([...placed.entries()].some(
+        ([id, slot]) => test(slot, nodePorts.get(id) || { in: [], out: [] })
+    ) ? PORT_LABEL_W : 0);
+    const leftPad = gutter((slot, p) => slot.colInBand === 0 && p.in.length);
+    const rightPad = gutter((slot, p) => slot.colInBand === usedCols - 1 && p.out.length);
 
     placed.forEach((slot) => {
-        slot.x = PAD + slot.colInBand * (NODE_W + COL_GAP);
-        slot.y = bandTop.get(slot.band) + slot.row * (NODE_H + ROW_GAP);
+        slot.x = leftPad + slot.colInBand * (NODE_W + COL_GAP);
+        slot.y = bandTop.get(slot.band) + slot.row * (nodeH + ROW_GAP);
     });
 
-    const usedCols = Math.min(perBand, Math.max(...column.values()) + 1);
-    const width = Math.max(PAD * 2 + usedCols * (NODE_W + COL_GAP) - COL_GAP, available);
+    const width = Math.max(leftPad + rightPad + usedCols * (NODE_W + COL_GAP) - COL_GAP, available);
     const height = cursorY - BAND_GAP + PAD;
 
     const svg = svgEl("svg", {
@@ -267,21 +421,24 @@ function renderGraph() {
     defs.appendChild(marker);
     svg.appendChild(defs);
 
+    // Route every edge first: hops are only computable once all the geometry is known.
     const laneUsage = new Map();
-    edges.forEach((edge) => {
+    const routes = edges.flatMap((edge) => {
         const from = placed.get(edge.source);
         const to = placed.get(edge.target);
-        if (!from || !to) return;
-        if (to.band === from.band && to.x > from.x) {
-            drawEdge(svg, edge, from, to);
-            return;
+        if (!from || !to) return [];
+        let laneY = null;
+        if (to.band !== from.band || to.x <= from.x) {
+            const laneBand = Math.max(from.band, to.band);
+            const taken = laneUsage.get(laneBand) || 0;
+            laneUsage.set(laneBand, taken + 1);
+            laneY = bandTop.get(laneBand) - BAND_GAP / 2 - taken * 15;
         }
-        const laneBand = Math.max(from.band, to.band);
-        const taken = laneUsage.get(laneBand) || 0;
-        laneUsage.set(laneBand, taken + 1);
-        const laneY = bandTop.get(laneBand) - BAND_GAP / 2 - taken * 15;
-        drawWrapEdge(svg, edge, from, to, laneY);
+        return [edgeRoute(edge, from, to, laneY)];
     });
+    // Each route hops over the ones drawn before it, so exactly one of any two crossing
+    // lines carries the bump.
+    routes.forEach((pts, i) => drawRoute(svg, pts, routes.slice(0, i)));
 
     nodes.forEach((node) => {
         const at = placed.get(node.id);
@@ -632,12 +789,12 @@ form.addEventListener("submit", (e) => {
                     targetContainer.innerHTML = `<strong>Action (${node}):</strong><br/>
                         <pre style="margin: 5px 0 0 0; font-size: 0.9em;">${JSON.stringify(parsedContent, null, 2)}</pre>`;
                 } catch (e) {
-                    targetContainer.innerHTML = currentStepText.replace(/\n/g, '<br>');
+                    renderMarkdown(targetContainer, currentStepText);
                 }
             } else if (node === "manager") {
                 targetContainer.textContent = currentStepText.replace(/```(json)?/gi, '').trim();
             } else {
-                targetContainer.innerHTML = currentStepText.replace(/\n/g, '<br>');
+                renderMarkdown(targetContainer, currentStepText);
             }
         }
 
@@ -663,3 +820,27 @@ new ResizeObserver(() => {
 }).observe(graphCanvas);
 
 renderGraph();
+
+/**
+ * One button per canned prompt in `prompts-summar.md`, so a test run does not need the
+ * prompt pasted in by hand. Clicking fills the input and submits the real form, so the
+ * send path is exactly the one a typed message takes.
+ */
+fetch("/api/test-prompts")
+    .then((r) => r.json())
+    .then((prompts) => {
+        prompts.forEach(({ label, prompt }) => {
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = "test-prompt";
+            button.textContent = label;
+            button.title = prompt;
+            button.addEventListener("click", () => {
+                input.value = prompt;
+                form.requestSubmit();
+            });
+            testPrompts.appendChild(button);
+        });
+        testPrompts.hidden = !prompts.length;
+    })
+    .catch(() => {});

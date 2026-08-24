@@ -18,6 +18,40 @@ body {
     color: #e5e7eb;
 }
 
+/* ------------------ SCROLLBARS ------------------ */
+
+/*
+ * shadcn/ui-style scrollbars: no track, no arrows, just a rounded thumb that sits in a
+ * wider transparent gutter. The transparent border plus `background-clip: content-box`
+ * is what insets the pill, so the thumb reads as ~4px while keeping a 10px grab target.
+ * Applied to every element, so any scroll area added later inherits it.
+ */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: #334155 transparent;
+}
+
+*::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+*::-webkit-scrollbar-track,
+*::-webkit-scrollbar-corner {
+    background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+    background-color: #334155;
+    border-radius: 999px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+    background-color: #475569;
+}
+
 /* ------------------ LAYOUT ------------------ */
 
 .app {
@@ -64,6 +98,93 @@ body {
     white-space: pre-wrap;
 }
 
+/* Assistant prose rendered from markdown. `pre-wrap` has to go: the generated block
+   elements carry their own spacing, and the source newlines would double it. */
+.message.markdown {
+    white-space: normal;
+}
+
+.markdown> :first-child {
+    margin-top: 0;
+}
+
+.markdown> :last-child {
+    margin-bottom: 0;
+}
+
+.markdown p,
+.markdown ul,
+.markdown ol,
+.markdown pre,
+.markdown blockquote {
+    margin: 0.6em 0;
+}
+
+.markdown ul,
+.markdown ol {
+    padding-left: 1.25em;
+}
+
+.markdown li {
+    margin: 0.15em 0;
+}
+
+.markdown h1,
+.markdown h2,
+.markdown h3,
+.markdown h4 {
+    margin: 0.8em 0 0.35em;
+    font-size: 1em;
+    font-weight: 600;
+}
+
+.markdown code {
+    padding: 1px 5px;
+    border-radius: 4px;
+    background: #0f172a;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.9em;
+}
+
+.markdown pre {
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: #0f172a;
+    overflow-x: auto;
+}
+
+.markdown pre code {
+    padding: 0;
+    background: none;
+}
+
+.markdown a {
+    color: #93c5fd;
+}
+
+.markdown blockquote {
+    padding-left: 0.8em;
+    border-left: 2px solid #334155;
+    color: #cbd5e1;
+}
+
+.markdown table {
+    border-collapse: collapse;
+    font-size: 0.95em;
+}
+
+.markdown th,
+.markdown td {
+    padding: 4px 8px;
+    border: 1px solid #334155;
+    text-align: left;
+}
+
+.markdown hr {
+    border: none;
+    border-top: 1px solid #334155;
+}
+
 .user {
     background: #2563eb;
     align-self: flex-end;
@@ -82,6 +203,29 @@ body {
 }
 
 /* INPUT AREA */
+
+.test-prompts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 8px 12px 0;
+    background: #020617;
+}
+
+.test-prompt {
+    padding: 4px 10px;
+    border-radius: 999px;
+    border: 1px solid #1e293b;
+    background: #0f172a;
+    color: #94a3b8;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.test-prompt:hover {
+    border-color: #334155;
+    color: #e5e7eb;
+}
 
 .input-area {
     display: flex;
@@ -199,6 +343,14 @@ button:hover {
     width: 8px;
     height: 8px;
     border-radius: 2px;
+}
+
+.legend-port {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #0f172a;
+    box-shadow: 0 0 0 1.5px #64748b;
 }
 
 .dot-running { background: #38bdf8; }
@@ -412,8 +564,10 @@ button:hover {
     stroke-width: 1.5;
 }
 
-.gedge-wrap {
-    stroke-dasharray: 4 3;
+/* The bump bridging a crossing: dashed so it reads as a jump over the other line
+   rather than as a corner of this one. */
+.gedge-hop {
+    stroke-dasharray: 2 2;
     stroke: #64748b;
 }
 
@@ -421,10 +575,22 @@ button:hover {
     fill: #475569;
 }
 
-.gedge-label {
-    fill: #64748b;
+.gport {
+    fill: #0f172a;
+    stroke: #64748b;
+    stroke-width: 1.5;
+}
+
+.gport-label {
+    fill: #94a3b8;
     font-size: 10px;
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    /* Halo in the canvas colour so a wrap-edge lane passing behind a gutter
+       label does not cut through the text. */
+    paint-order: stroke;
+    stroke: #0f172a;
+    stroke-width: 3px;
+    stroke-linejoin: round;
 }
 
 .graph-errors {

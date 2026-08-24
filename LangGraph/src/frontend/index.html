@@ -19,6 +19,8 @@
 
             <main id="chat" class="chat"></main>
 
+            <div id="test-prompts" class="test-prompts" hidden></div>
+
             <form id="chat-form" class="input-area">
                 <input id="prompt" type="text" placeholder="Ask something about geometry…" autocomplete="off"
                     required />
@@ -39,12 +41,16 @@
             <div id="graph" class="graph-canvas"></div>
             <div id="graph-legend" class="graph-legend" hidden>
                 <span class="legend-item">
-                    <svg width="26" height="9" aria-hidden="true"><path d="M1 4.5 H25" class="gedge"/></svg>
-                    output feeds the next step
+                    <i class="legend-port"></i>
+                    one anchor per parameter, labelled with its port name
                 </span>
                 <span class="legend-item">
-                    <svg width="26" height="9" aria-hidden="true"><path d="M1 4.5 H25" class="gedge gedge-wrap"/></svg>
-                    the same, routed back to a step on the row below
+                    <svg width="26" height="9" aria-hidden="true"><path d="M1 4.5 H25" class="gedge"/></svg>
+                    output feeds the next step's input
+                </span>
+                <span class="legend-item">
+                    <svg width="26" height="14" aria-hidden="true"><path d="M1 11 H7" class="gedge"/><path d="M7 11 A5 5 0 0 1 17 11" class="gedge gedge-hop"/><path d="M17 11 H25" class="gedge"/></svg>
+                    a hop: this line crosses another, it does not join it
                 </span>
                 <span class="legend-sep"></span>
                 <span class="legend-item"><i class="legend-dot dot-running"></i>running</span>

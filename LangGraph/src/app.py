@@ -25,6 +25,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 
 BASE_DIR = Path(__file__).resolve().parent
 FRONTEND_DIR = BASE_DIR / "frontend"
+PROMPTS_FILE = BASE_DIR.parent / "prompts-summar.md"
 
 app = FastAPI()
 
@@ -242,6 +243,31 @@ async def execute_sync(req: ExecuteRequest):
         return await execute_graph(graph)
     except ExecutionError as exc:
         return {"ok": False, "error": str(exc)}
+
+
+@app.get("/api/test-prompts")
+async def test_prompts():
+    """Canned prompts from `prompts-summar.md`, offered as one-click buttons in the UI.
+
+    Read per request rather than at import, so editing the markdown updates the buttons
+    on the next page load without a rebuild. A `Label:` line opens a section; the
+    non-empty lines under it are its prompt.
+    """
+    if not PROMPTS_FILE.exists():
+        return []
+
+    prompts, label, body = [], None, []
+    for line in PROMPTS_FILE.read_text(encoding="utf-8").splitlines():
+        text = line.strip()
+        if text.endswith(":") and len(text.split()) <= 6:
+            if label and body:
+                prompts.append({"label": label, "prompt": " ".join(body)})
+            label, body = text[:-1], []
+        elif text:
+            body.append(text)
+    if label and body:
+        prompts.append({"label": label, "prompt": " ".join(body)})
+    return prompts
 
 
 @app.get("/")

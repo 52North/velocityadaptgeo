@@ -38,6 +38,9 @@ services:
       - OLLAMA_MODEL=nomic-embed-text
     env_file:
       - ./LangGraph/.env
+    volumes:
+      # Mounted, not copied, so editing the test prompts does not need a rebuild.
+      - ./prompts-summar.md:/app/prompts-summar.md:ro
     depends_on:
       mcp:
         condition: service_started
