@@ -123,7 +123,7 @@ async def stream(prompt: str, thread_id: str):
                         continue
                     graph_payload = {
                         key: update[key]
-                        for key in ("workflow_graph", "last_validation")
+                        for key in ("workflow_graph", "last_validation", "unmet_capabilities")
                         if update.get(key) is not None
                     }
                     if graph_payload:

@@ -4,6 +4,7 @@ const input = document.getElementById("prompt");
 const graphCanvas = document.getElementById("graph");
 const graphStatus = document.getElementById("graph-status");
 const graphLegend = document.getElementById("graph-legend");
+const graphNotes = document.getElementById("graph-notes");
 const runButton = document.getElementById("run-graph");
 const deleteButton = document.getElementById("delete-mode");
 
@@ -24,6 +25,7 @@ const HIDDEN_CONFIG_KEYS = ["server_url", "timeout_seconds"];
 
 let executionGraph = { nodes: [], edges: [] };
 let lastValidation = null;
+let unmetCapabilities = [];
 let nodeRuns = {};
 let running = false;
 let deleting = false;
@@ -471,6 +473,35 @@ function drawRoute(svg, pts, others, edge) {
  * Render the OGC execution graph: one box per process node, one arrow per wired port.
  * Called on every graph update so the DAG grows as the workflow is assembled.
  */
+/**
+ * Note, beside the graph, every capability the user asked for that the catalog cannot
+ * perform. These are gaps the graph itself cannot show - nothing was added for them -
+ * so without this panel the only record is a sentence in the chat that scrolls away.
+ */
+function renderNotes() {
+    graphNotes.innerHTML = "";
+    graphNotes.hidden = !unmetCapabilities.length;
+    if (graphNotes.hidden) return;
+
+    const title = document.createElement("div");
+    title.className = "graph-notes-title";
+    title.textContent = `Not in the catalog — ${unmetCapabilities.length} capabilit${unmetCapabilities.length === 1 ? "y" : "ies"} not built`;
+    graphNotes.appendChild(title);
+
+    unmetCapabilities.forEach((note) => {
+        const row = document.createElement("div");
+        row.className = "graph-note";
+        const what = document.createElement("b");
+        what.textContent = note.capability || "(unnamed capability)";
+        row.appendChild(what);
+        if (note.closest_process) {
+            const sim = typeof note.similarity === "number" ? `, similarity ${note.similarity.toFixed(2)}` : "";
+            row.appendChild(document.createTextNode(` — closest match was ${note.closest_process}${sim}, which does not do it`));
+        }
+        graphNotes.appendChild(row);
+    });
+}
+
 function renderGraph() {
     const nodes = executionGraph.nodes || [];
     const edges = executionGraph.edges || [];
@@ -483,6 +514,7 @@ function renderGraph() {
         (nodes.length && lastValidation ? (lastValidation.valid ? " ok" : " bad") : "");
 
     graphLegend.hidden = !nodes.length;
+    renderNotes();
     runButton.disabled = running || !nodes.length;
     runButton.textContent = running ? "Running…" : "Run";
     deleteButton.disabled = running || !nodes.length;
@@ -1195,6 +1227,7 @@ form.addEventListener("submit", (e) => {
                 resetResultLayers();
             }
             if (data.last_validation) lastValidation = data.last_validation;
+            if (data.unmet_capabilities) unmetCapabilities = data.unmet_capabilities;
             renderGraph();
             return;
         }

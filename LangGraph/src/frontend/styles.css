@@ -689,6 +689,33 @@ button:hover {
     line-height: 1.5;
 }
 
+.graph-notes {
+    flex: 0 0 auto;
+    max-height: 30%;
+    overflow-y: auto;
+    border-top: 1px solid #1e293b;
+    background: #020617;
+    padding: 10px 14px;
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.graph-notes-title {
+    color: #fbbf24;
+    font-weight: 600;
+    padding-bottom: 4px;
+}
+
+.graph-note {
+    padding: 3px 0;
+    color: #94a3b8;
+}
+
+.graph-note b {
+    color: #e2e8f0;
+    font-weight: 600;
+}
+
 .plan-visualization {
     display: flex;
     flex-direction: column;
