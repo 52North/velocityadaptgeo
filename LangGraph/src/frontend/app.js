@@ -91,7 +91,6 @@ function renderManagerPlan(el, raw) {
     const action = data?.next_action || jsonField(text, "next_action");
     const name = data?.step?.name || jsonField(text, "name");
     const reasoning = data?.reasoning || jsonField(text, "reasoning");
-    const scope = data?.goal_scope || jsonField(text, "goal_scope");
     const instruction = data ? data.step?.instruction : jsonField(text, "instruction");
 
     el.textContent = "";
@@ -103,7 +102,6 @@ function renderManagerPlan(el, raw) {
     const head = planRow(el, "plan-head", "");
     if (action) planRow(head, `plan-action action-${action}`, MANAGER_ACTIONS[action] || action);
     if (name) planRow(head, "plan-name", name);
-    if (scope === "new") planRow(head, "plan-scope", "new goal");
 
     if (typeof instruction === "string" && instruction) {
         planRow(el, "plan-instruction", instruction);

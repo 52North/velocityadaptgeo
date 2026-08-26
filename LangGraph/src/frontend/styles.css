@@ -842,14 +842,6 @@ button:hover {
     font-weight: 600;
 }
 
-.plan-scope {
-    padding: 1px 7px;
-    border: 1px solid #78350f;
-    border-radius: 999px;
-    color: #fbbf24;
-    font-size: 11px;
-}
-
 .plan-instruction {
     margin-top: 8px;
     white-space: pre-wrap;

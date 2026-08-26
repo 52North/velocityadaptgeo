@@ -82,12 +82,11 @@ Rules:
   the first search is for geocoding, and only the next one for buffering.
 - Build the graph one capability at a time and only answer "done" once every
   capability the goal needs is present as a node.
-- Judge whether the newest user message continues the graph already built or starts
-  a fresh problem, and report it in "goal_scope". A graph must only ever contain the
-  capabilities of ONE problem: if the user has moved on to a different task, answer
-  "new" so the old nodes are cleared, then build the new graph from scratch. Answer
-  "continue" only when the message extends or corrects the current graph ("now also
-  buffer that result", "drop the second step").
+- The graph is never discarded. It only ever grows or is edited: a new message
+  extends or corrects what is already there ("now also buffer that result", "drop the
+  second step"). If the user moves on to a different task, add its capabilities to the
+  existing graph rather than starting over - removing nodes is an explicit "build" op
+  the user has to ask for.
 - If the graph is UNCHANGED since your previous decision, do not repeat that
   decision - the capability was either already added or is not in the catalog.
   Search for a different capability, or answer "done" and let the final reply
@@ -110,7 +109,6 @@ Rules:
 Output schema:
 {
   "next_action": "search" | "build" | "validate" | "chat" | "done",
-  "goal_scope": "new" | "continue",
   "step": {
     "name": "short label",
     "instruction": <string OR object — see below>
@@ -183,11 +181,9 @@ def parse_llm_json(text: str):
 async def management_node(state: WorkflowState, llm) -> dict:
     """Plan the next action for the current user goal.
 
-    On the first planning step of a turn the manager also judges whether the newest
-    message starts a fresh problem; if so the previously built graph is cleared, so a
-    graph never mixes the capabilities of two unrelated problems. Later steps of the
-    same turn skip that check - the graph they are midway through building is the one
-    being asked about.
+    The graph built so far is never cleared here: it survives every turn and is only
+    changed by an explicit build op, so nothing the manager decides can silently
+    discard work the user can still see on the canvas.
     """
     messages = state.get("messages", [])
     workflow_graph = state.get("workflow_graph", {"nodes": [], "edges": []})
@@ -261,14 +257,12 @@ async def management_node(state: WorkflowState, llm) -> dict:
 
     step = data.get("step")
     reasoning = data.get("reasoning", "")
-    starts_new_goal = iteration == 0 and data.get("goal_scope") == "new" and workflow_graph.get("nodes")
 
     decision_history.append({
         "node": "management_node",
         "iteration": iteration + 1,
         "current_action": next_action,
         "step": step,
-        "goal_scope": "new" if starts_new_goal else "continue",
         "reasoning": reasoning or "No reasoning provided by LLM.",
     })
 
@@ -278,13 +272,5 @@ async def management_node(state: WorkflowState, llm) -> dict:
         "iteration": iteration + 1,
         "decision_history": decision_history,
     }
-
-    if starts_new_goal:
-        logger.info("New goal detected; clearing the %d-node graph from the previous problem.",
-                    len(workflow_graph.get("nodes", [])))
-        update["workflow_graph"] = {"nodes": [], "edges": []}
-        update["candidate_processes"] = []
-        update["last_validation"] = None
-        update["unmet_capabilities"] = []
 
     return update

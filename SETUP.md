@@ -4,6 +4,11 @@ create `.env` in `LangGraph/` and paste the LLM key there
 ```bash
 cp LangGraph/.env.sample LangGraph/.env
 ```
+
+optionally override the compose defaults (DB credentials, service URLs, embedding model)
+```bash
+cp .env.sample .env
+```
 ## dev-setup
 ```bash
 docker compose up
