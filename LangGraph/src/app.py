@@ -22,6 +22,7 @@ from src.execution.runner import (
     summarise,
 )
 from src.helper.helper import pretty_print_messages
+from src.metrics import RunTracker
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 
@@ -93,7 +94,7 @@ async def chat(req: ChatRequest):
     """
     thread_id = req.thread_id or str(uuid4())
 
-    result = await compiled_graph.ainvoke(turn_input(req.prompt), config=turn_config(thread_id))
+    result = await compiled_graph.ainvoke(turn_input(req.prompt), config={**turn_config(thread_id), "callbacks": [RunTracker(thread_id)]})
 
     # Last message is the assistant reply
     assistant_message = result["messages"][-1].content
@@ -113,7 +114,7 @@ async def stream(prompt: str, thread_id: str):
         """
         async for path, mode, chunk in compiled_graph.astream(
             turn_input(prompt),
-            config=turn_config(thread_id),
+            config={**turn_config(thread_id), "callbacks": [RunTracker(thread_id)]},
             stream_mode=["messages", "updates"],
             subgraphs=True
         ):
