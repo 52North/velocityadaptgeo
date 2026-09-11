@@ -118,35 +118,27 @@ function renderManagerPlan(el, raw) {
 }
 
 /**
- * Render the retriever's catalog hits as ranked rows instead of the raw
- * `N. process_id | title | similarity=0.83` lines it emits. Anything that does not
- * match that shape (the "no matching processes" case) is kept as plain text.
+ * Render the retriever's MCP process tools as rows instead of the raw
+ * `N. tool | title` lines it emits. Anything that does not match that shape
+ * (the "no tools" case) is kept as plain text.
  */
 function renderCandidates(el, raw) {
     el.textContent = "";
     const head = planRow(el, "plan-head", "");
     planRow(head, "plan-action action-search", "Catalog");
-    planRow(head, "plan-name", /^Top retrieved/.test(raw.trim()) ? "Top retrieved processes" : "No match");
+    planRow(head, "plan-name", /^MCP process tools/.test(raw.trim()) ? "MCP process tools" : "No match");
 
     let rows = 0;
     raw.split("\n").forEach((line) => {
-        const m = line.match(/^\s*(\d+)\.\s*(.*?)\s*\|\s*(.*?)\s*\|\s*similarity=(.*)$/);
+        const m = line.match(/^\s*(\d+)\.\s*(.*?)\s*\|\s*(.*)$/);
         if (!m) return;
         rows += 1;
-        const [, rank, pid, title, sim] = m;
-        const score = Number(sim);
-        const strength = !Number.isFinite(score) ? "" : score >= 0.7 ? " score-strong" : score <= 0.55 ? " score-weak" : "";
-
+        const [, rank, tool, title] = m;
         const row = planRow(el, "candidate", "");
         planRow(row, "candidate-rank", rank);
         const body = planRow(row, "candidate-body", "");
-        planRow(body, "candidate-id", pid);
+        planRow(body, "candidate-id", tool);
         if (title) planRow(body, "candidate-title", title);
-
-        const meter = planRow(row, `candidate-score${strength}`, "");
-        planRow(meter, "candidate-score-value", Number.isFinite(score) ? score.toFixed(2) : sim);
-        const fill = planRow(planRow(meter, "candidate-bar", ""), "candidate-bar-fill", "");
-        fill.style.width = `${Math.round(Math.min(1, Math.max(0, score || 0)) * 100)}%`;
     });
 
     if (!rows) planRow(el, "plan-instruction", raw.trim());
@@ -493,8 +485,7 @@ function renderNotes() {
         what.textContent = note.capability || "(unnamed capability)";
         row.appendChild(what);
         if (note.closest_process) {
-            const sim = typeof note.similarity === "number" ? `, similarity ${note.similarity.toFixed(2)}` : "";
-            row.appendChild(document.createTextNode(` — closest match was ${note.closest_process}${sim}, which does not do it`));
+            row.appendChild(document.createTextNode(` — closest match was ${note.closest_process}, which does not do it`));
         }
         graphNotes.appendChild(row);
     });

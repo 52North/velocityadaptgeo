@@ -3,70 +3,39 @@ import logging
 from langchain_core.messages import AIMessage
 
 from src.llm.state.state import WorkflowState
-from src.llm.nodes._helpers import _log, _last_tool_result
-
-from src.llm.tools.ogc_client import search_ogc_processes
+from src.llm.nodes._helpers import _log
+from src.llm.tools.mcp_client import load_mcp_tools
 
 
 logger = logging.getLogger(__name__)
 
 
-RETRIEVER_SYSTEM = """You are an OGC process retrieval agent.
-
-Use `search_ogc_processes` to find candidates that match the current need.
-
-Rules:
-- Issue focused, capability-oriented queries (e.g. "buffer polygon by distance").
-- Do not invent process IDs. Only return what the tools provide.
-- Do not attempt to build or modify the workflow graph.
-"""
-
-
 async def retriever_node(state: WorkflowState, llm) -> dict:
-    """Query the OGC catalog for the manager's search step and record the candidates.
+    """List every OGC process tool of the MCP server as candidates for the manager's search step.
 
-    Returns only the newly produced status message; `messages` is an appending channel.
+    Nothing is ranked here: auto_build lets the LLM choose among all tools. Returns only the
+    newly produced status message; `messages` is an appending channel.
     """
-    step = state.get("step") or {}
-    instruction = step.get("instruction", "")
-
-    query = instruction if isinstance(instruction, str) and instruction else str(instruction)
-    logger.info("Retriever query: %s", query)
+    instruction = (state.get("step") or {}).get("instruction", "")
     try:
-        candidates = await search_ogc_processes.ainvoke({"query": query})
+        tools = await load_mcp_tools()
     except Exception as exc:
-        logger.exception("Retriever search failed for query: %s", query)
+        logger.exception("Retriever could not list MCP tools")
         return {
             "messages": [AIMessage(content=f"Retriever failed: {exc}")],
             "candidate_processes": [],
             "decision_history": _log(state, "retriever", instruction, error=str(exc)),
         }
 
-    candidate_ids = [
-        f"{candidate.get('process_id')}@{candidate.get('server_url')}"
-        for candidate in candidates[:5]
-        if isinstance(candidate, dict)
+    candidates = [
+        {"tool": t.name, **t.metadata["_meta"]["ogc"], "description": t.description, "inputs": t.args_schema.get("properties", {})}
+        for t in tools if "ogc" in ((t.metadata or {}).get("_meta") or {})
     ]
-    logger.info(
-        "Retriever returned %d candidates: %s",
-        len(candidates),
-        ", ".join(candidate_ids) if candidate_ids else "none",
-    )
-
-    if candidates:
-        summary = ["Top retrieved processes:"]
-        for i, candidate in enumerate(candidates[:5], start=1):
-            if isinstance(candidate, dict):
-                pid = candidate.get("process_id", "unknown")
-                title = candidate.get("title", "")
-                sim = candidate.get("similarity")
-                summary.append(f"{i}. {pid} | {title} | similarity={sim}")
-        status = AIMessage(content="\n".join(summary))
-    else:
-        status = AIMessage(content="Retriever returned no matching OGC processes.")
-
+    logger.info("Retriever listed %d MCP process tools", len(candidates))
+    lines = [f"{i}. {c['tool']} | {c.get('title') or ''}" for i, c in enumerate(candidates, start=1)]
+    status = "\n".join(["MCP process tools:", *lines]) if candidates else "MCP server exposes no OGC process tools."
     return {
-        "messages": [status],
+        "messages": [AIMessage(content=status)],
         "candidate_processes": candidates,
         "decision_history": _log(state, "retriever", instruction, candidates),
     }

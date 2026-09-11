@@ -28,7 +28,7 @@ def _log(
     return history
 
 
-def _unmet(state: dict, capability: Any, closest: str | None, similarity: Any) -> list[dict]:
+def _unmet(state: dict, capability: Any, closest: str | None) -> list[dict]:
     """Append a capability the catalog cannot supply, and return the new list.
 
     Recorded whenever a search finds nothing that actually performs the requested
@@ -36,7 +36,7 @@ def _unmet(state: dict, capability: Any, closest: str | None, similarity: Any) -
     step was NOT added rather than reporting a near-miss node as a success.
     """
     unmet = list(state.get("unmet_capabilities", []))
-    entry = {"capability": capability, "closest_process": closest, "similarity": similarity}
+    entry = {"capability": capability, "closest_process": closest}
     if entry not in unmet:
         unmet.append(entry)
     return unmet

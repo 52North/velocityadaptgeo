@@ -32,7 +32,7 @@ Plan:
 
 
                        ┌─────────────────┐
-                       │ tool_registry   │  loads OGC search tools (pgvector)
+                       │ tool_registry   │  loads OGC process tools (MCP)    
                        │                 │  + graph-builder tools (Agents)
                        └────────┬────────┘
                                 │

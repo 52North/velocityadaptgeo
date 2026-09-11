@@ -1,4 +1,4 @@
-"""Execute a built workflow graph against live OGC API - Processes servers.
+"""Execute a built workflow graph through the OGC process tools of the MCP server.
 
 The runner is deliberately independent of both the LLM that assembles the graph and the
 transport that reports on it: it takes the graph dict held in `WorkflowState`, walks it in
@@ -10,20 +10,18 @@ produce is runnable without changes here.
 """
 
 import asyncio
+import json
 import logging
-import os
 import time
 from collections.abc import AsyncIterator
-
-import httpx
+from datetime import timedelta
 
 from src.llm.state.graph import CONFIG_KEYS
+from src.llm.tools.mcp_client import mcp_client
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_TIMEOUT_SECONDS = 300.0
-LOCAL_PYGEOAPI_HOST = os.environ.get("LOCAL_PYGEOAPI_HOST", "localhost:5000")
-LOCAL_PYGEOAPI_INTERNAL = os.environ.get("LOCAL_PYGEOAPI_INTERNAL", "pygeoapi:80")
 
 GEOJSON_TYPES = frozenset({
     "Feature", "FeatureCollection", "Point", "MultiPoint", "LineString",
@@ -174,38 +172,24 @@ def mappable_outputs(payload: dict) -> dict:
     return found
 
 
-def _resolve_server_url(url: str) -> str:
-    """Prefer the compose service name when running inside Docker.
+async def _call_tool(node: dict, inputs: dict) -> object:
+    """Run one node through the MCP tool whose `_meta.ogc` matches its process and server.
 
-    The catalog is crawled from the host, so local processes are recorded against
-    `localhost:5000`; inside a container that port belongs to the container itself.
+    Returns the OGC response: the tool's structured content when it is an object, otherwise
+    its JSON text.
     """
-    if LOCAL_PYGEOAPI_HOST in url and os.path.exists("/.dockerenv"):
-        return url.replace(LOCAL_PYGEOAPI_HOST, LOCAL_PYGEOAPI_INTERNAL)
-    return url
-
-
-async def _post_execution(client: httpx.AsyncClient, node: dict, inputs: dict) -> dict:
-    """Run one node by calling its process's execution endpoint synchronously."""
     config = node.get("config") or {}
-    server_url = config.get("server_url")
-    if not server_url:
-        raise ExecutionError(f"node '{node['id']}' has no server_url to execute against")
-
-    url = f"{_resolve_server_url(str(server_url)).rstrip('/')}/processes/{node['type']}/execution"
-    timeout = float(config.get("timeout_seconds") or DEFAULT_TIMEOUT_SECONDS)
-
-    response = await client.post(
-        url,
-        json={"inputs": inputs},
-        headers={"Prefer": "respond-sync", "Accept": "application/json"},
-        timeout=timeout,
-    )
-    if response.status_code >= 400:
-        raise ExecutionError(
-            f"{node['type']} returned HTTP {response.status_code}: {response.text[:300]}"
-        )
-    return response.json()
+    timeout = timedelta(seconds=float(config.get("timeout_seconds") or DEFAULT_TIMEOUT_SECONDS))
+    async with mcp_client().session("geometry") as session:
+        tool = next((t.name for t in (await session.list_tools()).tools
+                     if ((t.meta or {}).get("ogc") or {}).items() >= {"process_id": node["type"], "server_url": config.get("server_url")}.items()), None)
+        result = tool and await session.call_tool(tool, inputs, read_timeout_seconds=timeout)
+    if tool is None:
+        raise ExecutionError(f"MCP server has no tool for '{node['type']}' at {config.get('server_url')}")
+    text = "".join(c.text for c in result.content if c.type == "text")
+    if result.isError:
+        raise ExecutionError(f"{tool} failed: {text[:300]}")
+    return result.structuredContent if result.structuredContent is not None else json.loads(text)
 
 
 async def run_graph(graph: dict) -> AsyncIterator[dict]:
@@ -231,44 +215,41 @@ async def run_graph(graph: dict) -> AsyncIterator[dict]:
     results: dict[str, dict] = {}
     failed: set[str] = set()
 
-    async with httpx.AsyncClient() as client:
-        for node_id in order:
-            node = nodes[node_id]
+    for node_id in order:
+        node = nodes[node_id]
 
-            blocked = sorted({e["source"] for e in incoming[node_id]} & failed)
-            if blocked:
-                failed.add(node_id)
-                yield {"event": "node-skipped", "node": node_id, "process": node["type"],
-                       "reason": f"depends on failed node(s): {', '.join(blocked)}"}
-                continue
+        blocked = sorted({e["source"] for e in incoming[node_id]} & failed)
+        if blocked:
+            failed.add(node_id)
+            yield {"event": "node-skipped", "node": node_id, "process": node["type"],
+                   "reason": f"depends on failed node(s): {', '.join(blocked)}"}
+            continue
 
-            try:
-                inputs = _resolve_inputs(node, incoming[node_id], results)
-            except ExecutionError as err:
-                failed.add(node_id)
-                yield {"event": "node-error", "node": node_id, "process": node["type"],
-                       "ms": 0, "error": str(err)}
-                continue
+        try:
+            inputs = _resolve_inputs(node, incoming[node_id], results)
+        except ExecutionError as err:
+            failed.add(node_id)
+            yield {"event": "node-error", "node": node_id, "process": node["type"],
+                   "ms": 0, "error": str(err)}
+            continue
 
-            yield {"event": "node-start", "node": node_id, "process": node["type"],
-                   "inputs": inputs}
+        yield {"event": "node-start", "node": node_id, "process": node["type"],
+               "inputs": inputs}
 
-            started = time.monotonic()
-            try:
-                produced = await _post_execution(client, node, inputs)
-            except (ExecutionError, httpx.HTTPError, ValueError) as err:
-                failed.add(node_id)
-                message = str(err) or type(err).__name__
-                if isinstance(err, httpx.TimeoutException):
-                    message = f"timed out after {node.get('config', {}).get('timeout_seconds', DEFAULT_TIMEOUT_SECONDS)}s"
-                logger.warning("Node %s (%s) failed: %s", node_id, node["type"], message)
-                yield {"event": "node-error", "node": node_id, "process": node["type"],
-                       "ms": int((time.monotonic() - started) * 1000), "error": message}
-                continue
+        started = time.monotonic()
+        try:
+            produced = await _call_tool(node, inputs)
+        except Exception as err:
+            failed.add(node_id)
+            message = str(err) or type(err).__name__
+            logger.warning("Node %s (%s) failed: %s", node_id, node["type"], message)
+            yield {"event": "node-error", "node": node_id, "process": node["type"],
+                   "ms": int((time.monotonic() - started) * 1000), "error": message}
+            continue
 
-            results[node_id] = produced
-            yield {"event": "node-done", "node": node_id, "process": node["type"],
-                   "ms": int((time.monotonic() - started) * 1000), "outputs": produced}
+        results[node_id] = produced
+        yield {"event": "node-done", "node": node_id, "process": node["type"],
+               "ms": int((time.monotonic() - started) * 1000), "outputs": produced}
 
     terminal = [n for n in order if n in results and not any(
         e["source"] == n for e in graph.get("edges", []) if e.get("target") in nodes

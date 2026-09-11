@@ -16,3 +16,5 @@ wheels/
 .env
 !.env.sample
 .claude
+# workflow metrics, shared across branches
+metrics/runs.jsonl

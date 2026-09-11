@@ -22,8 +22,8 @@ Explicitly mirrors the VelocityAdapt `NodeGraph` JSON Schema
 
 One deliberate deviation from the schema: `type` is kept as an open string
 rather than the schema's fixed 9-value enum, since it holds a live
-`process_id` discovered at runtime from the pgvector-backed OGC process
-catalog (see src/llm/tools/ogc_client.py) rather than a closed, hardcoded
+`process_id` discovered at runtime from the OGC process tools of the MCP
+server (see src/llm/nodes/retriever.py) rather than a closed, hardcoded
 set of node kinds.
 """
 

@@ -13,11 +13,10 @@ logger = logging.getLogger(__name__)
 
 
 class GraphBuildDecision(BaseModel):
-    """Which retrieved OGC process to add to the workflow graph, and how to wire it in."""
+    """Which MCP process tool to add to the workflow graph, and how to wire it in."""
 
     performs_capability: bool = Field(description="True if the chosen candidate actually PERFORMS the operation named in CAPABILITY SEARCHED FOR. False only if the catalog has nothing for that one capability. Judge the single searched capability, NOT the whole user goal.")
-    process_id: str = Field(description="process_id of the chosen candidate. Must exactly match one of the given candidates. When performs_capability is false, name the closest candidate anyway so the user can be told what was found instead.")
-    server_url: str = Field(description="server_url of the chosen candidate. Must exactly match the same candidate.")
+    tool: str = Field(description="`tool` name of the chosen candidate. Must exactly match one of the given candidates. When performs_capability is false, name the closest candidate anyway so the user can be told what was found instead.")
     inputs: dict = Field(default_factory=dict, description="Static input parameters implied by the user's goal, e.g. {'distance': 500}. Leave empty if unknown.")
     connect_from_node: Optional[str] = Field(default=None, description="id of an existing node in the current graph whose output feeds this new node's primary input. Null if there is no such node yet.")
     connect_from_output: Optional[str] = Field(default=None, description="Output name on connect_from_node. Required if connect_from_node is set.")
@@ -25,7 +24,7 @@ class GraphBuildDecision(BaseModel):
     reasoning: str = Field(description="One sentence justification for this choice.")
 
 
-AUTO_BUILD_SYSTEM = """You turn one freshly retrieved OGC process candidate into a
+AUTO_BUILD_SYSTEM = """You turn one of the MCP server's OGC process tools into a
 concrete node in the user's workflow graph.
 
 Rules:
@@ -33,21 +32,17 @@ Rules:
   is given only as context for wiring and input values. A candidate that performs the
   searched capability belongs in the graph even though it does not, on its own, satisfy
   the whole goal - the goal is built up over several turns, one capability per turn.
-- Decide whether any candidate performs THAT capability. The candidates are the nearest
-  vector matches, NOT a guarantee of fitness: the search always returns something, even
-  when nothing in the catalog performs the requested operation. If none of them performs
-  it, set performs_capability=false. Do NOT settle for a process that merely operates on
-  similar data, belongs to the same domain, or sounds related - a viewshed process is
-  not a shadow simulation, and a buffer is not a travel-time isochrone.
-- A `similarity` at or below ~0.55 is a hint that the capability may be absent
-  altogether; a genuine match usually scores well above that. The description decides,
-  though - the score is only evidence.
+- Decide whether any candidate performs THAT capability. The candidates are every process
+  tool the MCP server exposes, most of them unrelated to the capability. If none of them
+  performs it, set performs_capability=false. Do NOT settle for a process that merely
+  operates on similar data, belongs to the same domain, or sounds related - a viewshed
+  process is not a shadow simulation, and a buffer is not a travel-time isochrone.
 - When performs_capability=false nothing is added to the graph. That is the correct,
   useful outcome for a capability the catalog lacks: far better than adding a process
   that does the wrong thing, which would silently produce a workflow that cannot answer
   the goal. It does NOT abandon the goal - the remaining capabilities are still built.
 - Otherwise choose exactly one candidate from the list given - whichever best performs
-  the searched capability - and copy its process_id and server_url exactly as given.
+  the searched capability - and copy its `tool` name exactly as given.
 - Prefer a candidate that adds a capability the graph does not have yet. Never pick a
   candidate that is already present as a node in the current graph.
 - Wiring is required whenever it is possible: if an existing node produces what this
@@ -60,8 +55,8 @@ Rules:
   declared "outputs" keys, and connect_to_input one of this candidate's declared
   "inputs" keys, spelled exactly as given. Never reuse the input's name for the output
   or invent a port: a graph wired to a port that does not exist cannot be executed.
-- Do not invent process ids, servers, or node ids that are not present in the given
-  candidates or graph.
+- Do not invent tool names or node ids that are not present in the given candidates
+  or graph.
 """
 
 
@@ -85,7 +80,7 @@ async def auto_build_node(state: WorkflowState, llm) -> dict:
     refused deterministically: the manager would otherwise be able to stack duplicate
     nodes by searching the same capability twice.
     """
-    candidates = (state.get("candidate_processes") or [])[:5]
+    candidates = state.get("candidate_processes") or []
     graph = state.get("workflow_graph") or {"nodes": [], "edges": []}
     messages = state.get("messages", [])
 
@@ -130,50 +125,32 @@ Decide whether a candidate performs the searched capability, and if so how to wi
         }
 
     if not decision.performs_capability:
-        closest = next(
-            (c for c in candidates if c.get("process_id") == decision.process_id),
-            candidates[0],
-        )
-        logger.info(
-            "Auto-build refused: no candidate performs '%s' (closest %s, similarity %s).",
-            capability, closest.get("process_id"), closest.get("similarity"),
-        )
+        logger.info("Auto-build refused: no tool performs '%s' (closest %s).", capability, decision.tool)
         return {
-            "unmet_capabilities": _unmet(
-                state, capability, closest.get("process_id"), closest.get("similarity"),
-            ),
+            "unmet_capabilities": _unmet(state, capability, decision.tool),
             "decision_history": _log(
                 state, "auto_build", decision.model_dump(),
-                error=(
-                    f"No catalog process performs this capability; nothing added. "
-                    f"Closest was '{closest.get('process_id')}' "
-                    f"(similarity {closest.get('similarity')}), which does not do it."
-                ),
+                error=f"No MCP process tool performs this capability; nothing added. Closest was '{decision.tool}', which does not do it.",
             ),
         }
 
-    if (decision.process_id, decision.server_url) in _graph_processes(graph):
-        logger.info(
-            "Auto-build skipped: process %s is already a node in the graph.",
-            decision.process_id,
-        )
+    chosen = next((c for c in candidates if c["tool"] == decision.tool), None)
+    if chosen is None:
+        return {"decision_history": _log(state, "auto_build", decision.model_dump(), error=f"Unknown tool '{decision.tool}'; no node added.")}
+
+    if (chosen["process_id"], chosen["server_url"]) in _graph_processes(graph):
+        logger.info("Auto-build skipped: tool %s is already a node in the graph.", decision.tool)
         return {
             "decision_history": _log(
                 state, "auto_build", decision.model_dump(),
-                error=f"Process '{decision.process_id}' is already present in the graph; no node added.",
+                error=f"Tool '{decision.tool}' is already present in the graph; no node added.",
             ),
         }
-
-    chosen = next(
-        (c for c in candidates
-         if c.get("process_id") == decision.process_id and c.get("server_url") == decision.server_url),
-        {},
-    )
 
     try:
         new_graph = apply_build_op(graph, "add_node", {
-            "process_id": decision.process_id,
-            "server_url": decision.server_url,
+            "process_id": chosen["process_id"],
+            "server_url": chosen["server_url"],
             "inputs": decision.inputs,
             "input_ports": list((chosen.get("inputs") or {}).keys()),
             "output_ports": list((chosen.get("outputs") or {}).keys()),

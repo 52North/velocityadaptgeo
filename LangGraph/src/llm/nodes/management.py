@@ -35,8 +35,8 @@ satisfy the user's goal. You do this incrementally: pick ONE next action, observ
 the result, then plan again.
 
 Available actions (choose exactly one each turn):
-  - "search":   ask the retriever to query the OGC catalog for candidate
-                processes that advance the goal. Use when the graph is missing
+  - "search":   list the OGC process tools of the MCP server and pick the one
+                that advances the goal. Use when the graph is missing
                 a capability and you don't yet know which process provides it.
                 NOTE: a successful search automatically adds the best-matching
                 candidate to the workflow graph, wires it to the upstream node
@@ -121,7 +121,6 @@ Instruction format per action:
               Example: "Find an OGC process that buffers a polygon by a distance in meters."
 - "build":    instruction is an OBJECT with `op` and `args`:
                 {"op": "add_node",         "args": {"process_id": "...", "server_url": "...", "inputs": {}}}
-                {"op": "add_top_candidate", "args": {}}
                 {"op": "connect",          "args": {"source": "node_0", "source_output": "result",
                                                      "target": "node_1", "target_input": "geometry"}}
                 {"op": "remove_node",      "args": {"node_id": "node_2"}}
@@ -130,9 +129,6 @@ Instruction format per action:
                 {"op": "set_input",        "args": {"node_id": "node_1", "port": "distance", "value": 500}}
                 {"op": "swap_nodes",       "args": {"node_a": "node_1", "node_b": "node_2"}}
               Use process_id and server_url values from prior search results.
-              "add_top_candidate" needs no process_id/server_url - it deterministically
-              adds the #1 ranked result from the most recent search (RECENT CANDIDATE
-              PROCESSES below) as a new node.
 - "validate": instruction is a STRING — a short justification, e.g. "Verify wiring before finalizing."
 - "chat":     "step" may be null; the chat node answers from the conversation directly.
 - "done":     "step" may be null.
@@ -219,7 +215,7 @@ async def management_node(state: WorkflowState, llm) -> dict:
         }
 
     graph_blob = json.dumps(workflow_graph, indent=2)
-    candidates_blob = json.dumps(candidate_processes[:5], indent=2)
+    candidates_blob = json.dumps(candidate_processes, indent=2)
     validation_blob = json.dumps(last_validation, indent=2) if last_validation else "null"
     last_decisions = json.dumps(decision_history[-3:], indent=2)
 
@@ -231,7 +227,7 @@ async def management_node(state: WorkflowState, llm) -> dict:
             CURRENT WORKFLOW GRAPH:
             {graph_blob}
 
-            RECENT CANDIDATE PROCESSES (from last search, if any):
+            MCP PROCESS TOOLS (from last search, if any):
             {candidates_blob}
 
             LAST VALIDATION REPORT:

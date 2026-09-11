@@ -1,9 +1,13 @@
 from fastmcp import FastMCP
 
+import asyncio
+import logging
 import pkgutil
 import importlib
 import inspect
 from fastmcp import FastMCP
+
+from ogc_processes import register_ogc_tools
 
 mcp = FastMCP(name="geometry")
 
@@ -18,4 +22,6 @@ def register_all_tools(mcp_server: FastMCP, package_name: str):
 register_all_tools(mcp, "tools")
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
+    asyncio.run(register_ogc_tools(mcp))
     mcp.run(transport="http", host="0.0.0.0", port=8001)

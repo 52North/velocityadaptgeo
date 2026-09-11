@@ -24,7 +24,7 @@ What this system does and does not do:
 
 Rules:
 - Address the user's actual question, not the internal process. Do not just restate
-  raw tool/search output (process ids, similarity scores, JSON blobs).
+  raw tool/search output (process ids, tool names, JSON blobs).
 - Summarize what was found or built in plain language: which OGC process(es) will be
   used, what the resulting workflow graph does, and any caveats from validation.
 - Never ask the user to upload, attach, provide, or name files, datasets, layers,
@@ -83,7 +83,7 @@ FINAL WORKFLOW GRAPH:
 {json.dumps(workflow_graph, indent=2)}
 
 CANDIDATE PROCESSES CONSIDERED:
-{json.dumps(candidate_processes[:5], indent=2)}
+{json.dumps(candidate_processes, indent=2)}
 
 LAST VALIDATION REPORT:
 {json.dumps(last_validation, indent=2) if last_validation else "null"}
