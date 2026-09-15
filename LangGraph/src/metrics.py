@@ -133,20 +133,10 @@ class RunTracker(BaseCallbackHandler):
             f.write(json.dumps(record) + "\n")
 
 
-def _closest(searches: list[dict], key: str) -> str | None:
-    """Most alike candidate pair over all searches, as `ratio (name_a / name_b)`."""
-    if not searches:
-        return None
-    ratio, a, b = max((s[key] for s in searches), key=lambda pair: pair[0])
-    return f"{ratio} ({str(a).split('__')[-1]} / {str(b).split('__')[-1]})"
-
-
 def _row(runs: list[dict]) -> dict:
     """Average one group of turn records into report metrics: context cost first, then tool visibility, then outcome."""
     mean = lambda f, digits=None: round(sum(map(f, runs)) / len(runs), digits)
     searches = [s for r in runs for s in r["searches"]]
-    saved = lambda r: sum(((c.get("tool_def_tokens") or 0) - (c.get("tool_name_tokens") or 0))
-                          * PRICES_PER_MTOK.get(c.get("model"), (0, 0))[0] for c in r["calls"]) / 1e6
     return {
         "runs (failed)": f"{len(runs)} ({sum(bool(r['error']) for r in runs)})",
         "LLM calls": mean(lambda r: r["llm_calls"], 1),
@@ -157,14 +147,9 @@ def _row(runs: list[dict]) -> dict:
         "tool definition share of input": f"{sum(r['tool_def_tokens'] for r in runs) / max(sum(r['input_tokens'] for r in runs), 1):.0%}",
         "tool name tokens (defer loading)": mean(lambda r: r["tool_name_tokens"]),
         "cost USD": mean(lambda r: r["cost_usd"], 4),
-        "cost USD with names only": mean(lambda r: r["cost_usd"] - saved(r), 4),
         "max visible tools (one call)": max(r["max_visible_tools"] for r in runs),
         "tools per search": round(sum(s["visible_tools"] for s in searches) / len(searches), 1) if searches else None,
-        "servers per search": round(sum(s["servers"] for s in searches) / len(searches), 1) if searches else None,
-        "closest tool names": _closest(searches, "closest_names"),
-        "closest tool descriptions": _closest(searches, "closest_descriptions"),
         "wall time s": mean(lambda r: r["wall_ms"] / 1000, 1),
-        "graph nodes": mean(lambda r: r["graph_nodes"], 1),
         "unmet capabilities": mean(lambda r: r["unmet_capabilities"], 1),
     }
 
@@ -176,14 +161,32 @@ def _table(runs: list[dict]) -> str:
         groups.setdefault(r["variant"], []).append(r)
     rows = {variant: _row(group) for variant, group in groups.items()}
     cell = lambda v: f"{v:,}" if isinstance(v, (int, float)) else (v or "-")
-    lines = [f"| metric | {' | '.join(rows)} |", f"|---|{'---|' * len(rows)}"]
-    return "\n".join(lines + [f"| {k} | {' | '.join(cell(r[k]) for r in rows.values())} |" for k in next(iter(rows.values()))])
+    lines = [f"| metric | {' | '.join(rows)} | explanation |", f"|---|{'---|' * len(rows)}---|"]
+    return "\n".join(lines + [f"| {k} | {' | '.join(cell(r[k]) for r in rows.values())} | {FIELDS[k]} |" for k in next(iter(rows.values()))])
+
+
+FIELDS = {  # report metric -> explanation; values are averages per turn unless stated otherwise
+    "runs (failed)": "recorded turns; failed = turn ended with an error",
+    "LLM calls": "chat model calls in one turn",
+    "input tokens": "input tokens reported by the model, summed over all calls",
+    "peak input tokens (one call)": "largest input of a single call, i.e. the biggest context window",
+    "output tokens": "generated tokens, summed over all calls",
+    "tool definition tokens": "exact tokens of the candidate tool definitions as they appear in the prompts, summed over all calls",
+    "tool definition share of input": "tool definition tokens / input tokens, over all runs",
+    "tool name tokens (defer loading)": "tokens if the prompts carried only the names of the same tools",
+    "cost USD": "input and output tokens times the model's price per MTok",
+    "max visible tools (one call)": "most candidate tools in a single prompt, over all runs",
+    "tools per search": "candidates returned by one retriever step",
+    "wall time s": "duration of the whole turn",
+    "unmet capabilities": "capabilities no process was found for",
+}
 
 
 def report(path: str = METRICS_FILE) -> str:
-    """Write `report.md` next to the metrics file: variants compared over all turns, then per prompt. Returns its path."""
+    """Write `report.md` next to the metrics file: the latest turn of each variant, then all turns, then per prompt. Returns its path."""
     runs = [json.loads(line) for line in open(path, encoding="utf-8") if line.strip()]
-    parts = ["# Workflow variant comparison", "", "## All prompts", _table(runs)]
+    last = list({r["variant"]: r for r in runs}.values())  # most recent record of each variant
+    parts = ["# Workflow variant comparison", "", "## Last run per variant", _table(last), "", "## All prompts", _table(runs)]
     for prompt in dict.fromkeys(r["prompt"] for r in runs):
         title = prompt if len(prompt or "") <= 80 else prompt[:80] + "…"
         parts += ["", f"## {title}", _table([r for r in runs if r["prompt"] == prompt])]

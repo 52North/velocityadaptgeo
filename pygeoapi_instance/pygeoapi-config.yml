@@ -549,8 +549,3 @@ resources:
       withCore:
         schema:
           type: integer
-
-  cool_spots:
-    type: process
-    processor:
-      name: processes.cool_spots.CoolSpotsProcessor
