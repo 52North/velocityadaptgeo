@@ -1305,7 +1305,7 @@ new ResizeObserver(() => {
 renderGraph();
 
 /**
- * One button per canned prompt in `prompts-summar.md`, so a test run does not need the
+ * One button per canned prompt in `prompts.jsonl`, so a test run does not need the
  * prompt pasted in by hand. Clicking fills the input and submits the real form, so the
  * send path is exactly the one a typed message takes.
  */

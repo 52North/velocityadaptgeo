@@ -43,7 +43,7 @@ services:
     volumes:
       - ./metrics:/app/metrics
       # Mounted, not copied, so editing the test prompts does not need a rebuild.
-      - ./prompts-summar.md:/app/prompts-summar.md:ro
+      - ./prompts.jsonl:/app/prompts.jsonl:ro
     depends_on:
       mcp:
         condition: service_started

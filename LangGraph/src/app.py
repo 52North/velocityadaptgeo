@@ -28,7 +28,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 
 BASE_DIR = Path(__file__).resolve().parent
 FRONTEND_DIR = BASE_DIR / "frontend"
-PROMPTS_FILE = BASE_DIR.parent / "prompts-summar.md"
+PROMPTS_FILE = BASE_DIR.parent / "prompts.jsonl"
 
 app = FastAPI()
 
@@ -291,27 +291,14 @@ async def graph_op(req: GraphOpRequest):
 
 @app.get("/api/test-prompts")
 async def test_prompts():
-    """Canned prompts from `prompts-summar.md`, offered as one-click buttons in the UI.
+    """Canned prompts from `prompts.jsonl`, offered as one-click buttons in the UI.
 
-    Read per request rather than at import, so editing the markdown updates the buttons
-    on the next page load without a rebuild. A `Label:` line opens a section; the
-    non-empty lines under it are its prompt.
+    One `{"label": ..., "prompt": ...}` object per line. Read per request rather than at
+    import, so editing the file updates the buttons on the next page load without a rebuild.
     """
     if not PROMPTS_FILE.exists():
         return []
-
-    prompts, label, body = [], None, []
-    for line in PROMPTS_FILE.read_text(encoding="utf-8").splitlines():
-        text = line.strip()
-        if text.endswith(":") and len(text.split()) <= 6:
-            if label and body:
-                prompts.append({"label": label, "prompt": " ".join(body)})
-            label, body = text[:-1], []
-        elif text:
-            body.append(text)
-    if label and body:
-        prompts.append({"label": label, "prompt": " ".join(body)})
-    return prompts
+    return [json.loads(line) for line in PROMPTS_FILE.read_text(encoding="utf-8").splitlines() if line.strip()]
 
 
 @app.get("/")
