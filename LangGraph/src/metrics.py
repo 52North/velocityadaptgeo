@@ -17,8 +17,13 @@ import anthropic
 from langchain_core.callbacks import BaseCallbackHandler
 
 METRICS_FILE = os.getenv("METRICS_FILE", "metrics/runs.jsonl")
-VARIANT = os.getenv("WORKFLOW_VARIANT", "unknown")
-PRICES_PER_MTOK = {"claude-haiku-4-5-20251001": (1.0, 5.0)}  # USD (input, output)
+VARIANT = os.getenv("WORKFLOW_VARIANT", "pgvector")
+# "<model>=<input>,<output>;..." in USD per million tokens; models absent here report cost_usd=None.
+PRICES_PER_MTOK = {
+    m: (float(i), float(o))
+    for m, _, io in (e.partition("=") for e in os.getenv("MODEL_PRICES_PER_MTOK", "claude-haiku-4-5-20251001=1.0,5.0").split(";") if e.strip())
+    for i, _, o in [io.partition(",")]
+}
 
 
 def _name(candidate: dict) -> str:

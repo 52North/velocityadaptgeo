@@ -22,14 +22,15 @@ Part 3: Validation
 Questions:
 - Should MCP be used for geospatial tasks for an LLM?
   - Only valid
--
 
-Plan:
-- RAG instead of MCP
-  - Integrate the Json-Graph as elements in some database.
-- RAG: pgVector + JsonB
+Open: 
+- Datenquellen als Node-Type
+    - Open-Source-Endpunkte wie z.B. Satellite Data oder Ähnliches.
+    - Hypertegrity-Endpunkte
+    - S3-Kompatible-Endpunkte
+    - Problem: Was macht der Graph, wenn wir große Daten anstelle von 
 
-
+---
 
                        ┌─────────────────┐
                        │ tool_registry   │  loads OGC search tools (pgvector)

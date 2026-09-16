@@ -12,22 +12,20 @@ from langchain_core.tools import tool
 from langchain_ollama import OllamaEmbeddings
 from pgvector.psycopg import register_vector
 
-DB_DSN = os.environ.get(
-    "DB_DSN",
-    "postgresql://postgres:postgres@postgres-vector:5432/velocityadaptgeo",
+# Assembled from the parts docker-compose shares with the postgres service; an explicit
+# DB_DSN (host runs, external database) wins.
+DB_DSN = os.environ.get("DB_DSN") or "postgresql://{}:{}@{}:{}/{}".format(
+    os.environ.get("POSTGRES_USER", "postgres"),
+    os.environ.get("POSTGRES_PASSWORD", "postgres"),
+    os.environ.get("POSTGRES_HOST", "postgres-vector"),
+    os.environ.get("POSTGRES_PORT", "5432"),
+    os.environ.get("POSTGRES_DB", "velocityadaptgeo"),
 )
-OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
+OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://ollama:11434")
 OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "nomic-embed-text")
 HTTP_TIMEOUT = float(os.environ.get("HTTP_TIMEOUT", "30.0"))
 
 logger = logging.getLogger(__name__)
-
-
-def _resolve_ollama_base_url() -> str:
-    """Prefer the compose service name when running inside Docker."""
-    if OLLAMA_BASE_URL.startswith("http://localhost") and os.path.exists("/.dockerenv"):
-        return "http://ollama:11434"
-    return OLLAMA_BASE_URL
 
 
 def _get_embedding_dim(conn: psycopg.Connection) -> int | None:
@@ -61,9 +59,8 @@ def _get_embedding_dim(conn: psycopg.Connection) -> int | None:
 
 @lru_cache(maxsize=1)
 def _embedder() -> OllamaEmbeddings:
-    resolved_base_url = _resolve_ollama_base_url()
-    logger.info("Using Ollama embeddings at %s with model %s", resolved_base_url, OLLAMA_MODEL)
-    return OllamaEmbeddings(model=OLLAMA_MODEL, base_url=resolved_base_url)
+    logger.info("Using Ollama embeddings at %s with model %s", OLLAMA_BASE_URL, OLLAMA_MODEL)
+    return OllamaEmbeddings(model=OLLAMA_MODEL, base_url=OLLAMA_BASE_URL)
 
 @tool
 def search_ogc_processes(query: str, k: int = 5) -> list[dict]:
@@ -167,8 +164,5 @@ async def execute_ogc_process(
         return resp.json()
 
 async def load_ogc_tools() -> list:
-    """Return LangChain tools backed by the pgvector OGC catalog.
-
-    Drop-in replacement for the previous MCP-based `load_mcp_tools()`.
-    """
+    """Return LangChain tools backed by the pgvector OGC catalog."""
     return [search_ogc_processes, execute_ogc_process]

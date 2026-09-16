@@ -1,30 +1,41 @@
+# All configuration lives here. Only secrets are mounted at runtime, from LangGraph/.env.
+x-postgres: &postgres
+  POSTGRES_DB: velocityadaptgeo
+  POSTGRES_USER: postgres
+  POSTGRES_PASSWORD: postgres
+
+# Index-side and query-side embedding must be the same model.
+x-ollama: &ollama
+  OLLAMA_MODEL: nomic-embed-text
+
+# Local pygeoapi: the host-facing address that appears in generated URLs, and the
+# in-network address every container actually calls.
+x-pygeoapi: &pygeoapi
+  LOCAL_PYGEOAPI_HOST: localhost:5000
+  LOCAL_PYGEOAPI_INTERNAL: pygeoapi:80
+
 services:
   pygeoapi:
     build: ./pygeoapi_instance
-#    image: geopython/pygeoapi:latest
     container_name: pygeoapi
     volumes:
       - ./pygeoapi_instance/pygeoapi-config.yml:/pygeoapi/local.config.yml
       - ./pygeoapi_instance/processes:/pygeoapi/processes
     environment:
-      - PYGEOAPI_CONFIG=/pygeoapi/local.config.yml
-      - PYTHONPATH=/pygeoapi
+      PYGEOAPI_CONFIG: /pygeoapi/local.config.yml
+      PYTHONPATH: /pygeoapi
+      NOMINATIM_URL: https://nominatim.openstreetmap.org/search
+      OVERPASS_ENDPOINTS: https://overpass.kumi.systems/api/interpreter,https://overpass-api.de/api/interpreter,https://overpass.private.coffee/api/interpreter
+      OSM_USER_AGENT: north52-coolspots/1.0
+      HTTP_TIMEOUT: "30"
+      OVERPASS_TIMEOUT: "180"
+      OVERPASS_ATTEMPTS: "3"
+      OVERPASS_BACKOFF: "2"
+      OVERPASS_DEADLINE: "240"
     ports:
       - "5000:80"
 
-  mcp:
-    build:
-      context: mcp
-      dockerfile: Dockerfile
-    #profiles: [ "mcp" ]
-    environment:
-      - PYGEOAPI_URL=${PYGEOAPI_URL:-http://pygeoapi:80}
-      - NOMINATIM_BASE_URL=${NOMINATIM_BASE_URL:-http://nominatim:8080}
-    ports:
-      - "8001:8001"
-
   langgraph:
-    #profiles: [ "langgraph" ]
     build:
       context: ./LangGraph
       dockerfile: Dockerfile
@@ -32,21 +43,24 @@ services:
       - "8000:8000"
     dns:
       - 8.8.8.8
-    environment:
-      - DB_DSN=${DB_DSN:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@${POSTGRES_HOST:-postgres-vector}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-velocityadaptgeo}}
-      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://ollama:11434}
-      - OLLAMA_MODEL=${OLLAMA_MODEL:-nomic-embed-text}
-      - MAX_WORKFLOW_ITERATIONS=${MAX_WORKFLOW_ITERATIONS:-16}
-      - WORKFLOW_VARIANT=${WORKFLOW_VARIANT:-pgvector}
     env_file:
-      - ./LangGraph/.env
+      - path: ./LangGraph/.env
+        required: false
+    environment:
+      <<: [*postgres, *ollama, *pygeoapi]
+      ANTHROPIC_MODEL: claude-haiku-4-5-20251001
+      ANTHROPIC_TEMPERATURE: "0"
+      ANTHROPIC_MAX_RETRIES: "3"
+      MODEL_PRICES_PER_MTOK: claude-haiku-4-5-20251001=1.0,5.0
+      MAX_WORKFLOW_ITERATIONS: "16"
+      MAX_MAP_FEATURES: "3000"
+      HTTP_TIMEOUT: "30"
+      WORKFLOW_VARIANT: pgvector
+      METRICS_FILE: metrics/runs.jsonl
     volumes:
       - ./metrics:/app/metrics
-      # Mounted, not copied, so editing the test prompts does not need a rebuild.
       - ./prompts.jsonl:/app/prompts.jsonl:ro
     depends_on:
-      mcp:
-        condition: service_started
       postgres-vector:
         condition: service_healthy
       ollama:
@@ -59,7 +73,7 @@ services:
     image: ollama/ollama:latest
     container_name: ollama
     environment:
-      - OLLAMA_HOST=${OLLAMA_HOST:-0.0.0.0:11434}
+      OLLAMA_HOST: 0.0.0.0:11434
     ports:
       - "11434:11434"
     volumes:
@@ -74,8 +88,7 @@ services:
   ollama-pull:
     image: ollama/ollama:latest
     environment:
-      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://ollama:11434}
-      - OLLAMA_MODEL=${OLLAMA_MODEL:-nomic-embed-text}
+      <<: *ollama
     volumes:
       - ./scripts/pull-ollama-model.sh:/pull-ollama-model.sh:ro
     depends_on:
@@ -88,9 +101,8 @@ services:
     image: pgvector/pgvector:pg16-trixie
     container_name: postgres-vector
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-velocityadaptgeo}
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      <<: *postgres
+      EMBED_DIM: "768"
     ports:
       - "5432:5432"
     volumes:
@@ -102,17 +114,15 @@ services:
       timeout: 5s
       retries: 5
 
-  # One-shot crawler: fills ogc_processes with embedded process metadata, then exits.
-  # Same image is the manual re-crawl: docker compose run --rm ogc-database
   ogc-database:
     build:
       context: ./ogc_database
       dockerfile: Dockerfile
     environment:
-      - DB_DSN=${DB_DSN:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@${POSTGRES_HOST:-postgres-vector}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-velocityadaptgeo}}
-      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://ollama:11434}
-      - OLLAMA_MODEL=${OLLAMA_MODEL:-nomic-embed-text}
-      - LOCAL_PYGEOAPI_URL=${LOCAL_PYGEOAPI_URL:-http://pygeoapi:80/}
+      <<: [*postgres, *ollama, *pygeoapi]
+      OGC_SERVERS: https://demo.pygeoapi.io/master/,https://maps.ecere.com/ogcapi/
+      HTTP_TIMEOUT: "30"
+      CONCURRENT_REQUESTS: "5"
     dns:
       - 8.8.8.8
     depends_on:

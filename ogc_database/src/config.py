@@ -2,28 +2,38 @@
 
 import os
 
-# OGC API servers to crawl
+# Comma-separated OGC API servers to crawl. The local pygeoapi instance is appended,
+# addressed via LOCAL_PYGEOAPI_INTERNAL so it can move without touching this list.
+LOCAL_PYGEOAPI_URL = os.environ.get("LOCAL_PYGEOAPI_URL") or "http://{}/".format(
+    os.environ.get("LOCAL_PYGEOAPI_INTERNAL", "pygeoapi:80")
+)
 OGC_SERVERS = [
-    "https://demo.pygeoapi.io/master/",
-    "https://maps.ecere.com/ogcapi/",
-    # Local pygeoapi instance (see ./pygeoapi_instance), exposed via docker-compose
-    # on host port 5000 (pygeoapi:80 -> localhost:5000).
-    os.environ.get("LOCAL_PYGEOAPI_URL", "http://localhost:5000/"),
+    url.strip()
+    for url in os.environ.get(
+        "OGC_SERVERS",
+        "https://demo.pygeoapi.io/master/,https://maps.ecere.com/ogcapi/",
+    ).split(",")
+    + [LOCAL_PYGEOAPI_URL]
+    if url.strip()
 ]
 
-DB_DSN = os.environ.get(
-    "DB_DSN",
-    "postgresql://postgres:postgres@localhost:5432/velocityadaptgeo",
+# Assembled from the parts docker-compose shares with the postgres service; an explicit
+# DB_DSN (host runs, external database) wins.
+DB_DSN = os.environ.get("DB_DSN") or "postgresql://{}:{}@{}:{}/{}".format(
+    os.environ.get("POSTGRES_USER", "postgres"),
+    os.environ.get("POSTGRES_PASSWORD", "postgres"),
+    os.environ.get("POSTGRES_HOST", "postgres-vector"),
+    os.environ.get("POSTGRES_PORT", "5432"),
+    os.environ.get("POSTGRES_DB", "velocityadaptgeo"),
 )
 
 # Embedding model configuration
-OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
+OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://ollama:11434")
 OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "nomic-embed-text")
-EMBED_DIM = int(os.environ.get("EMBED_DIM", "768"))
 
 # HTTP client configuration
-HTTP_TIMEOUT = 30.0
-CONCURRENT_REQUESTS = 5
+HTTP_TIMEOUT = float(os.environ.get("HTTP_TIMEOUT", "30.0"))
+CONCURRENT_REQUESTS = int(os.environ.get("CONCURRENT_REQUESTS", "5"))
 
 # Database upsert SQL statement
 UPSERT_SQL = """

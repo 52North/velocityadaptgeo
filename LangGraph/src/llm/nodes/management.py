@@ -4,7 +4,6 @@ import os
 import re
 
 from dotenv import load_dotenv
-from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from src.llm.state.state import WorkflowState
@@ -13,18 +12,9 @@ logger = logging.getLogger(__name__)
 
 load_dotenv(override=True)
 
-llm = ChatAnthropic(
-    model="claude-haiku-4-5-20251001",
-    temperature=0,
-    api_key=os.environ.get("ANTHROPIC_API_KEY"),
-    streaming=True,
-    max_retries=3,
-)
-
-
 ALLOWED_ACTIONS = ("search", "build", "validate", "chat", "done")
 
-MAX_WORKFLOW_ITERATIONS = int(os.environ.get("MAX_WORKFLOW_ITERATIONS", "12"))
+MAX_WORKFLOW_ITERATIONS = int(os.environ.get("MAX_WORKFLOW_ITERATIONS", "16"))
 
 
 MANAGER_SYSTEM = """You are a workflow manager for a geospatial assistant.

@@ -31,11 +31,11 @@ WORKFLOW_RECURSION_LIMIT = int(os.environ.get(
 DEFAULT_WORKFLOW_CONFIG = {"recursion_limit": WORKFLOW_RECURSION_LIMIT}
 
 llm = ChatAnthropic(
-    model="claude-haiku-4-5-20251001",
-    temperature=0,
+    model=os.environ.get("ANTHROPIC_MODEL", "claude-haiku-4-5-20251001"),
+    temperature=float(os.environ.get("ANTHROPIC_TEMPERATURE", "0")),
     api_key=os.environ.get("ANTHROPIC_API_KEY"),
     streaming=True,
-    max_retries=3,
+    max_retries=int(os.environ.get("ANTHROPIC_MAX_RETRIES", "3")),
 )
 
 graph = StateGraph(WorkflowState)

@@ -1,3 +1,8 @@
+#!/bin/sh
+# Runs once on first database start. A .sh (not .sql) so EMBED_DIM reaches the schema:
+# the vector column's dimension must match whatever OLLAMA_MODEL produces.
+set -e
+psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" <<SQL
 CREATE EXTENSION IF NOT EXISTS vector;
 
 CREATE TABLE IF NOT EXISTS ogc_processes (
@@ -8,7 +13,7 @@ CREATE TABLE IF NOT EXISTS ogc_processes (
     title           TEXT,
     description     TEXT,
     metadata        JSONB NOT NULL,
-    embedding       VECTOR(768),
+    embedding       VECTOR(${EMBED_DIM:-768}),
     fetched_at      TIMESTAMPTZ DEFAULT now(),
     UNIQUE (server_url, process_id)
 );
@@ -18,3 +23,4 @@ CREATE INDEX IF NOT EXISTS ogc_processes_embedding_idx
 
 CREATE INDEX IF NOT EXISTS ogc_processes_metadata_idx
     ON ogc_processes USING gin (metadata);
+SQL
