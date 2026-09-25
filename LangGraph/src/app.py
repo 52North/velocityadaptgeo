@@ -23,6 +23,7 @@ from src.execution.runner import (
 )
 from src.helper.helper import pretty_print_messages
 from src.metrics import RunTracker
+from src.prov_tracker import ProvTracker, NODE_READS, PROV_ROOT_URL, PROV_PROCESS_ID, PROV_DIR
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 
@@ -74,6 +75,16 @@ def turn_input(prompt: str) -> dict:
     }
 
 
+def _save_prov(tracker: ProvTracker) -> None:
+    """Persist the PROV document for one job. Never raises - a provenance failure must
+    never break or obscure the actual workflow response."""
+    try:
+        os.makedirs(PROV_DIR, exist_ok=True)
+        tracker.document.serialize(os.path.join(PROV_DIR, f"{tracker.job_id}.json"), indent=2)
+    except Exception:
+        logging.getLogger(__name__).exception("Failed to serialize PROV document for job %s", tracker.job_id)
+
+
 def turn_config(thread_id: str) -> dict:
     """Build the run config for one user turn.
 
@@ -94,10 +105,25 @@ async def chat(req: ChatRequest):
     """
     thread_id = req.thread_id or str(uuid4())
 
-    result = await compiled_graph.ainvoke(turn_input(req.prompt), config={**turn_config(thread_id), "callbacks": [RunTracker(thread_id)]})
+    tracker = ProvTracker(compiled_graph, root_url=PROV_ROOT_URL, process_id=PROV_PROCESS_ID,
+                          job_id=str(uuid4()), output_keys=["workflow_graph"], node_reads=NODE_READS)
+    try:
+        result = await compiled_graph.ainvoke(
+            turn_input(req.prompt),
+            config={**turn_config(thread_id), "callbacks": [RunTracker(thread_id), tracker]},
+        )
+    except Exception:
+        _save_prov(tracker)
+        raise
 
     # Last message is the assistant reply
     assistant_message = result["messages"][-1].content
+
+    try:
+        tracker.add_result("final_reply", assistant_message)
+    except Exception:
+        logging.getLogger(__name__).exception("prov add_result failed for job %s", tracker.job_id)
+    _save_prov(tracker)
 
     pretty_print_messages(result["messages"])
 
@@ -105,6 +131,9 @@ async def chat(req: ChatRequest):
 
 @app.get("/api/stream")
 async def stream(prompt: str, thread_id: str):
+    tracker = ProvTracker(compiled_graph, root_url=PROV_ROOT_URL, process_id=PROV_PROCESS_ID,
+                          job_id=str(uuid4()), output_keys=["workflow_graph"], node_reads=NODE_READS)
+
     async def gen():
         """Forward LangGraph message chunks and graph updates as server-sent events.
 
@@ -112,52 +141,61 @@ async def stream(prompt: str, thread_id: str):
         chat tokens, "updates" carries node state so the workflow graph can be drawn
         while it is being built. Every event names its kind in `event`.
         """
-        async for path, mode, chunk in compiled_graph.astream(
-            turn_input(prompt),
-            config={**turn_config(thread_id), "callbacks": [RunTracker(thread_id)]},
-            stream_mode=["messages", "updates"],
-            subgraphs=True
-        ):
-            if mode == "updates":
-                for node_name, update in (chunk or {}).items():
-                    if not isinstance(update, dict):
-                        continue
-                    graph_payload = {
-                        key: update[key]
-                        for key in ("workflow_graph", "last_validation", "unmet_capabilities")
-                        if update.get(key) is not None
-                    }
-                    if graph_payload:
-                        graph_payload.update({"event": "graph", "node": node_name})
-                        yield f"data: {json.dumps(graph_payload)}\n\n"
-                continue
+        try:
+            async for path, mode, chunk in compiled_graph.astream(
+                turn_input(prompt),
+                config={**turn_config(thread_id), "callbacks": [RunTracker(thread_id), tracker]},
+                stream_mode=["messages", "updates"],
+                subgraphs=True
+            ):
+                if mode == "updates":
+                    for node_name, update in (chunk or {}).items():
+                        if not isinstance(update, dict):
+                            continue
+                        graph_payload = {
+                            key: update[key]
+                            for key in ("workflow_graph", "last_validation", "unmet_capabilities")
+                            if update.get(key) is not None
+                        }
+                        if graph_payload:
+                            graph_payload.update({"event": "graph", "node": node_name})
+                            yield f"data: {json.dumps(graph_payload)}\n\n"
+                    continue
 
-            message_chunk, metadata = chunk
-            content = message_chunk.content
+                message_chunk, metadata = chunk
+                content = message_chunk.content
 
-            payload = {
-                "event": "message",
-                "path": path,
-                "metadata": metadata,
-                "type": message_chunk.type,
-                "id": message_chunk.id,
-            }
+                payload = {
+                    "event": "message",
+                    "path": path,
+                    "metadata": metadata,
+                    "type": message_chunk.type,
+                    "id": message_chunk.id,
+                }
 
-            # Stream artifact if present to render geometry on frontend map
-            if getattr(message_chunk, "artifact", None):
-                payload["artifact"] = message_chunk.artifact
-                logging.getLogger(__name__).info("Streaming artifact: %s", message_chunk.artifact)
+                # Stream artifact if present to render geometry on frontend map
+                if getattr(message_chunk, "artifact", None):
+                    payload["artifact"] = message_chunk.artifact
+                    logging.getLogger(__name__).info("Streaming artifact: %s", message_chunk.artifact)
 
-            # Normal textual streaming
-            if isinstance(content, str):
-                payload["content"] = content
-                yield f"data: {json.dumps(payload)}\n\n"
+                # Normal textual streaming
+                if isinstance(content, str):
+                    payload["content"] = content
+                    yield f"data: {json.dumps(payload)}\n\n"
 
-            elif isinstance(content, list):
-                for block in content:
-                    if block.get("type") == "text":
-                        payload["content"] = block["text"]
-                        yield f"data: {json.dumps(payload)}\n\n"
+                elif isinstance(content, list):
+                    for block in content:
+                        if block.get("type") == "text":
+                            payload["content"] = block["text"]
+                            yield f"data: {json.dumps(payload)}\n\n"
+        finally:
+            try:
+                final_messages = compiled_graph.get_state(turn_config(thread_id)).values.get("messages") or []
+                if final_messages:
+                    tracker.add_result("final_reply", final_messages[-1].content)
+            except Exception:
+                logging.getLogger(__name__).exception("prov add_result (stream) failed for job %s", tracker.job_id)
+            _save_prov(tracker)
 
     return StreamingResponse(gen(), media_type="text/event-stream")
 

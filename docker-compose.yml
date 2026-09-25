@@ -57,8 +57,14 @@ services:
       HTTP_TIMEOUT: "30"
       WORKFLOW_VARIANT: pgvector
       METRICS_FILE: metrics/runs.jsonl
+      PROV_ROOT_URL: http://localhost:8000
+      PROV_PROCESS_ID: geo-agent-workflow
+      PROV_NAMESPACE: https://velocityadaptgeo.local/prov#
+      PROV_DIR: prov
+      PROV_GRANULARITY: low
     volumes:
       - ./metrics:/app/metrics
+      - ./prov:/app/prov
       - ./prompts.jsonl:/app/prompts.jsonl:ro
     depends_on:
       postgres-vector:

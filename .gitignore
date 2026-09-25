@@ -18,3 +18,7 @@ wheels/
 .claude
 # workflow metrics, shared across branches
 metrics/runs.jsonl
+# per-job PROV documents (runtime output, one file per turn)
+**/prov/*.json
+**/prov/*.ttl
+**/prov/*.provn
