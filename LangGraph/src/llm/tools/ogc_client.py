@@ -144,3 +144,37 @@ def list_ogc_processes() -> list[dict]:
     with psycopg.connect(DB_DSN) as conn:
         rows = conn.execute(sql).fetchall()
     return [_candidate(r) for r in rows]
+
+
+def fetch_port_specs(processes) -> dict[tuple[str, str], dict]:
+    """Look up the declared input/output descriptions of catalogued processes.
+
+    `processes` is an iterable of (process_id, server_url) pairs, as a graph node stores
+    them in `type` and `config.server_url`. Returns {(process_id, server_url): {"inputs":
+    {...}, "outputs": {...}}} for every pair the catalog knows. An unreachable catalog
+    yields {} rather than an error: callers treat missing descriptions as "unknown type",
+    which validation lets through.
+    """
+    wanted = sorted({(p, s) for p, s in processes if p and s})
+    if not wanted:
+        return {}
+
+    sql = """
+        SELECT process_id, server_url, metadata
+        FROM ogc_processes
+        WHERE (process_id, server_url) IN (SELECT * FROM unnest(%s::text[], %s::text[]));
+    """
+    try:
+        with psycopg.connect(DB_DSN) as conn:
+            rows = conn.execute(sql, ([p for p, _ in wanted], [s for _, s in wanted])).fetchall()
+    except psycopg.Error as exc:
+        logger.warning("Port lookup failed, skipping type checks: %s", exc)
+        return {}
+
+    return {
+        (r[0], r[1]): {
+            "inputs": (r[2] or {}).get("inputs", {}),
+            "outputs": (r[2] or {}).get("outputs", {}),
+        }
+        for r in rows
+    }
