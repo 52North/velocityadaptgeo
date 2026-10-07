@@ -167,12 +167,12 @@ class ProvTracker(BaseCallbackHandler):
         graph_hash = _digest(graph_json)
 
         # Generalisierter Prozess (= Workflow-Definition), mit Versions-Fingerprint.
-        # Der Hash beantwortet "welche Definition hat diesen Lauf erzeugt?" (vgl. Issue #632).
         self.process = d.entity(f"proc:{self.process_id}", {
             PROV_TYPE: self.wfdesc["Workflow"],
             PROV_LOCATION: f"{self.root}/processes/{self.process_id}",
             "ex:graphHash": graph_hash,
             **({"ex:gitCommit": c} if (c := _git_commit()) else {}),
+        # Der Hash beantwortet "welche Definition hat diesen Lauf erzeugt?" (vgl. https://github.com/opengeospatial/ogcapi-processes/issues/632).
         })
         self.node_desc = {}
         if self.granularity == "high":
