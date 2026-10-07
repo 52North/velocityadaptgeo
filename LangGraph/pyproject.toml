@@ -7,6 +7,7 @@ requires-python = ">=3.12"
 dependencies = [
     "dotenv>=0.9.9",
     "fastapi>=0.120.4",
+    "jsonschema>=4.26.0",
     "langchain>=1.0.3",
     "langchain-anthropic>=1.4.2",
     "langchain-community>=0.4.1",
@@ -16,11 +17,11 @@ dependencies = [
     "langgraph>=1.0.2",
     "pandas>=2.3.3",
     "pgvector>=0.4.2",
-    "prov>=3.2.2",
     "psycopg[binary]>=3.3.4",
     "pytest>=8.4.2",
     "python-dotenv>=1.2.1",
     "python-multipart>=0.0.21",
+    "pyyaml>=6.0.3",
     "rdflib>=7.6.0",
     "uvicorn[standard]>=0.38.0",
 ]

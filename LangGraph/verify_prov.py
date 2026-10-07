@@ -1,10 +1,13 @@
 """One-off: run the real agent loop with the retriever's catalog search stubbed, then verify
-the resulting PROV document. Does NOT need the docker-compose stack running - only
-ANTHROPIC_API_KEY, set in LangGraph/.env, as a precondition.
+the resulting PROV document against the 52N provenance profile schema (validate_prov.py)
+and the OGC Part 5 requirements (check_ogc.py). Does NOT need the docker-compose stack
+running - only ANTHROPIC_API_KEY, set in LangGraph/.env, and internet access (schemas and
+JSON-LD context are fetched online) as preconditions.
 
     cd LangGraph && uv run python verify_prov.py
 """
 import asyncio
+import json
 import os
 import subprocess
 import sys
@@ -15,6 +18,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from langchain_core.messages import HumanMessage
+from rdflib import Graph
 
 import src.llm.nodes.retriever as retriever_module
 from src.llm.workflow import compiled_graph, DEFAULT_WORKFLOW_CONFIG, MAX_WORKFLOW_ITERATIONS
@@ -70,14 +74,16 @@ async def main() -> int:
 
     os.makedirs("prov", exist_ok=True)
     tracker.document.serialize("prov/job_prov.json", indent=2)
-    tracker.document.serialize("prov/job_prov.ttl", format="rdf", rdf_format="turtle")
-    with open("prov/job_prov.provn", "w") as f:
-        f.write(tracker.document.get_provn())
-    print("Wrote prov/job_prov.{json,ttl,provn}")
+    # Turtle nur als abgeleitete Sicht (JSON-LD mit dem PROV-Kontext) für check_ogc.py
+    Graph().parse(data=json.dumps(tracker.document.to_jsonld()), format="json-ld") \
+        .serialize("prov/job_prov.ttl", format="turtle")
+    print("Wrote prov/job_prov.{json,ttl}")
 
-    rc = subprocess.call([sys.executable, "check_ogc.py", "prov/job_prov.ttl"])
-    print("check_ogc.py exit code:", rc)
-    return rc
+    rc_schema = subprocess.call([sys.executable, "validate_prov.py", "prov/job_prov.json"])
+    print("validate_prov.py exit code:", rc_schema)
+    rc_ogc = subprocess.call([sys.executable, "check_ogc.py", "prov/job_prov.ttl"])
+    print("check_ogc.py exit code:", rc_ogc)
+    return rc_schema or rc_ogc
 
 
 if __name__ == "__main__":
