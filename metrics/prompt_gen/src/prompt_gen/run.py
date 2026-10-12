@@ -5,6 +5,7 @@ scored, and resuming a run re-reads that file. accepted.jsonl is rebuilt from it
 """
 
 import json
+import shutil
 import subprocess
 import time
 from dataclasses import asdict
@@ -92,8 +93,10 @@ class Run:
             "examples_yaml": EXAMPLES_PATH.read_text(encoding="utf-8"),
         }
         path.write_text(json.dumps(snapshot, indent=2, ensure_ascii=False), encoding="utf-8")
+        # The code may not be committed yet, so keep an exact copy of what produced this run.
+        shutil.copytree(PACKAGE_ROOT / "src" / "prompt_gen", self.dir / "code", ignore=shutil.ignore_patterns("__pycache__"))
 
-    def execute(self, categories: list[str], n: int) -> None:
+    def execute(self, categories: list[str], n: int, hours: float | None = None) -> None:
         self.dir.mkdir(parents=True, exist_ok=True)
         self._write_config(categories, n)
         history = read_jsonl(self.candidates_path)
@@ -101,13 +104,19 @@ class Run:
             print(f"Resuming {self.run_id}: {len(history)} candidates already scored")
 
         print("Loading models...", flush=True)
-        generator = Generator(self.cfg.generator, self.cfg.ollama_host, self.cfg.thresholds.accept_relative)
-        judge = Judge(self.cfg.judge, self.cfg.ollama_host)
+        generator = Generator(self.cfg.generator, self.cfg.ollama_host, self.cfg.thresholds.accept_relative, self.cfg.num_ctx)
+        judge = Judge(self.cfg.judge, self.cfg.ollama_host, self.cfg.num_ctx)
         scorer = Scorer(self.cfg.embeddings)
 
         loop = self.cfg.loop
         durations = [c["duration_s"] for c in history if "duration_s" in c]
+        deadline = time.monotonic() + hours * 3600 if hours else None
         for cat_index, key in enumerate(categories):
+            # Equal share of the remaining time; time a category doesn't use rolls over to the next.
+            # Categories run one after another so Ollama can reuse the cached prompt prefix.
+            budget_end = (
+                time.monotonic() + (deadline - time.monotonic()) / (len(categories) - cat_index) if deadline else None
+            )
             category = typology.get(key)
             mine = [c for c in history if c["category"] == key]
             accepted = [c["prompt"] for c in mine if c["accepted"]]
@@ -119,7 +128,12 @@ class Run:
                 consecutive += 1
             max_attempts = loop.max_attempts_factor * n
 
-            while len(accepted) < n and attempts < max_attempts and consecutive < loop.max_consecutive_rejects:
+            while (
+                len(accepted) < n
+                and attempts < max_attempts
+                and consecutive < loop.max_consecutive_rejects
+                and (budget_end is None or time.monotonic() < budget_end)
+            ):
                 attempts += 1
                 started = time.monotonic()
                 record = {"seed_id": self.seed.id, "category": key, "attempt": attempts}
@@ -158,7 +172,12 @@ class Run:
                 self._progress(key, accepted, n, attempts, record, durations, categories, cat_index)
 
             if len(accepted) < n:
-                why = "max attempts" if attempts >= max_attempts else f"{consecutive} rejects in a row"
+                if budget_end is not None and time.monotonic() >= budget_end:
+                    why = "time budget"
+                elif attempts >= max_attempts:
+                    why = "max attempts"
+                else:
+                    why = f"{consecutive} rejects in a row"
                 print(f"  ! {key}: stopped at {len(accepted)}/{n} accepted ({why})")
 
         self.write_accepted()

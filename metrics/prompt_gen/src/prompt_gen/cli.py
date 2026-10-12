@@ -20,7 +20,7 @@ def cmd_run(args) -> None:
     seed = seeds.load(args.seed)
     run = Run(cfg, seed, args.resume)
     print(f"Run {run.run_id} -> {run.dir}")
-    run.execute(categories, args.n or cfg.loop.n_per_category)
+    run.execute(categories, args.n or cfg.loop.n_per_category, args.hours)
 
 
 def cmd_check_judge(args) -> None:
@@ -29,7 +29,7 @@ def cmd_check_judge(args) -> None:
 
     cfg = config.load()
     seed = seeds.load(args.seed)
-    judge = Judge(cfg.judge, cfg.ollama_host)
+    judge = Judge(cfg.judge, cfg.ollama_host, cfg.num_ctx)
     correct = 0
     for t in seed.trap_set:
         r = judge.check(seed, typology.get("lexical"), t.text)
@@ -59,6 +59,7 @@ def main() -> None:
     p.add_argument("--categories", nargs="+", help="category keys (default: all six)")
     p.add_argument("--n", type=int, help="accepted prompts per category (default: config)")
     p.add_argument("--resume", metavar="RUN_ID", help="continue an interrupted run")
+    p.add_argument("--hours", type=float, help="time budget; each category gets an equal share of the remaining time")
     p.set_defaults(func=cmd_run)
 
     p = sub.add_parser("check-judge", help="run the judge on the seed's trap set")

@@ -40,6 +40,7 @@ class Thresholds(BaseModel):
 
 class Config(BaseModel):
     ollama_host: str
+    num_ctx: int
     generator: GeneratorConfig
     judge: JudgeConfig
     embeddings: EmbeddingConfig

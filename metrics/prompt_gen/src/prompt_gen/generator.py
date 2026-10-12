@@ -99,9 +99,10 @@ def user_prompt(seed: Seed, previous: list[str]) -> str:
 
 
 class Generator:
-    def __init__(self, config: GeneratorConfig, host: str, accept_relative: bool):
+    def __init__(self, config: GeneratorConfig, host: str, accept_relative: bool, num_ctx: int):
         self.config = config
         self.accept_relative = accept_relative
+        self.num_ctx = num_ctx
         self.client = ollama.Client(host=host)
 
     def generate(
@@ -119,7 +120,7 @@ class Generator:
                 messages=messages,
                 think=self.config.think,
                 format=GeneratorOutput.model_json_schema(),
-                options={"temperature": self.config.temperature, "seed": sampling_seed + attempt - 1},
+                options={"temperature": self.config.temperature, "seed": sampling_seed + attempt - 1, "num_ctx": self.num_ctx},
             )
             try:
                 output = GeneratorOutput.model_validate_json(response.message.content)

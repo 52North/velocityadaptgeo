@@ -85,8 +85,9 @@ a rewrite that mostly relies on other categories does not match."""
 
 
 class Judge:
-    def __init__(self, config: JudgeConfig, host: str):
+    def __init__(self, config: JudgeConfig, host: str, num_ctx: int):
         self.config = config
+        self.num_ctx = num_ctx
         self.client = ollama.Client(host=host)
 
     def check(self, seed: Seed, category: typology.Category, candidate: str) -> Judgement:
@@ -98,7 +99,7 @@ class Judge:
             ],
             think=self.config.think,
             format=Judgement.model_json_schema(),
-            options={"temperature": self.config.temperature, "seed": 0},
+            options={"temperature": self.config.temperature, "seed": 0, "num_ctx": self.num_ctx},
         )
         judgement = Judgement.model_validate_json(response.message.content)
         expected = [c.id for c in seed.constraints]

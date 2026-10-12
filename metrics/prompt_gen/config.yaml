@@ -1,4 +1,8 @@
 ollama_host: http://localhost:11434
+# Context window for generator and judge (same value for both, or Ollama reloads the model on every switch).
+# The generator prompt grows with each accepted paraphrase (~3,000 tokens at 29); Ollama's default window
+# is smaller and silently truncates the start of the prompt, where the instructions are.
+num_ctx: 8192
 
 generator:
   model: qwen3:8b
@@ -21,7 +25,7 @@ embeddings:
 loop:
   n_per_category: 10
   max_attempts_factor: 3    # max attempts = factor * n
-  max_consecutive_rejects: 5
+  max_consecutive_rejects: 8
 
 # Stage 1: loose gates. Per-category thresholds come from manual review (see .docs/plan.md, step 5).
 thresholds:
