@@ -1,0 +1,136 @@
+# Few-shot examples for the paraphrase generator.
+#
+# spans: curated single-type edits from ETPC (textual_paraphrases.xml, etpc_label=1, sense-preserving).
+#   `pair` is the ETPC pair_id, for tracing back. Spans without `pair` are hand-written, for types
+#   ETPC has no usable example of. Picked by hand: many raw ETPC spans are noisy or mislabelled.
+# demo: a hand-written full-sentence paraphrase per category. It uses a different geospatial request
+#   than any seed on purpose, so the generator learns the operation without copying seed wording.
+
+demo_source: Find all schools in Bonn that are within 500 metres of a bus stop and show them on a map.
+
+categories:
+  morphological:
+    demo:
+      paraphrase: You should find all schools in Bonn that are within 500 metres of bus stops and show them on a map.
+      operations: [Modal verb changes (find -> you should find), Inflectional changes (a bus stop -> bus stops)]
+    spans:
+      1:
+        - {pair: 758, from: "were not forcing", to: "did not force"}
+        - {pair: 5171, from: "was allowed", to: "has been allowed"}
+        - {pair: 1098, from: "attacks", to: "attack"}
+      2:
+        - {pair: 40, from: "intend to seek", to: "will seek"}
+        - {pair: 2436, from: "should implement", to: "can implement"}
+        - {pair: 4349, from: "will", to: "is likely to"}
+      3:
+        - {pair: 4340, from: "investigate", to: "investigation"}
+        - {pair: 5552, from: "absent", to: "absence"}
+        - {pair: 2629, from: "violations", to: "violating"}
+
+  lexical:
+    demo:
+      paraphrase: Locate every school in Bonn that lies within 0.5 km of a bus stop and display them on a map.
+      operations: [Same polarity substitution (habitual) (find -> locate, show -> display), Change of format (500 metres -> 0.5 km)]
+    spans:
+      4:
+        - {pair: 3852, from: "per cent", to: "percent"}
+        - {pair: 2864, from: "director general", to: "director-general"}
+        - {pair: 5346, from: "didn't", to: "did not"}
+      5:
+        - {pair: 4237, from: "handing over", to: "turn over"}
+        - {pair: 5300, from: "finished", to: "ended"}
+        - {pair: 118, from: "although", to: "while"}
+      6:
+        - {pair: 3074, from: "planes", to: "aircraft"}
+        - {pair: 4551, from: "In court", to: "during the hearing"}
+        - {pair: 4336, from: "a parishioner", to: "one of its members"}
+      7:
+        - {pair: 4836, from: "Texas Department of Public Safety", to: "Texas law enforcement officials"}
+        - {pair: 4559, from: "SARS", to: "The virus"}
+        - {pair: 5723, from: "JI", to: "Jemaah Islamiah"}
+      8:
+        - {pair: 3698, from: "32", to: "Thirty-two"}
+        - {pair: 2584, from: "one", to: "1"}
+        - {pair: 4823, from: "Chief Executive Officer", to: "chief executive officer"}
+
+  lexico_syntactic:
+    demo:
+      paraphrase: Find all schools in Bonn that are no farther than 500 metres from a bus stop and map them.
+      operations: [Opposite polarity substitution (within -> no farther than), Synthetic/analytic substitution (show them on a map -> map them)]
+    spans:
+      9:
+        - {pair: 5402, from: "less expensive", to: "cheaper"}
+        - {pair: 3786, from: "easy", to: "not difficult"}
+        - {pair: 3090, from: "lacked", to: "had no"}
+      10:
+        - {pair: 681, from: "continue to hold out", to: "have not ruled out"}
+        - {pair: 3614, from: "aiding", to: "doing nothing to discourage"}
+      11:
+        - {pair: 3490, from: "remains of terrorists", to: "terrorist remains"}
+        - {pair: 4896, from: "Its maker", to: "the maker of FluMist"}
+        - {pair: 5542, from: "the total", to: "the total number of stores"}
+      13:
+        - {pair: 4699, from: "agreed with", to: "was joined by"}
+        - {pair: 3936, from: "triggered", to: "came after"}
+      32:
+        - {from: "Bonn", to: "the city of Bonn"}
+        - {from: "the UN climate secretariat", to: "the United Nations Framework Convention on Climate Change secretariat"}
+
+  syntactic:
+    demo:
+      paraphrase: All schools in Bonn within 500 metres of a bus stop are to be found and shown on a map.
+      operations: [Diathesis alternation (find ... and show -> are to be found and shown), Ellipsis (schools that are within -> schools within)]
+    spans:
+      14:
+        - {pair: 2343, from: "He transferred another 10 million shares", to: "A further 10 million shares were transferred"}
+        - {pair: 5571, from: "A jury convicted rapper C-Murder of second-degree murder", to: "Rapper C-Murder has been convicted of second-degree murder"}
+      15:
+        - {pair: 4067, from: "Nobody wants", to: "We don't want"}
+        - {pair: 1236, from: "hasn't uncovered evidence", to: "has found no such evidence"}
+        - {pair: 1434, from: "does not have a state death penalty", to: "has no state death penalty"}
+      16:
+        - {pair: 4220, from: "to resign or negotiate", to: "to resign or to negotiate"}
+        - {pair: 4283, from: "reached 19.5 million over 2001's 8.9 million units", to: "reached 19.5 million units compared with 8.9 million units"}
+      17:
+        - {pair: 5343, from: "nuts, cereals", to: "nuts and cereals"}
+        - {pair: 2249, from: "men's and women's basketball", to: "men's basketball, women's basketball"}
+        - {pair: 5322, from: "June 24-25", to: "June 24 and 25"}
+      18:
+        - {pair: 5607, from: "Exchange Server 2003 -- available Monday --", to: "Exchange Server 2003, which is available Monday,"}
+        - {pair: 1886, from: "that program, which also dated from the Depression", to: "that Depression-era program"}
+        - {pair: 1017, from: "Zulifquar Ali, a worshiper slightly wounded by shrapnel,", to: "Zulfiqar Ali, who was slightly wounded by shrapnel,"}
+
+  discourse:
+    demo:
+      paraphrase: "Which schools in Bonn are within 500 metres of a bus stop? Show them on a map."
+      operations: [Sentence modality changes (command -> question), Syntax/discourse structure changes (one sentence -> question followed by an instruction)]
+    spans:
+      21:
+        - {pair: 2757, from: "most recently in 1991", to: "(most recently in 1991)"}
+        - {pair: 1759, from: "- if they are ever allowed to meet -", to: ", should they be allowed to meet,"}
+      22:
+        - {pair: 2743, from: "\"I conclude,\" Baer said", to: "Harold Baer concluded"}
+        - {pair: 3317, from: "The opposition would resort to rolling mass action", to: "we will embark on rolling mass action"}
+      23:
+        - {from: "Map the schools near bus stops.", to: "Can you map the schools near bus stops?"}
+        - {from: "I need the flood zones.", to: "Show me the flood zones."}
+      24:
+        - {pair: 2260, from: "The WWF thinks", to: "According to WWF,"}
+        - {pair: 2800, from: "In Kentucky,", to: "Kentucky:"}
+        - {pair: 2923, from: "People who have this disorder", to: "Haemochromatosis is a disorder in which people"}
+
+  other:
+    demo:
+      paraphrase: To check how easily pupils can reach school by public transport, show me on a map the schools in Bonn that are within 500 metres of a bus stop.
+      operations: [Addition/Deletion (added the purpose of the request), Change of order (output instruction moved before the selection)]
+    spans:
+      25:
+        - {pair: 1056, from: "", to: "yesterday"}
+        - {pair: 2202, from: "I think", to: ""}
+        - {pair: 4218, from: "", to: "of South Dakota"}
+      26:
+        - {pair: 1222, from: "in a statement", to: "In a statement,", note: moved to the start of the sentence}
+        - {pair: 5388, from: "on Wednesday", to: "On Wednesday,", note: moved to the start of the sentence}
+      28:
+        - {pair: 1234, from: "During a period of nearly a decade", to: "from 1987 to 1995"}
+        - {pair: 4858, from: "adopt flexible trade", to: "be flexible on its trade"}

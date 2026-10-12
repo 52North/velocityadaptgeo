@@ -1,0 +1,72 @@
+import json
+
+import pytest
+
+from prompt_gen import config, examples, seeds, typology
+from prompt_gen.judge import ConstraintVerdict, Judgement
+from prompt_gen.run import EXAMPLES_PATH, gate, read_jsonl
+
+
+def test_every_type_maps_to_exactly_one_category():
+    ids = [t.id for c in typology.CATEGORIES for t in c.types]
+    assert len(ids) == len(set(ids))
+    assert {c.key for c in typology.CATEGORIES} == {"morphological", "lexical", "lexico_syntactic", "syntactic", "discourse", "other"}
+    assert typology.IDENTITY_TYPE_ID not in typology.BY_TYPE_ID
+
+
+def test_examples_cover_every_type():
+    ex = examples.load(EXAMPLES_PATH)
+    for c in typology.CATEGORIES:
+        assert {s.type_id for s in ex[c.key].spans} == c.type_ids
+
+
+def test_seed_loads_with_trap_set():
+    seed = seeds.load("muenster_green_300m")
+    assert "Münster" in seed.text
+    assert [c.id for c in seed.constraints][:4] == ["location", "target", "distance", "walking"]
+    assert any(t.passes for t in seed.trap_set) and any(not t.passes for t in seed.trap_set)
+    assert any(t.relative for t in seed.trap_set)
+
+
+def _judgement(*statuses: str) -> Judgement:
+    return Judgement(
+        verdicts=[ConstraintVerdict(id=f"c{i}", reason="", status=s) for i, s in enumerate(statuses)],
+        operations_found=[], matches_category=True, category_reason="",
+    )
+
+
+SCORES = {"sem": 0.8, "prag": 0.95, "max_sem_same_category": 0.5}
+
+
+@pytest.fixture
+def cfg():
+    return config.load()
+
+
+def test_relative_passes_failed_rejects():
+    assert _judgement("kept", "relative").passed
+    assert _judgement("kept", "relative").relative_ids == ["c1"]
+    assert _judgement("kept", "failed").failed_ids == ["c1"]
+
+
+def test_gate(cfg):
+    assert gate(cfg, "lexical", SCORES, _judgement("kept", "relative")) == "relative:c1"
+    cfg.thresholds.accept_relative = True
+    assert gate(cfg, "lexical", SCORES, _judgement("kept", "relative")) is None
+    assert gate(cfg, "lexical", SCORES, _judgement("failed", "kept", "failed")) == "constraint:c0,c2"
+    assert gate(cfg, "lexical", {**SCORES, "max_sem_same_category": 0.99}, _judgement("kept")) == "near_duplicate"
+    assert gate(cfg, "lexical", {**SCORES, "max_sem_same_category": None}, _judgement("kept")) is None
+
+
+def test_gate_thresholds(cfg):
+    cfg.thresholds.sem_max = {"lexical": 0.7}
+    cfg.thresholds.prag_min = 0.97
+    assert gate(cfg, "lexical", SCORES, _judgement("kept")) == "too_similar_to_seed"
+    assert gate(cfg, "syntactic", SCORES, _judgement("kept")) == "intent_drift"
+
+
+def test_read_jsonl_skips_blank_lines(tmp_path):
+    path = tmp_path / "c.jsonl"
+    path.write_text(json.dumps({"a": 1}) + "\n\n" + json.dumps({"a": 2}) + "\n")
+    assert read_jsonl(path) == [{"a": 1}, {"a": 2}]
+    assert read_jsonl(tmp_path / "missing.jsonl") == []

@@ -1,0 +1,34 @@
+ollama_host: http://localhost:11434
+
+generator:
+  model: qwen3:8b
+  temperature: 0.8
+  think: false            # short-reasoning mode: the plan is the first JSON field instead (about 7x faster on CPU)
+  max_retries: 3          # per candidate, for invalid or empty output
+
+judge:
+  model: qwen3:8b
+  temperature: 0.0
+  think: false
+
+embeddings:
+  semantic: sentence-transformers/all-mpnet-base-v2
+  pragmatic: intfloat/multilingual-e5-large-instruct
+  # E5 instruct format: "Instruct: {task}\nQuery: {text}", applied to both texts being compared.
+  pragmatic_instruction: >-
+    Given a geospatial analysis request, retrieve requests that ask for the same analysis and the same output
+
+loop:
+  n_per_category: 10
+  max_attempts_factor: 3    # max attempts = factor * n
+  max_consecutive_rejects: 5
+
+# Stage 1: loose gates. Per-category thresholds come from manual review (see .docs/plan.md, step 5).
+thresholds:
+  near_duplicate_sem: 0.97          # reject if sem(candidate, any accepted in category) is above this
+  sem_max: {}                       # per category, e.g. {lexical: 0.9}; empty = not gated
+  prag_min: null                    # same for every category; null = not gated
+  # Strict mode (false): reject paraphrases that state a value or feature set vaguely ("a short walk",
+  # "recreational green space"). They stay in candidates.jsonl with reject_reason "relative:<ids>".
+  # true: accept them, tagged in the `relative` field.
+  accept_relative: false

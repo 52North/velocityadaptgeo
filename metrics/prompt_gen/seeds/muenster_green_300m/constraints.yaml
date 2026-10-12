@@ -1,0 +1,124 @@
+# Hard constraints of the seed. The LLM judge gives each constraint one of three verdicts:
+#   kept      the same value, in any form (other words, units, formats)
+#   relative  a specific value or feature set of the seed expressed vaguely or more broadly, so the agent
+#             would have to choose the quantity itself ("a short walk" for 300 m, "recreational green
+#             space" for parks or forests). Only allowed on constraints that list `relative` phrasings.
+#             Rejected by default (strict mode); accepted and tagged with thresholds.accept_relative.
+#   failed    a different specific value (500 m), a changed meaning, or the constraint dropped
+# `accept` / `relative` / `reject` phrasings anchor the judge. Add new cases here as review settles them.
+
+constraints:
+  - id: location
+    requirement: The analysis is about the city of Münster.
+    accept: ["Münster", "Muenster", "Munster", "the city of Münster", "Münster, Germany"]
+    reject: ["Münster district (Kreis)", "Münsterland", "any other city", "no location given"]
+
+  - id: target
+    requirement: The result is the areas that ARE within the distance limit of a qualifying green space (the well-served areas).
+    accept: ["areas within walking distance", "places close enough to a park", "areas no more than 300 m away", "neighbourhoods that have a park nearby"]
+    reject: ["areas too far from a park", "areas outside the limit", "underserved areas", "the parks themselves as the result"]
+
+  - id: distance
+    requirement: The distance limit is 300 metres.
+    accept: ["300 m", "0.3 km", "three hundred metres", "a five-minute walk (counts as exactly 300 m, so kept, not relative)"]
+    relative: ["a short walk", "a few minutes on foot", "easy walking distance", "close enough to walk to"]
+    reject: ["500 m", "a fifteen-minute walk", "near (no limit at all)", "no distance given"]
+
+  - id: walking
+    requirement: Distance is measured as walking distance (along walkable routes), not straight-line distance or by another mode.
+    accept: ["walking distance", "on foot", "a walk", "along footpaths", "by walking"]
+    reject: ["as the crow flies", "straight-line", "radius", "buffer", "driving", "cycling", "near (no mode given)"]
+
+  - id: green_space
+    requirement: The destinations are public parks or forests.
+    accept: ["parks or forests", "public parks and woods", "green spaces such as parks and forests", "public green areas and woodland"]
+    relative: ["recreational green space", "green spaces", "somewhere green", "green areas"]
+    reject: ["private gardens", "any vegetation", "playgrounds only", "parks only, forests excluded", "water bodies"]
+
+  - id: size
+    requirement: Only green spaces large enough for recreation count.
+    accept: ["large enough for recreation", "big enough to spend time in", "usable for recreation", "not tiny patches of green"]
+    relative: ["size only implied by an adjective such as 'recreational'", "decent green spaces"]
+    reject: ["any green space regardless of size", "a specific different size threshold such as at least 10 ha", "size condition missing"]
+
+  - id: output_highlight
+    requirement: The output is a visualization that highlights the well-served areas.
+    accept: ["a map highlighting these areas", "visualize the served areas", "show these areas on a map"]
+    reject: ["a table only", "a count only", "no visual output requested"]
+
+  - id: output_bands
+    requirement: The visualization shows walking distance from the green spaces in incremental intervals up to the limit.
+    accept: ["distance bands up to 300 m", "steps of increasing distance", "rings at intervals up to the limit", "a graduated scale of distance",
+             "steps up to that limit (whatever form the limit takes)"]
+    reject: ["a single 300 m buffer only", "intervals beyond 300 m", "no distance intervals"]
+
+# Known paraphrases for testing the judge. `pass` is the expected judge verdict (no constraint failed);
+# `relative` lists constraints that must come back as relative (others may too).
+trap_set:
+  - text: >-
+      In Muenster I want to find out which parts of the city are too far from any decent shady green area
+      to escape the summer heat. Only count parks or woods that are big enough to actually sit in, and treat
+      anything more than a 300 metre walk as too far. Show me the leftover areas and how the distance builds up in steps.
+    pass: false
+    reason: inverted target (areas too far); CoolSpots prompt from prompts.jsonl
+  - text: >-
+      Identify all areas in Münster that are within a 500-meter walking distance of a public park or forest large
+      enough for recreation. Output a visualization that highlights these well-served areas and displays the walking
+      distances from the green spaces in incremental intervals up to the 500-meter limit.
+    pass: false
+    reason: distance changed to 500 m
+  - text: >-
+      Identify all areas in Bielefeld that are within a 300-meter walking distance of a public park or forest large
+      enough for recreation. Output a visualization that highlights these well-served areas and displays the walking
+      distances from the green spaces in incremental intervals up to the 300-meter limit.
+    pass: false
+    reason: different city
+  - text: >-
+      Identify all areas in Münster that are within 300 meters in a straight line of a public park or forest large
+      enough for recreation. Output a visualization that highlights these well-served areas and displays the distances
+      from the green spaces in incremental intervals up to the 300-meter limit.
+    pass: false
+    reason: straight-line instead of walking distance
+  - text: >-
+      Identify all areas in Münster that are within a 300-meter walking distance of a public park or forest large
+      enough for recreation, and list them in a table.
+    pass: false
+    reason: visualization and distance bands dropped
+  - text: >-
+      Identify all areas in Münster that are within a 300-meter walking distance of any public park or forest.
+      Output a visualization that highlights these areas and displays the walking distances in incremental intervals up to 300 meters.
+    pass: false
+    reason: size condition dropped
+  - text: >-
+      Which parts of Münster are a five-minute walk or less from a park or forest big enough to relax in? Map those
+      areas and show how far they are from the green space in steps up to that limit.
+    pass: true
+    reason: five-minute walk accepted; all constraints kept
+  - text: >-
+      Find every area of Muenster lying no more than 0.3 km on foot from a public park or woodland that is usable for
+      recreation, then produce a map that highlights them and shows walking distance from the green spaces in bands up to 300 m.
+    pass: true
+    reason: lexical and format changes only
+  - text: >-
+      I'm interested in how well Münster's residents are served by green space. Please map the areas that lie within
+      a 300 m walk of a public park or forest large enough for recreation, showing walking distance from those spaces in increasing intervals up to 300 m.
+    pass: true
+    reason: added motivation, order changed; all constraints kept
+  - text: >-
+      Which parts of Münster are just a short walk from a public park or forest big enough for recreation? Map those
+      areas and show the walking distance from the green spaces in steps up to that limit.
+    pass: true
+    relative: [distance]
+    reason: 300 m expressed relatively as a short walk
+  - text: >-
+      Identify all areas in Münster that are near a public park or forest large enough for recreation. Output a
+      visualization that highlights these areas and displays the distances from the green spaces in incremental intervals.
+    pass: false
+    reason: walking and the distance limit both dropped, only "near" is left
+  - text: >-
+      Locate all areas in Münster that are within a 300 metres walking distance of a recreational green space.
+      Generate a map visualization that highlights these well-served areas and displays the walking distances from
+      the green spaces in incremental intervals up to the 300 metres limit.
+    pass: true
+    relative: [green_space]
+    reason: park or forest broadened to recreational green space (accepted by the judge in the first smoke run)
