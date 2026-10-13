@@ -32,7 +32,7 @@ def _judgement(*statuses: str, grammatical: bool = True) -> Judgement:
     return Judgement(
         verdicts=[ConstraintVerdict(id=f"c{i}", reason="", status=s) for i, s in enumerate(statuses)],
         operations_found=[], main_change="", category_reason="", matches_category=True,
-        grammar_reason="", grammatical=grammatical,
+        corrected="", grammatical=grammatical,
     )
 
 

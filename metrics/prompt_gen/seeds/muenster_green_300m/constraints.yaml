@@ -122,3 +122,60 @@ trap_set:
     pass: true
     relative: [green_space]
     reason: park or forest broadened to recreational green space (accepted by the judge in the first smoke run)
+  - text: >-
+      Find parks or forests near areas in the city of Münster that are no farther than 300 meters by foot and large
+      enough for recreation. Output a visualization that highlights these well-served areas and displays the walking
+      distances from the green spaces in incremental intervals up to the 300-meter limit.
+    pass: false
+    reason: reversed target (finds parks near areas, not areas near parks); lexico-syntactic #4 of the first run, accepted by the extended single-call judge
+
+# Grammar test sentences for the judge's correction-based grammar check (`check-judge` reports them separately).
+grammar_set:
+  - text: >-
+      Identified all areas in Münster that are within a 300-meter walkable routes of public parks or forests large
+      enough for recreation. Generate a map visualization that highlights these well-served areas and displays the
+      walking distances from the green spaces in incremental intervals up to the 300-meter limit.
+    grammatical: false
+    reason: past tense as a request, and "a ... routes"; morphological #13 of the first run
+  - text: >-
+      Highlight all areas in Münster that are within a 300-meter walking distance of a public parks or forests large
+      enough for recreation. Generate a visualization that highlights these well-served areas and displays the walking
+      distances from the green spaces in incremental intervals up to the 300-meter limit.
+    grammatical: false
+    reason: '"a public parks"; morphological #1 of the first run'
+  - text: >-
+      Identify all areas in Münster that is within a 300-meter walking distance of a public park or forest large enough
+      for recreation. Output a visualization that highlight these well-served areas and displays the walking distances
+      from the green spaces in incremental intervals up to the 300-meter limit.
+    grammatical: false
+    reason: '"areas ... that is", "a visualization that highlight"; hand-written'
+  - text: >-
+      Identify all areas in Münster that are within a 300-meter walking distance of a public park or forest large enough
+      for recreation. Output a visualization that highlights these well-served areas and displays the walking distances
+      from the green spaces in incremental intervals up to the 300-meter limit.
+    grammatical: true
+    reason: the seed itself
+  - text: >-
+      Locate all areas in Münster that are within a 300-metre walking distance of a recreational park or forest large
+      enough for recreation. Output a visualization that highlights these well-served areas and displays the walking
+      distances from the green spaces in incremental intervals up to the 300-metre limit.
+    grammatical: true
+    reason: lexical #1 of the first run
+  - text: >-
+      A visualization should be output that highlights all areas in Münster within a 300-meter walking distance of a
+      public park or forest large enough for recreation and displays the walking distances from the green spaces in
+      incremental intervals up to the 300-meter limit.
+    grammatical: true
+    reason: syntactic #4 of the first run (passive, awkward but grammatical)
+  - text: >-
+      To create a visualization that highlights these well-served areas and displays the walking distances from the
+      green spaces in incremental intervals up to the 300-meter limit, show all areas in Münster that are within a
+      300-meter walking distance of a public park or forest large enough for recreation.
+    grammatical: true
+    reason: other #5 of the first run (reordered)
+  - text: >-
+      The task is to identify all areas in Münster that are within a 300-meter walking distance of a public park or
+      forest large enough for recreation. Output a visualization that highlights these well-served areas and displays
+      the walking distances from the green spaces in incremental intervals up to the 300-meter limit.
+    grammatical: true
+    reason: discourse #1 of the first run

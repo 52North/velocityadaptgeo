@@ -25,28 +25,47 @@ def cmd_run(args) -> None:
 
 def cmd_check_judge(args) -> None:
     from prompt_gen import config, seeds, typology
-    from prompt_gen.judge import Judge
+    from prompt_gen.judge import Judge, same_text
 
     cfg = config.load()
     seed = seeds.load(args.seed)
     judge = Judge(cfg.judge, cfg.ollama_host, cfg.num_ctx)
+
+    print("Constraints (call A):")
     correct = 0
     for t in seed.trap_set:
-        r = judge.check(seed, typology.get("lexical"), t.text)
-        ok = r.passed == t.passes and (not t.passes or set(t.relative) <= set(r.relative_ids))
+        verdicts, _ = judge.check_constraints(seed, t.text)
+        failed = [v.id for v in verdicts if v.status == "failed"]
+        relative = [v.id for v in verdicts if v.status == "relative"]
+        passed = not failed
+        ok = passed == t.passes and (not t.passes or set(t.relative) <= set(relative))
         correct += ok
         print(f"{'OK' if ok else 'XX'}  expected {'pass' if t.passes else 'fail'}{list(t.relative) or ''}, "
-              f"got {'pass' if r.passed else 'fail'} failed={r.failed_ids} relative={r.relative_ids}  [{t.reason}]", flush=True)
+              f"got {'pass' if passed else 'fail'} failed={failed} relative={relative}  [{t.reason}]", flush=True)
         if not ok:
-            for v in r.verdicts:
+            for v in verdicts:
                 print(f"      {v.id}: {v.status} - {v.reason}")
-    print(f"{correct}/{len(seed.trap_set)} correct")
+    print(f"{correct}/{len(seed.trap_set)} correct\n")
+
+    print("Grammar (call B):")
+    grammar_correct = 0
+    for g in seed.grammar_set:
+        b, _ = judge.check_category_grammar(seed, typology.get("lexical"), g.text)
+        grammatical = same_text(b.corrected, g.text)
+        ok = grammatical == g.grammatical
+        grammar_correct += ok
+        print(f"{'OK' if ok else 'XX'}  expected {'grammatical' if g.grammatical else 'ungrammatical'}, "
+              f"got {'grammatical' if grammatical else 'ungrammatical'}  [{g.reason}]", flush=True)
+        if not grammatical:
+            print(f"      corrected: {b.corrected}")
+    print(f"{grammar_correct}/{len(seed.grammar_set)} correct")
 
 
 def cmd_rejudge(args) -> None:
     """Re-judge stored candidates with the current judge, without regenerating them. Results go to
     out/<run_id>/rejudged.jsonl; candidates.jsonl is not changed."""
     import json
+    from datetime import datetime
 
     from prompt_gen import config, seeds, stems, typology
     from prompt_gen.judge import Judge
@@ -60,7 +79,7 @@ def cmd_rejudge(args) -> None:
         c for c in read_jsonl(run_dir / "candidates.jsonl")
         if c.get("prompt") and c["category"] == args.category and (not args.contains or args.contains in c["prompt"])
     ][: args.limit]
-    out = run_dir / "rejudged.jsonl"
+    out = run_dir / f"rejudged_{datetime.now():%Y%m%d-%H%M%S}.jsonl"
     print(f"Re-judging {len(picked)} {args.category} candidates -> {out}", flush=True)
     for c in picked:
         stem_result = stems.check(seed.text, c["prompt"]) if c["category"] in cfg.thresholds.stem_check else None
@@ -73,7 +92,7 @@ def cmd_rejudge(args) -> None:
                 "new": j.model_dump(),
             }, ensure_ascii=False) + "\n")
         print(f"{c['category']}#{c['attempt']}: category match {old.get('matches_category')} -> {j.matches_category}, "
-              f"grammatical={j.grammatical}, failed={j.failed_ids}", flush=True)
+              f"grammatical={j.grammatical}, failed={j.failed_ids}, {j.durations_s}", flush=True)
 
 
 def cmd_review(args) -> None:
@@ -99,7 +118,7 @@ def main() -> None:
     p.add_argument("--seed", default="muenster_green_300m")
     p.set_defaults(func=cmd_check_judge)
 
-    p = sub.add_parser("rejudge", help="re-judge stored candidates with the current judge (writes rejudged.jsonl)")
+    p = sub.add_parser("rejudge", help="re-judge stored candidates with the current judge (writes rejudged_<time>.jsonl)")
     p.add_argument("run_id")
     p.add_argument("--category", required=True)
     p.add_argument("--limit", type=int, default=10)

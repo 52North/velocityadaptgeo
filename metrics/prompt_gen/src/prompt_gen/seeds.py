@@ -28,11 +28,19 @@ class TrapCase:
 
 
 @dataclass(frozen=True)
+class GrammarCase:
+    text: str
+    grammatical: bool
+    reason: str
+
+
+@dataclass(frozen=True)
 class Seed:
     id: str
     text: str
     constraints: tuple[Constraint, ...]
     trap_set: tuple[TrapCase, ...]
+    grammar_set: tuple[GrammarCase, ...] = ()
 
 
 def load(seed_id: str, seeds_dir: Path = SEEDS_DIR) -> Seed:
@@ -48,6 +56,9 @@ def load(seed_id: str, seeds_dir: Path = SEEDS_DIR) -> Seed:
         trap_set=tuple(
             TrapCase(" ".join(t["text"].split()), t["pass"], t["reason"], tuple(t.get("relative", ())))
             for t in data.get("trap_set", [])
+        ),
+        grammar_set=tuple(
+            GrammarCase(" ".join(g["text"].split()), g["grammatical"], g["reason"]) for g in data.get("grammar_set", [])
         ),
     )
 

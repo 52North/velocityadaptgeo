@@ -271,7 +271,10 @@ def _body(state: ReviewState, seed_text: str, details: bool) -> Group:
             grammar_row = Text("not checked", style="dim")
         elif j["grammatical"]:
             grammar_row = Text("ok", style="green")
-        else:
+        elif "corrected" in j:  # correction-based check: show what the judge would fix
+            grammar_row = Text("ungrammatical, judge's correction:\n", style="red")
+            grammar_row.append_text(word_diff(c["prompt"], j["corrected"]))
+        else:  # judged by the earlier single-call verdict
             grammar_row = Text("ungrammatical: ", style="red")
             grammar_row.append(j["grammar_reason"], style="default")
         info.add_row("scores", scores)
