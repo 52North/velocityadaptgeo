@@ -9,6 +9,7 @@ generator:
   temperature: 0.8
   think: false            # short-reasoning mode: the plan is the first JSON field instead (about 7x faster on CPU)
   max_retries: 3          # per candidate, for invalid or empty output
+  feedback_retries: 2     # per candidate: drafts sent back with feedback (e.g. too similar to an accepted one)
 
 judge:
   model: qwen3:8b

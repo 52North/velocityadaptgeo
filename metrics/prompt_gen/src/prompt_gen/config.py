@@ -11,6 +11,7 @@ class GeneratorConfig(BaseModel):
     temperature: float
     think: bool
     max_retries: int
+    feedback_retries: int = 2
 
 
 class JudgeConfig(BaseModel):

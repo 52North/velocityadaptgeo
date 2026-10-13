@@ -61,6 +61,25 @@ def stem_reason(result: stems.StemCheck) -> str | None:
     return "|".join(parts)
 
 
+def near_duplicate_feedback(text: str, accepted: list[str], similarities, threshold: float) -> str | None:
+    """Feedback for the generator when a draft is a near-duplicate of an accepted paraphrase, else None."""
+    if not accepted:
+        return None
+    sims = similarities(text, accepted)
+    best = max(range(len(sims)), key=sims.__getitem__)
+    if sims[best] <= threshold:
+        return None
+    return (
+        f'Your paraphrase is too similar to this one, already written: "{accepted[best]}". Start again from the seed '
+        "request and give the whole sentence a clearly different structure. Keep to the category's operations and "
+        "to all hard constraints, and answer in the same JSON format."
+    )
+
+
+def is_near_duplicate(scores: dict, threshold: float) -> bool:
+    return scores["max_sem_same_category"] is not None and scores["max_sem_same_category"] > threshold
+
+
 def gate(cfg: Config, category: str, scores: dict, judgement) -> str | None:
     """Reject reason, or None if the candidate passes."""
     if not judgement.passed:
@@ -70,13 +89,40 @@ def gate(cfg: Config, category: str, scores: dict, judgement) -> str | None:
         return "relative:" + ",".join(judgement.relative_ids)
     if not judgement.grammatical and t.strict:
         return "ungrammatical"
-    if scores["max_sem_same_category"] is not None and scores["max_sem_same_category"] > t.near_duplicate_sem:
+    if is_near_duplicate(scores, t.near_duplicate_sem):
         return "near_duplicate"
     if category in t.sem_max and scores["sem"] > t.sem_max[category]:
         return "too_similar_to_seed"
     if t.prag_min is not None and scores["prag"] < t.prag_min:
         return "intent_drift"
     return None
+
+
+class WrittenList:
+    """Paraphrases already written in one category, shown to the generator so it doesn't repeat itself.
+
+    Holds accepted paraphrases and near-duplicate rejections, tagged, in the order they were written.
+    A near-duplicate rejection is skipped if it is itself a near-duplicate of a rejection already listed,
+    so the list grows with distinct attempts only. Entries are only ever appended, which keeps the
+    generator prompt's prefix cacheable.
+    """
+
+    def __init__(self, similarities, threshold: float):
+        self.similarities = similarities  # (text, others) -> list of cosine similarities
+        self.threshold = threshold
+        self.entries: list[tuple[str, str]] = []
+
+    def add(self, record: dict) -> None:
+        text = record.get("prompt")
+        if not text:
+            return
+        if record.get("accepted"):
+            self.entries.append((text, "accepted"))
+        elif record.get("reject_reason") == "near_duplicate":
+            rejected = [t for t, tag in self.entries if tag == "rejected"]
+            if rejected and max(self.similarities(text, rejected)) > self.threshold:
+                return
+            self.entries.append((text, "rejected"))
 
 
 class Run:
@@ -89,9 +135,10 @@ class Run:
         self.examples = examples.load(EXAMPLES_PATH)
 
     def _write_config(self, categories: list[str], n: int) -> None:
-        path = self.dir / "config.json"
-        if path.exists():
-            return
+        """Config and code snapshot. The first session writes config.json and code/; each resumed session
+        adds config_<time>.json and code_<time>/, since the code may have changed in between."""
+        suffix = "" if not (self.dir / "config.json").exists() else f"_{datetime.now():%Y%m%d-%H%M%S}"
+        path = self.dir / f"config{suffix}.json"
         snapshot = {
             "run_id": self.run_id,
             "started": datetime.now().isoformat(timespec="seconds"),
@@ -107,7 +154,7 @@ class Run:
         }
         path.write_text(json.dumps(snapshot, indent=2, ensure_ascii=False), encoding="utf-8")
         # The code may not be committed yet, so keep an exact copy of what produced this run.
-        shutil.copytree(PACKAGE_ROOT / "src" / "prompt_gen", self.dir / "code", ignore=shutil.ignore_patterns("__pycache__"))
+        shutil.copytree(PACKAGE_ROOT / "src" / "prompt_gen", self.dir / f"code{suffix}", ignore=shutil.ignore_patterns("__pycache__"))
 
     def execute(self, categories: list[str], n: int, hours: float | None = None) -> None:
         self.dir.mkdir(parents=True, exist_ok=True)
@@ -133,12 +180,11 @@ class Run:
             category = typology.get(key)
             mine = [c for c in history if c["category"] == key]
             accepted = [c["prompt"] for c in mine if c["accepted"]]
+            written = WrittenList(scorer.semantic_similarities, self.cfg.thresholds.near_duplicate_sem)
+            for c in mine:
+                written.add(c)
             attempts = len(mine)
-            consecutive = 0
-            for c in reversed(mine):
-                if c["accepted"]:
-                    break
-                consecutive += 1
+            consecutive = 0  # per session: a resumed run gets a fresh chance in every category
             max_attempts = loop.max_attempts_factor * n
 
             while (
@@ -149,9 +195,14 @@ class Run:
             ):
                 attempts += 1
                 started = time.monotonic()
-                record = {"seed_id": self.seed.id, "category": key, "attempt": attempts}
+                target = category.types[(attempts - 1) % len(category.types)]
+                record = {"seed_id": self.seed.id, "category": key, "attempt": attempts, "target_operation": target.name}
                 try:
-                    g = generator.generate(category, self.examples[key], self.seed, accepted, sampling_seed=cat_index * 1000 + attempts * 10)
+                    g = generator.generate(
+                        category, self.examples[key], self.seed, written.entries,
+                        sampling_seed=cat_index * 1000 + attempts * 10, target=target,
+                        feedback=lambda text: near_duplicate_feedback(text, accepted, scorer.semantic_similarities, self.cfg.thresholds.near_duplicate_sem),
+                    )
                 except GenerationError as e:
                     record.update(prompt=None, accepted=False, reject_reason=f"generation_error: {e}")
                 else:
@@ -162,6 +213,7 @@ class Run:
                         sampling_seed=g.sampling_seed,
                         generation_attempts=g.attempts,
                         eval_tokens=g.eval_tokens,
+                        discarded=g.discarded,
                     )
                     stem_result = stems.check(self.seed.text, g.paraphrase) if key in self.cfg.thresholds.stem_check else None
                     if stem_result is not None:
@@ -172,20 +224,25 @@ class Run:
                     else:
                         others = [c["prompt"] for c in history if c["accepted"] and c["category"] != key]
                         scores = scorer.score(g.paraphrase, self.seed.text, accepted, others)
-                        judgement = judge.check(self.seed, category, g.paraphrase, stem_result)
-                        reason = gate(self.cfg, key, scores, judgement)
-                        record.update(
-                            generation,
-                            accepted=reason is None,
-                            reject_reason=reason,
-                            relative=judgement.relative_ids,
-                            ungrammatical=not judgement.grammatical,
-                            **scores,
-                            judge=judgement.model_dump(),
-                        )
+                        if is_near_duplicate(scores, self.cfg.thresholds.near_duplicate_sem):
+                            # Still a near-duplicate after the feedback retries: no need to spend ~105 s on the judge.
+                            record.update(generation, accepted=False, reject_reason="near_duplicate", relative=[], **scores)
+                        else:
+                            judgement = judge.check(self.seed, category, g.paraphrase, stem_result)
+                            reason = gate(self.cfg, key, scores, judgement)
+                            record.update(
+                                generation,
+                                accepted=reason is None,
+                                reject_reason=reason,
+                                relative=judgement.relative_ids,
+                                ungrammatical=not judgement.grammatical,
+                                **scores,
+                                judge=judgement.model_dump(),
+                            )
                 record["duration_s"] = round(time.monotonic() - started, 1)
                 _append(self.candidates_path, record)
                 history.append(record)
+                written.add(record)
                 durations.append(record["duration_s"])
 
                 if record["accepted"]:

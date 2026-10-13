@@ -1,7 +1,8 @@
 """Chain-of-thought paraphrase generation with a local Ollama model."""
 
 import time
-from dataclasses import dataclass
+from collections.abc import Callable
+from dataclasses import dataclass, field
 
 import ollama
 from pydantic import BaseModel, Field, ValidationError
@@ -28,6 +29,7 @@ class Generation:
     attempts: int
     duration_s: float
     eval_tokens: int
+    discarded: list[dict] = field(default_factory=list)  # drafts rejected by the feedback check, with the feedback
 
 
 class GenerationError(RuntimeError):
@@ -87,15 +89,39 @@ hard constraint in your planned version.
 3. `paraphrase`: the paraphrase only, as natural English that a real user could type."""
 
 
-def user_prompt(seed: Seed, previous: list[str]) -> str:
+TAG_TEXT = {"accepted": "accepted", "rejected": "rejected: too similar to an accepted one"}
+
+
+def user_prompt(seed: Seed, written: list[tuple[str, str]], target: typology.ParaphraseType | None = None) -> str:
+    """`written`: (paraphrase, "accepted" | "rejected") in the order written. New entries only ever go at
+    the end, and the target operation comes last, so Ollama can reuse the processed prompt prefix."""
     prompt = f"Seed request:\n{seed.text}"
-    if previous:
-        listed = "\n".join(f"- {p}" for p in previous)
+    if written:
+        listed = "\n".join(f"- [{TAG_TEXT[tag]}] {text}" for text, tag in written)
         prompt += (
-            "\n\nParaphrases already written for this category. Yours must be clearly different from all of them, "
-            f"using other operations or applying them in other places:\n{listed}"
+            "\n\nParaphrases already written for this category, in the order they were written. Yours must be "
+            f"clearly different from all of them, using other operations or applying them in other places:\n{listed}"
+        )
+    openings = used_openings(written)
+    if openings:
+        listed = "; ".join(f'"{o} ..."' for o in openings)
+        prompt += f"\n\nOpenings already used, do not start your paraphrase with any of these: {listed}"
+    if target is not None:
+        prompt += (
+            f"\n\nStarting from the seed request, apply only this operation: {target.name}: {target.description}. "
+            "Do not carry over the sentence structure of the paraphrases listed above."
         )
     return prompt
+
+
+def used_openings(written: list[tuple[str, str]], words: int = 4) -> list[str]:
+    """First words of each written paraphrase, without repeats, in order of first use."""
+    openings: list[str] = []
+    for text, _ in written:
+        opening = " ".join(text.split()[:words]).rstrip(",.:;")
+        if opening not in openings:
+            openings.append(opening)
+    return openings
 
 
 class Generator:
@@ -106,41 +132,64 @@ class Generator:
         self.client = ollama.Client(host=host)
 
     def generate(
-        self, category: typology.Category, examples: CategoryExamples, seed: Seed, previous: list[str], sampling_seed: int
+        self,
+        category: typology.Category,
+        examples: CategoryExamples,
+        seed: Seed,
+        written: list[tuple[str, str]],
+        sampling_seed: int,
+        target: typology.ParaphraseType | None = None,
+        feedback: Callable[[str], str | None] | None = None,
     ) -> Generation:
+        """`feedback(paraphrase)` returns a correction message, or None if the draft is fine. A draft with
+        feedback is sent back in the same conversation, up to `feedback_retries` times; the last draft is
+        returned even if it still has feedback, and the caller decides what to do with it."""
         messages = [
             {"role": "system", "content": system_prompt(category, examples, seed, self.strict)},
-            {"role": "user", "content": user_prompt(seed, previous)},
+            {"role": "user", "content": user_prompt(seed, written, target)},
         ]
-        errors = []
-        for attempt in range(1, self.config.max_retries + 1):
-            started = time.monotonic()
+        started = time.monotonic()
+        errors: list[str] = []
+        discarded: list[dict] = []
+        tokens = 0
+        call = 0
+        while True:
+            call += 1
             response = self.client.chat(
                 model=self.config.model,
                 messages=messages,
                 think=self.config.think,
                 format=GeneratorOutput.model_json_schema(),
-                options={"temperature": self.config.temperature, "seed": sampling_seed + attempt - 1, "num_ctx": self.num_ctx},
+                options={"temperature": self.config.temperature, "seed": sampling_seed + call - 1, "num_ctx": self.num_ctx},
             )
+            tokens += response.eval_count or 0
             try:
                 output = GeneratorOutput.model_validate_json(response.message.content)
-            except ValidationError as e:
-                errors.append(f"invalid JSON: {e.errors()[0]['msg']}")
+                paraphrase = " ".join(output.paraphrase.split())
+                if not paraphrase:
+                    raise ValueError("empty paraphrase")
+                if paraphrase.casefold() == seed.text.casefold():
+                    raise ValueError("copied the seed")
+            except (ValidationError, ValueError) as e:
+                errors.append(f"invalid JSON: {e.errors()[0]['msg']}" if isinstance(e, ValidationError) else str(e))
+                if len(errors) >= self.config.max_retries:
+                    raise GenerationError(f"no valid paraphrase after {len(errors)} invalid outputs: {errors}") from None
                 continue
-            paraphrase = " ".join(output.paraphrase.split())
-            if not paraphrase:
-                errors.append("empty paraphrase")
-                continue
-            if paraphrase.casefold() == seed.text.casefold():
-                errors.append("copied the seed")
+            message = feedback(paraphrase) if feedback else None
+            if message and len(discarded) < self.config.feedback_retries:
+                discarded.append({"prompt": paraphrase, "feedback": message})
+                messages += [
+                    {"role": "assistant", "content": response.message.content},
+                    {"role": "user", "content": message},
+                ]
                 continue
             return Generation(
                 paraphrase=paraphrase,
                 operations_applied=output.operations_applied,
                 reasoning="\n\n".join(filter(None, [response.message.thinking, output.reasoning])),
-                sampling_seed=sampling_seed + attempt - 1,
-                attempts=attempt,
+                sampling_seed=sampling_seed + call - 1,
+                attempts=call,
                 duration_s=time.monotonic() - started,
-                eval_tokens=response.eval_count or 0,
+                eval_tokens=tokens,
+                discarded=discarded,
             )
-        raise GenerationError(f"no valid paraphrase after {self.config.max_retries} attempts: {errors}")

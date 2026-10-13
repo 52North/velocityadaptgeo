@@ -247,7 +247,9 @@ def _body(state: ReviewState, seed_text: str, details: bool) -> Group:
             row = Text("only forms of the seed's words", style="green")
         info.add_row("stems", row)
     if j is None:
-        info.add_row("judge", Text("not run (rejected by the stem check)", style="dim"))
+        if "max_sem_same_category" in c:  # near-duplicate rejected before judging: show how close it was
+            info.add_row("scores", f"sem {c['sem']:.3f}   max sem in category {c['max_sem_same_category']:.3f}")
+        info.add_row("judge", Text(f"not run (rejected before judging: {c['reject_reason']})", style="dim"))
     else:
         scores = Text(f"sem {c['sem']:.3f}   prag {c['prag']:.3f}   prag (no instr.) {c['prag_no_instruction']:.3f}   ")
         scores.append(
@@ -294,6 +296,12 @@ def _body(state: ReviewState, seed_text: str, details: bool) -> Group:
     ]
     if details:
         parts.append(Panel(Text(c["reasoning"]), title="Generator plan", title_align="left"))
+        if c.get("discarded"):
+            drafts = Text()
+            for i, d in enumerate(c["discarded"], 1):
+                drafts.append(f"{i}. {d['prompt']}\n", style="dim")
+                drafts.append(f"   feedback: {d['feedback']}\n")
+            parts.append(Panel(drafts, title="Discarded drafts", title_align="left"))
     if details and j is not None:
         category_details = f"{j['category_reason']}\n" if j["matches_category"] else ""  # else already shown above
         main_change = f"Main change: {j['main_change']}\n" if j.get("main_change") else ""

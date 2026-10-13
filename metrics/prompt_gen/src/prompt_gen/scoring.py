@@ -40,6 +40,9 @@ class Scorer:
         vectors = embedder.embed([text, *others])
         return vectors[1:] @ vectors[0]
 
+    def semantic_similarities(self, text: str, others: list[str]) -> list[float]:
+        return [float(x) for x in self._sim(self.semantic, text, others)] if others else []
+
     def score(self, candidate: str, seed: str, same_category: list[str], other_categories: list[str]) -> dict:
         sem_seed, *sem_same = self._sim(self.semantic, candidate, [seed, *same_category])
         prag, prag_plain = (float(self._sim(e, candidate, [seed])[0]) for e in (self.pragmatic, self.pragmatic_plain))
