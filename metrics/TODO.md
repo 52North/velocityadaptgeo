@@ -1,0 +1,1 @@
+- [ ] Investigate adding a required example to each typological category's sub-types
