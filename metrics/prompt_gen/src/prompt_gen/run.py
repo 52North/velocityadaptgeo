@@ -12,7 +12,7 @@ from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
 
-from prompt_gen import examples, typology
+from prompt_gen import examples, stems, typology
 from prompt_gen.config import PACKAGE_ROOT, Config
 from prompt_gen.generator import GenerationError, Generator
 from prompt_gen.judge import Judge
@@ -50,13 +50,26 @@ def _git_commit() -> str | None:
         return None
 
 
+def stem_reason(result: stems.StemCheck) -> str | None:
+    if result.passed:
+        return None
+    parts = []
+    if result.new:
+        parts.append("stem:" + ",".join(result.new))
+    if result.missing:
+        parts.append("missing:" + ",".join(result.missing))
+    return "|".join(parts)
+
+
 def gate(cfg: Config, category: str, scores: dict, judgement) -> str | None:
     """Reject reason, or None if the candidate passes."""
     if not judgement.passed:
         return "constraint:" + ",".join(judgement.failed_ids)
     t = cfg.thresholds
-    if judgement.relative_ids and not t.accept_relative:
+    if judgement.relative_ids and t.strict:
         return "relative:" + ",".join(judgement.relative_ids)
+    if not judgement.grammatical and t.strict:
+        return "ungrammatical"
     if scores["max_sem_same_category"] is not None and scores["max_sem_same_category"] > t.near_duplicate_sem:
         return "near_duplicate"
     if category in t.sem_max and scores["sem"] > t.sem_max[category]:
@@ -104,7 +117,7 @@ class Run:
             print(f"Resuming {self.run_id}: {len(history)} candidates already scored")
 
         print("Loading models...", flush=True)
-        generator = Generator(self.cfg.generator, self.cfg.ollama_host, self.cfg.thresholds.accept_relative, self.cfg.num_ctx)
+        generator = Generator(self.cfg.generator, self.cfg.ollama_host, self.cfg.thresholds.strict, self.cfg.num_ctx)
         judge = Judge(self.cfg.judge, self.cfg.ollama_host, self.cfg.num_ctx)
         scorer = Scorer(self.cfg.embeddings)
 
@@ -142,23 +155,34 @@ class Run:
                 except GenerationError as e:
                     record.update(prompt=None, accepted=False, reject_reason=f"generation_error: {e}")
                 else:
-                    others = [c["prompt"] for c in history if c["accepted"] and c["category"] != key]
-                    scores = scorer.score(g.paraphrase, self.seed.text, accepted, others)
-                    judgement = judge.check(self.seed, category, g.paraphrase)
-                    reason = gate(self.cfg, key, scores, judgement)
-                    record.update(
+                    generation = dict(
                         prompt=g.paraphrase,
-                        accepted=reason is None,
-                        reject_reason=reason,
-                        relative=judgement.relative_ids,
-                        **scores,
-                        judge=judgement.model_dump(),
                         operations_applied=g.operations_applied,
                         reasoning=g.reasoning,
                         sampling_seed=g.sampling_seed,
                         generation_attempts=g.attempts,
                         eval_tokens=g.eval_tokens,
                     )
+                    stem_result = stems.check(self.seed.text, g.paraphrase) if key in self.cfg.thresholds.stem_check else None
+                    if stem_result is not None:
+                        generation["stems"] = {"new": list(stem_result.new), "missing": list(stem_result.missing)}
+                    if stem_result is not None and not stem_result.passed:
+                        # Deterministic and instant: skip the embeddings and the ~65 s judge call.
+                        record.update(generation, accepted=False, reject_reason=stem_reason(stem_result), relative=[])
+                    else:
+                        others = [c["prompt"] for c in history if c["accepted"] and c["category"] != key]
+                        scores = scorer.score(g.paraphrase, self.seed.text, accepted, others)
+                        judgement = judge.check(self.seed, category, g.paraphrase, stem_result)
+                        reason = gate(self.cfg, key, scores, judgement)
+                        record.update(
+                            generation,
+                            accepted=reason is None,
+                            reject_reason=reason,
+                            relative=judgement.relative_ids,
+                            ungrammatical=not judgement.grammatical,
+                            **scores,
+                            judge=judgement.model_dump(),
+                        )
                 record["duration_s"] = round(time.monotonic() - started, 1)
                 _append(self.candidates_path, record)
                 history.append(record)
@@ -188,6 +212,7 @@ class Run:
         status = "accepted" if record["accepted"] else f"rejected ({record['reject_reason']})"
         sims = f" sem={record['sem']:.3f} prag={record['prag']:.3f}" if "sem" in record else ""
         tag = f" relative={record['relative']}" if record.get("relative") else ""
+        tag += " ungrammatical" if record.get("ungrammatical") else ""
         print(
             f"[{key} {len(accepted)}/{n}, attempt {attempts}] {status}{sims}{tag} "
             f"{record['duration_s']:.0f}s | ETA at least {remaining * mean / 60:.0f} min",
@@ -209,6 +234,7 @@ class Run:
                     "seed_id": c["seed_id"],
                     "category": c["category"],
                     "relative": c["relative"],
+                    "ungrammatical": c.get("ungrammatical", False),
                     "sem": c["sem"],
                     "prag": c["prag"],
                 }, ensure_ascii=False) + "\n")

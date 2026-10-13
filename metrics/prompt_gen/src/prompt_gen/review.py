@@ -158,8 +158,9 @@ class ReviewState:
 
 
 def load_candidates(run_dir: Path) -> list[dict]:
-    """Candidates that produced a paraphrase and were judged (generation errors are left out)."""
-    return [c for c in read_jsonl(run_dir / "candidates.jsonl") if c.get("prompt") and "judge" in c]
+    """Candidates that produced a paraphrase (generation errors are left out). Candidates rejected by
+    the stem check have no scores or judge result."""
+    return [c for c in read_jsonl(run_dir / "candidates.jsonl") if c.get("prompt")]
 
 
 def load_decisions(path: Path) -> dict[str, dict]:
@@ -230,33 +231,53 @@ def _body(state: ReviewState, seed_text: str, details: bool) -> Group:
         moved = f" → {review['category']}" if review["category"] != c["category"] else ""
         header.append_text(_badge(f"review: {review['decision']}{moved}", "black on green" if review["decision"] == "accept" else "black on red"))
 
-    scores = Text(f"sem {c['sem']:.3f}   prag {c['prag']:.3f}   prag (no instr.) {c['prag_no_instruction']:.3f}   ")
-    scores.append(
-        f"max sem in category {c['max_sem_same_category']:.3f}" if c["max_sem_same_category"] is not None
-        else "max sem in category —"
-    )
-
-    j = c["judge"]
-    problems = [v for v in j["verdicts"] if v["status"] != "kept"]
-    if problems:
-        judge = Text()
-        for i, v in enumerate(problems):
-            judge.append(("\n" if i else "") + f"{v['status']} {v['id']}: ", style="red" if v["status"] == "failed" else "yellow")
-            judge.append(v["reason"])
-    else:
-        judge = Text(f"all {len(j['verdicts'])} constraints kept", style="green")
-
     info = Table.grid(padding=(0, 2))
     info.add_column(style="bold", no_wrap=True)
     info.add_column(ratio=1)
-    info.add_row("scores", scores)
-    info.add_row("judge", judge)
-    if j["matches_category"]:
-        category_row = Text("matches", style="green")
+    j = c.get("judge")
+    if "stems" in c:
+        stem = c["stems"]
+        if stem["new"] or stem["missing"]:
+            row = Text("failed", style="red")
+            if stem["new"]:
+                row.append(f"   new words: {', '.join(stem['new'])}")
+            if stem["missing"]:
+                row.append(f"   missing: {', '.join(stem['missing'])}")
+        else:
+            row = Text("only forms of the seed's words", style="green")
+        info.add_row("stems", row)
+    if j is None:
+        info.add_row("judge", Text("not run (rejected by the stem check)", style="dim"))
     else:
-        category_row = Text("does not match: ", style="yellow")
-        category_row.append(j["category_reason"], style="default")
-    info.add_row("category", category_row)
+        scores = Text(f"sem {c['sem']:.3f}   prag {c['prag']:.3f}   prag (no instr.) {c['prag_no_instruction']:.3f}   ")
+        scores.append(
+            f"max sem in category {c['max_sem_same_category']:.3f}" if c["max_sem_same_category"] is not None
+            else "max sem in category —"
+        )
+        problems = [v for v in j["verdicts"] if v["status"] != "kept"]
+        if problems:
+            judge = Text()
+            for i, v in enumerate(problems):
+                judge.append(("\n" if i else "") + f"{v['status']} {v['id']}: ", style="red" if v["status"] == "failed" else "yellow")
+                judge.append(v["reason"])
+        else:
+            judge = Text(f"all {len(j['verdicts'])} constraints kept", style="green")
+        if j["matches_category"]:
+            category_row = Text("matches", style="green")
+        else:
+            category_row = Text("does not match: ", style="yellow")
+            category_row.append(j["category_reason"], style="default")
+        if "grammatical" not in j:  # judged before the grammar check existed
+            grammar_row = Text("not checked", style="dim")
+        elif j["grammatical"]:
+            grammar_row = Text("ok", style="green")
+        else:
+            grammar_row = Text("ungrammatical: ", style="red")
+            grammar_row.append(j["grammar_reason"], style="default")
+        info.add_row("scores", scores)
+        info.add_row("judge", judge)
+        info.add_row("category", category_row)
+        info.add_row("grammar", grammar_row)
     info.add_row("ops", "\n".join(c["operations_applied"]))
     note = (review or {}).get("note") or state.pending_notes.get(key)
     if note:
@@ -270,9 +291,11 @@ def _body(state: ReviewState, seed_text: str, details: bool) -> Group:
     ]
     if details:
         parts.append(Panel(Text(c["reasoning"]), title="Generator plan", title_align="left"))
+    if details and j is not None:
         category_details = f"{j['category_reason']}\n" if j["matches_category"] else ""  # else already shown above
+        main_change = f"Main change: {j['main_change']}\n" if j.get("main_change") else ""
         parts.append(Panel(
-            Text(f"{category_details}Operations found: {'; '.join(j['operations_found'])}"),
+            Text(f"{main_change}{category_details}Operations found: {'; '.join(j['operations_found'])}"),
             title="Judge: category", title_align="left",
         ))
         verdicts = Text("\n".join(f"{v['status']:8} {v['id']}: {v['reason']}" for v in j["verdicts"]))

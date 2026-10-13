@@ -1,4 +1,4 @@
-"""prompt-gen run | check-judge | review"""
+"""prompt-gen run | check-judge | rejudge | review"""
 
 import argparse
 import os
@@ -43,6 +43,39 @@ def cmd_check_judge(args) -> None:
     print(f"{correct}/{len(seed.trap_set)} correct")
 
 
+def cmd_rejudge(args) -> None:
+    """Re-judge stored candidates with the current judge, without regenerating them. Results go to
+    out/<run_id>/rejudged.jsonl; candidates.jsonl is not changed."""
+    import json
+
+    from prompt_gen import config, seeds, stems, typology
+    from prompt_gen.judge import Judge
+    from prompt_gen.run import OUT_DIR, read_jsonl
+
+    cfg = config.load()
+    run_dir = OUT_DIR / args.run_id
+    seed = seeds.load(json.loads((run_dir / "config.json").read_text(encoding="utf-8"))["seed"]["id"])
+    judge = Judge(cfg.judge, cfg.ollama_host, cfg.num_ctx)
+    picked = [
+        c for c in read_jsonl(run_dir / "candidates.jsonl")
+        if c.get("prompt") and c["category"] == args.category and (not args.contains or args.contains in c["prompt"])
+    ][: args.limit]
+    out = run_dir / "rejudged.jsonl"
+    print(f"Re-judging {len(picked)} {args.category} candidates -> {out}", flush=True)
+    for c in picked:
+        stem_result = stems.check(seed.text, c["prompt"]) if c["category"] in cfg.thresholds.stem_check else None
+        j = judge.check(seed, typology.get(c["category"]), c["prompt"], stem_result)
+        old = c.get("judge") or {}
+        with out.open("a", encoding="utf-8") as f:
+            f.write(json.dumps({
+                "category": c["category"], "attempt": c["attempt"], "prompt": c["prompt"],
+                "old": {"matches_category": old.get("matches_category"), "failed": [v["id"] for v in old.get("verdicts", []) if v["status"] == "failed"]},
+                "new": j.model_dump(),
+            }, ensure_ascii=False) + "\n")
+        print(f"{c['category']}#{c['attempt']}: category match {old.get('matches_category')} -> {j.matches_category}, "
+              f"grammatical={j.grammatical}, failed={j.failed_ids}", flush=True)
+
+
 def cmd_review(args) -> None:
     from prompt_gen.review import review
     from prompt_gen.run import OUT_DIR
@@ -65,6 +98,13 @@ def main() -> None:
     p = sub.add_parser("check-judge", help="run the judge on the seed's trap set")
     p.add_argument("--seed", default="muenster_green_300m")
     p.set_defaults(func=cmd_check_judge)
+
+    p = sub.add_parser("rejudge", help="re-judge stored candidates with the current judge (writes rejudged.jsonl)")
+    p.add_argument("run_id")
+    p.add_argument("--category", required=True)
+    p.add_argument("--limit", type=int, default=10)
+    p.add_argument("--contains", help="only candidates whose prompt contains this text")
+    p.set_defaults(func=cmd_rejudge)
 
     p = sub.add_parser("review", help="review a run's candidates (full screen; decisions go to reviewed.jsonl)")
     p.add_argument("run_id")

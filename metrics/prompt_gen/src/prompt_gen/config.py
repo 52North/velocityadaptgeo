@@ -35,7 +35,8 @@ class Thresholds(BaseModel):
     near_duplicate_sem: float
     sem_max: dict[str, float] = {}
     prag_min: float | None = None
-    accept_relative: bool = False
+    strict: bool = True
+    stem_check: list[str] = []
 
 
 class Config(BaseModel):

@@ -32,7 +32,10 @@ thresholds:
   near_duplicate_sem: 0.97          # reject if sem(candidate, any accepted in category) is above this
   sem_max: {}                       # per category, e.g. {lexical: 0.9}; empty = not gated
   prag_min: null                    # same for every category; null = not gated
-  # Strict mode (false): reject paraphrases that state a value or feature set vaguely ("a short walk",
-  # "recreational green space"). They stay in candidates.jsonl with reject_reason "relative:<ids>".
-  # true: accept them, tagged in the `relative` field.
-  accept_relative: false
+  # Strict mode (true): reject paraphrases that state a value or feature set vaguely ("a short walk",
+  # "recreational green space") or that are ungrammatical. They stay in candidates.jsonl with
+  # reject_reason "relative:<ids>" / "ungrammatical". false: accept them, tagged `relative` / `ungrammatical`.
+  strict: true
+  # Categories whose paraphrases may only use the seed's word families (stems.py). Checked before the
+  # embeddings and the judge; reject reason "stem:<new words>|missing:<seed words>".
+  stem_check: [morphological]

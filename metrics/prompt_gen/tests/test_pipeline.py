@@ -2,9 +2,9 @@ import json
 
 import pytest
 
-from prompt_gen import config, examples, seeds, typology
+from prompt_gen import config, examples, seeds, stems, typology
 from prompt_gen.judge import ConstraintVerdict, Judgement
-from prompt_gen.run import EXAMPLES_PATH, gate, read_jsonl
+from prompt_gen.run import EXAMPLES_PATH, gate, read_jsonl, stem_reason
 
 
 def test_every_type_maps_to_exactly_one_category():
@@ -28,10 +28,11 @@ def test_seed_loads_with_trap_set():
     assert any(t.relative for t in seed.trap_set)
 
 
-def _judgement(*statuses: str) -> Judgement:
+def _judgement(*statuses: str, grammatical: bool = True) -> Judgement:
     return Judgement(
         verdicts=[ConstraintVerdict(id=f"c{i}", reason="", status=s) for i, s in enumerate(statuses)],
-        operations_found=[], matches_category=True, category_reason="",
+        operations_found=[], main_change="", category_reason="", matches_category=True,
+        grammar_reason="", grammatical=grammatical,
     )
 
 
@@ -51,7 +52,7 @@ def test_relative_passes_failed_rejects():
 
 def test_gate(cfg):
     assert gate(cfg, "lexical", SCORES, _judgement("kept", "relative")) == "relative:c1"
-    cfg.thresholds.accept_relative = True
+    cfg.thresholds.strict = False
     assert gate(cfg, "lexical", SCORES, _judgement("kept", "relative")) is None
     assert gate(cfg, "lexical", SCORES, _judgement("failed", "kept", "failed")) == "constraint:c0,c2"
     assert gate(cfg, "lexical", {**SCORES, "max_sem_same_category": 0.99}, _judgement("kept")) == "near_duplicate"
@@ -70,3 +71,21 @@ def test_read_jsonl_skips_blank_lines(tmp_path):
     path.write_text(json.dumps({"a": 1}) + "\n\n" + json.dumps({"a": 2}) + "\n")
     assert read_jsonl(path) == [{"a": 1}, {"a": 2}]
     assert read_jsonl(tmp_path / "missing.jsonl") == []
+
+
+def test_gate_grammar_follows_strict_mode(cfg):
+    assert gate(cfg, "lexical", SCORES, _judgement("kept", grammatical=False)) == "ungrammatical"
+    # a failed constraint is the more important reason
+    assert gate(cfg, "lexical", SCORES, _judgement("failed", grammatical=False)) == "constraint:c0"
+    cfg.thresholds.strict = False
+    assert gate(cfg, "lexical", SCORES, _judgement("kept", grammatical=False)) is None
+
+
+def test_stem_check_configured_for_morphological_only(cfg):
+    assert cfg.thresholds.stem_check == ["morphological"]
+
+
+def test_stem_reason():
+    assert stem_reason(stems.StemCheck((), ())) is None
+    assert stem_reason(stems.StemCheck(("generate", "routes"), ())) == "stem:generate,routes"
+    assert stem_reason(stems.StemCheck(("generate",), ("identify",))) == "stem:generate|missing:identify"

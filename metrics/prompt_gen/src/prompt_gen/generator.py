@@ -34,7 +34,7 @@ class GenerationError(RuntimeError):
     pass
 
 
-def system_prompt(category: typology.Category, examples: CategoryExamples, seed: Seed, accept_relative: bool) -> str:
+def system_prompt(category: typology.Category, examples: CategoryExamples, seed: Seed, strict: bool) -> str:
     types = "\n".join(f"- {t.name}: {t.description}" for t in category.types)
     type_names = {t.id: t.name for t in category.types}
     spans = "\n".join(
@@ -42,7 +42,7 @@ def system_prompt(category: typology.Category, examples: CategoryExamples, seed:
         for s in examples.spans
     )
     constraints = "\n".join(f"- {c.requirement}" for c in seed.constraints)
-    if accept_relative:
+    if not strict:
         relative_rule = (
             'You may also state a value or a set of features more vaguely, as a real user might '
             '(e.g. "a short walk", "recreational green space").'
@@ -99,9 +99,9 @@ def user_prompt(seed: Seed, previous: list[str]) -> str:
 
 
 class Generator:
-    def __init__(self, config: GeneratorConfig, host: str, accept_relative: bool, num_ctx: int):
+    def __init__(self, config: GeneratorConfig, host: str, strict: bool, num_ctx: int):
         self.config = config
-        self.accept_relative = accept_relative
+        self.strict = strict
         self.num_ctx = num_ctx
         self.client = ollama.Client(host=host)
 
@@ -109,7 +109,7 @@ class Generator:
         self, category: typology.Category, examples: CategoryExamples, seed: Seed, previous: list[str], sampling_seed: int
     ) -> Generation:
         messages = [
-            {"role": "system", "content": system_prompt(category, examples, seed, self.accept_relative)},
+            {"role": "system", "content": system_prompt(category, examples, seed, self.strict)},
             {"role": "user", "content": user_prompt(seed, previous)},
         ]
         errors = []
