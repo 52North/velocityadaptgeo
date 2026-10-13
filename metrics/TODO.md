@@ -1,1 +1,2 @@
 - [ ] Investigate adding a required example to each typological category's sub-types
+- [ ] Further split the judgment calls into individual calls per verdict
