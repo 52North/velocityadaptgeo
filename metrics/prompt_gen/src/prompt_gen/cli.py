@@ -47,7 +47,7 @@ def cmd_review(args) -> None:
     from prompt_gen.review import review
     from prompt_gen.run import OUT_DIR
 
-    review(OUT_DIR / args.run_id, args.all)
+    review(OUT_DIR / args.run_id)
 
 
 def main() -> None:
@@ -66,9 +66,8 @@ def main() -> None:
     p.add_argument("--seed", default="muenster_green_300m")
     p.set_defaults(func=cmd_check_judge)
 
-    p = sub.add_parser("review", help="manually review a run's candidates")
+    p = sub.add_parser("review", help="review a run's candidates (full screen; decisions go to reviewed.jsonl)")
     p.add_argument("run_id")
-    p.add_argument("--all", action="store_true", help="also review candidates the gates rejected")
     p.set_defaults(func=cmd_review)
 
     args = parser.parse_args()
