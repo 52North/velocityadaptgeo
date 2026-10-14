@@ -143,3 +143,58 @@ def test_match_status():
     assert match_status("lexical#1", s.by_key, {"lexical#1": decision("accept", "discourse")}) == ("discourse", True, "accept")
     assert match_status("lexical#1", s.by_key, {"lexical#1": decision("reject", "lexical")}) == ("lexical", False, "reject")
     assert match_status("lexical#99", s.by_key, {}) is None
+
+
+# --- sorting (review_table_plan.md) --------------------------------------------------------------
+
+from helpers import embeddings_for  # noqa: E402
+
+from prompt_review.state import SORTS  # noqa: E402
+
+
+def test_sort_by_similarity_and_category(tmp_path):
+    s = ReviewState(CANDIDATES, None, embeddings_for(tmp_path), 0.97, ["syntactic", "lexical"])
+    s.filter = "all"
+    assert s.sort == "file order" and keys(s.visible()) == keys(CANDIDATES)
+    s.cycle_sort()
+    # within category, live: lexical#2 -> lexical#1 0.995, lexical#1 -> lexical#3 0.6, lexical#3 -> lexical#1 0.6,
+    # syntactic#1 -> syntactic#2 0.196, syntactic#2: no other kept syntactic one (last)
+    assert s.sort == "similarity"
+    assert keys(s.visible()) == ["lexical#2", "lexical#1", "lexical#3", "syntactic#1", "syntactic#2"]
+    s.cycle_sort()
+    assert s.sort == "category"  # the given category order, file order within a category
+    assert keys(s.visible()) == ["syntactic#1", "syntactic#2", "lexical#1", "lexical#2", "lexical#3"]
+    s.cycle_sort()
+    assert s.sort == SORTS[0]
+
+
+def test_sort_keeps_the_current_candidate_and_sets_the_review_order(tmp_path):
+    s = ReviewState(CANDIDATES, None, embeddings_for(tmp_path), 0.97)
+    s.filter = "all"
+    s.go_to("lexical#3")
+    s.cycle_sort()  # similarity
+    assert candidate_key(s.current()) == "lexical#3"
+    s.move(1)  # moving follows the sorted order
+    assert candidate_key(s.current()) == "syntactic#1"
+
+
+def test_category_sort_follows_moves():
+    s = ReviewState(CANDIDATES, {"syntactic#2": decision("accept", "lexical")}, categories=["lexical", "syntactic"])
+    s.filter, s.sort = "all", "category"
+    assert keys(s.visible()) == ["lexical#1", "lexical#2", "lexical#3", "syntactic#2", "syntactic#1"]
+
+
+def test_similarity_sort_without_embeddings_uses_the_stored_matches():
+    stored = [{**c, "closest_accepted": {"key": "x", "prompt": "x", "sem": sem} if sem else None}
+              for c, sem in zip(CANDIDATES, [None, 0.9, 0.5, 0.99, None])]
+    s = ReviewState(stored)
+    s.filter, s.sort = "all", "similarity"
+    assert keys(s.visible()) == ["syntactic#1", "lexical#2", "lexical#3", "lexical#1", "syntactic#2"]
+
+
+def test_visible_cache_follows_direct_decision_changes():
+    s = ReviewState(CANDIDATES)
+    s.filter = "unreviewed"
+    assert len(s.visible()) == 5
+    s.decisions["lexical#1"] = decision("accept", "lexical")  # changed without decide()
+    assert "lexical#1" not in keys(s.visible())

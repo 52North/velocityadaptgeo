@@ -15,17 +15,38 @@ Decisions are saved to `<run_dir>/reviewed.jsonl` after every change. `candidate
 
 With the run's `embeddings.jsonl` (written by the generator; for older runs `prompt-gen backfill-embeddings <run_id>`), the closest matches are recomputed after every decision, against all other kept paraphrases: accepted in review, or accepted by the gates and not reviewed yet. The details show them under **Now**, and the matches stored at generation (earlier gate-accepted paraphrases only, what the gate's near-duplicate check saw) under **At generation**. A kept paraphrase whose closest kept paraphrase in its category is above the run's near-duplicate threshold is marked "kept near-duplicate of …", and the filter **kept near-duplicates** steps through them. `--summary` adds their count.
 
-## Keys
+## Screens and keys
+
+The reviewer starts on a **list** of all candidates in the current filter: one line each, with the run number, key, current category (`→` when moved), the gates' result, your decision, the similarity to the closest kept paraphrase in its category (red over the near-duplicate threshold) and the start of the prompt. The highlighted row's full text and closest match are shown below the table. Enter opens the **review page** for that candidate; Esc returns to the list at the same row. Both share the filter, sort order and position.
+
+List:
 
 | Key | Action |
 |---|---|
-| ← / → | previous / next candidate (within the filter) |
+| ↑ / ↓, PgUp / PgDn, Home / End | move |
+| Enter | open the review page |
+| a / r | accept / reject, then move on |
+| u | undo the decision |
+| f | cycle the filter |
+| s | cycle the sort: file order, similarity (most similar first), category |
+| q / Esc | quit |
+
+Review page:
+
+| Key | Action |
+|---|---|
+| ← / → | previous / next candidate (in the list's filter and sort order) |
 | Home / End | first / last |
 | a / r | accept / reject, then move on |
-| c | accept into another category (number key picks it) |
-| n | note on the current candidate |
+| c | accept into another category (number key, or ↑/↓ and Enter) |
+| n | note on the current candidate (Enter saves, Esc cancels) |
 | u | undo the decision |
 | g | next unreviewed |
 | d | details: closest matches, generator plan, discarded drafts, judge output |
-| f | cycle the filter: all, passed gates, rejected by gates, unreviewed, kept near-duplicates (with embeddings), one per reject reason |
-| q / Esc | quit |
+| ↑ / ↓, PgUp / PgDn | scroll the page |
+| f / s | cycle the filter / sort |
+| Esc | back to the list |
+| q | quit |
+
+Filters: all, passed gates (the default), rejected by gates, unreviewed, kept near-duplicates (with embeddings), one per reject reason.
+

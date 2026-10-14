@@ -1,19 +1,17 @@
-"""Rich renderables for the review screen and the summary table."""
+"""Rich renderables: the review page, the list rows and preview, and the summary table."""
 
 import difflib
 from datetime import datetime
 from pathlib import Path
 
 from rich.console import Console, Group
-from rich.layout import Layout
 from rich.panel import Panel
-from rich.rule import Rule
 from rich.table import Table
 from rich.text import Text
 
 from prompt_review.data import candidate_key, categories, latest_config, load_candidates, load_decisions, read_jsonl
 from prompt_review.similarity import kept_near_duplicates, load_embeddings
-from prompt_review.state import ReviewState, SummaryRow, current_category, kept, match_status, summarize
+from prompt_review.state import ReviewState, SummaryRow, current_category, kept, match_status, reason_group, summarize
 
 
 def word_diff(old: str, new: str) -> Text:
@@ -113,14 +111,6 @@ def closest_panel(candidate: dict, state: "ReviewState") -> Panel:
 
 def _badge(label: str, style: str) -> Text:
     return Text(f" {label} ", style=style)
-
-
-def render(state: ReviewState, seed_text: str, details: bool, footer: Text) -> Layout:
-    """Full screen: the candidate on top, the key bar pinned to the bottom. If the candidate doesn't
-    fit (details open in a small terminal), its bottom is cut off, never the key bar."""
-    layout = Layout()
-    layout.split_column(Layout(_body(state, seed_text, details), name="body"), Layout(Group(Rule(), footer), size=4))
-    return layout
 
 
 def _body(state: ReviewState, seed_text: str, details: bool) -> Group:
@@ -236,19 +226,76 @@ def _body(state: ReviewState, seed_text: str, details: bool) -> Group:
     return Group(*parts)
 
 
-KEYS_HELP = "←/→ move · a accept · r reject · c category · n note · u undo · g unreviewed · d details · f filter · q quit"
+KEYS_HELP = ("←/→ move · a accept · r reject · c category · n note · u undo · g unreviewed · d details · "
+             "f filter · s sort · ↑/↓ scroll · Esc list · q quit")
 
 
-def footer_text(state: ReviewState, prompt: str | None = None) -> Text:
+def footer_text(state: ReviewState) -> Text:
     t = Text()
-    if prompt:
-        t.append(prompt, style="bold yellow")
-        return t
     t.append(KEYS_HELP + "\n", style="dim")
     c = state.current()
     if c:  # overall progress is at the top of the screen
         a, r, u = state.counts(c["category"])
         t.append(f"{c['category']}: {a} accepted · {r} rejected · {u} to go")
+    return t
+
+
+# --- list view (review_table_plan.md) -------------------------------------------------------------
+
+LIST_COLUMNS = (("#", 4), ("Key", 20), ("Category", 18), ("Gate", 15), ("Review", 7), ("Sim", 6), ("Prompt", None))
+
+
+def _cut(text: str, width: int) -> str:
+    text = " ".join(text.split())
+    return text if len(text) <= width else text[: max(0, width - 1)] + "…"
+
+
+def _sim_text(state: ReviewState, sem: float) -> Text:
+    over = state.threshold is not None and sem > state.threshold
+    return Text(f"{sem:.3f}", style="red" if over else "")
+
+
+def list_row(c: dict, state: ReviewState, prompt_width: int) -> list:
+    """One table row: number in the run, key, current category, gate, review, closest similarity in the
+    category, and the prompt cut to one line."""
+    key = candidate_key(c)
+    review = state.decisions.get(key)
+    current = current_category(c, state.decisions)
+    match = state.similarity(c)
+    return [
+        Text(str(state.number[key]), style="dim"),
+        key,
+        Text(f"→ {current}", style="yellow") if current != c["category"] else Text(current),
+        Text("accept", style="green") if c["accepted"] else Text(reason_group(c) or "reject", style="red"),
+        Text("—", style="dim") if review is None else Text(review["decision"], style="green" if review["decision"] == "accept" else "red"),
+        Text("—", style="dim") if match is None else _sim_text(state, match[1]),
+        _cut(c["prompt"], prompt_width),
+    ]
+
+
+def list_preview(c: dict | None, state: ReviewState) -> Text:
+    """Full text of the highlighted row, and its closest match in the category."""
+    if c is None:
+        return Text(f"No candidates match the filter '{state.filter}'. Press f to change it.", style="dim")
+    key = candidate_key(c)
+    t = Text()
+    t.append(key, style="bold")
+    current = current_category(c, state.decisions)
+    t.append(f" · {current}" + (" (moved)" if current != c["category"] else ""))
+    t.append(" · gates: ")
+    t.append("accepted" if c["accepted"] else c["reject_reason"], style="green" if c["accepted"] else "red")
+    near = state.near_duplicates().get(key)
+    if near:
+        t.append(f" · kept near-duplicate of {near[0]}", style="yellow")
+    t.append("\n" + c["prompt"] + "\n")
+    match = state.similarity(c)
+    source = "now" if state.embeddings is not None else "at generation"
+    if match is None:
+        t.append(f"closest in {current} ({source}): none", style="dim")
+    else:
+        t.append(f"closest in {current} ({source}): {match[0]} · ", style="dim")
+        t.append_text(_sim_text(state, match[1]))
+        t.append("\n" + state.by_key[match[0]]["prompt"] if match[0] in state.by_key else "", style="dim")
     return t
 
 

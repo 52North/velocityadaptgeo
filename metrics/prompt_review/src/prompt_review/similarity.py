@@ -74,19 +74,31 @@ def closest_in_pool(key: str, category: str, pool: dict[str, str], emb: Embeddin
     return {"within": best([e for e in others if e[2] == category]), "any": best(others)}
 
 
+def closest_within_all(current: dict[str, str], pool: dict[str, str], emb: Embeddings) -> dict[str, tuple[str, float] | None]:
+    """For every candidate in `current` (key -> current category) that has a vector: the closest other
+    paraphrase of `pool` (key -> current category) in the same category, as (key, similarity), or None.
+    One matrix operation for all candidates, for the list view. Ties go to the earlier candidate."""
+    q = [(k, c) for k, c in current.items() if k in emb.index]
+    p = sorted((emb.index[k], k, c) for k, c in pool.items() if k in emb.index)
+    if not q:
+        return {}
+    if not p:
+        return {k: None for k, _ in q}
+    qi = np.array([emb.index[k] for k, _ in q])
+    pi = np.array([e[0] for e in p])
+    sub = emb.sims[np.ix_(qi, pi)].copy()
+    qc = np.array([c for _, c in q])
+    pc = np.array([e[2] for e in p])
+    sub[(qc[:, None] != pc[None, :]) | (qi[:, None] == pi[None, :])] = -np.inf
+    best = sub.argmax(axis=1)
+    out = {}
+    for a, (k, _) in enumerate(q):
+        b = best[a]
+        out[k] = None if np.isneginf(sub[a, b]) else (p[b][1], float(sub[a, b]))
+    return out
+
+
 def kept_near_duplicates(kept: dict[str, str], emb: Embeddings, threshold: float) -> dict[str, tuple[str, float]]:
     """Kept paraphrases whose closest other kept paraphrase in the same category is above the threshold:
     key -> (that paraphrase's key, similarity). Both members of a pair are listed."""
-    idx = [(emb.index[k], k, cat) for k, cat in kept.items() if k in emb.index]
-    if not idx:
-        return {}
-    rows = np.array([e[0] for e in idx])
-    cats = np.array([e[2] for e in idx])
-    sub = emb.sims[np.ix_(rows, rows)].copy()
-    sub[(cats[:, None] != cats[None, :]) | np.eye(len(idx), dtype=bool)] = -np.inf
-    best = sub.argmax(axis=1)
-    found = {}
-    for a, b in enumerate(best):
-        if sub[a, b] > threshold:
-            found[idx[a][1]] = (idx[b][1], float(sub[a, b]))
-    return found
+    return {k: m for k, m in closest_within_all(kept, kept, emb).items() if m and m[1] > threshold}

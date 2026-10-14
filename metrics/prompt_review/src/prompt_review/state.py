@@ -5,11 +5,12 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from prompt_review.data import candidate_key
-from prompt_review.similarity import Embeddings, closest_in_pool, kept_near_duplicates
+from prompt_review.similarity import Embeddings, closest_in_pool, closest_within_all
 
 BASE_FILTERS = ("all", "passed gates", "rejected by gates", "unreviewed")
 NEAR_DUPLICATE_FILTER = "kept near-duplicates"  # only offered when the run has embeddings
 DEFAULT_FILTER = "passed gates"
+SORTS = ("file order", "similarity", "category")
 
 
 def reason_group(c: dict) -> str | None:
@@ -36,18 +37,33 @@ def kept(candidates: list[dict], decisions: dict[str, dict]) -> dict[str, str]:
 
 class ReviewState:
     def __init__(self, candidates: list[dict], decisions: dict[str, dict] | None = None,
-                 embeddings: Embeddings | None = None, threshold: float | None = None):
+                 embeddings: Embeddings | None = None, threshold: float | None = None, categories: list[str] | None = None):
         self.candidates = candidates
         self.decisions = dict(decisions or {})
         self.pending_notes: dict[str, str] = {}  # notes typed before the candidate was decided
         self.by_key = {candidate_key(c): c for c in candidates}
+        self.number = {candidate_key(c): i for i, c in enumerate(candidates, 1)}  # position in the run
         self.embeddings = embeddings  # None: no live similarities, only the stored closest_* fields
         self.threshold = threshold  # the run's near-duplicate threshold
         reasons = sorted({r for c in candidates if (r := reason_group(c))})
         live = [NEAR_DUPLICATE_FILTER] if embeddings is not None else []
         self.filters = [*BASE_FILTERS, *live, *(f"reason: {r}" for r in reasons)]
         self.filter = DEFAULT_FILTER
+        self.sort = SORTS[0]
+        # Category order for sorting; the run's typology order when given.
+        self.categories = list(categories or dict.fromkeys(c["category"] for c in candidates))
         self.index = 0  # position within visible()
+        self._cache: dict[str, tuple] = {}  # name -> (fingerprint, value)
+
+    def _cached(self, name: str, fingerprint, compute):
+        hit = self._cache.get(name)
+        if hit is None or hit[0] != fingerprint:
+            hit = self._cache[name] = (fingerprint, compute())
+        return hit[1]
+
+    def _decisions_fingerprint(self) -> tuple:
+        """Changes whenever a decision or a category changes; notes don't matter here."""
+        return tuple((k, d["decision"], d["category"]) for k, d in self.decisions.items())
 
     # --- live similarity (review_similarity_plan.md) ---
 
@@ -61,11 +77,30 @@ class ReviewState:
             return None
         return closest_in_pool(candidate_key(c), current_category(c, self.decisions), self.kept(), self.embeddings, self.by_key)
 
+    def within_all(self) -> dict[str, tuple[str, float] | None]:
+        """Live closest kept paraphrase in each candidate's current category: key -> (key, similarity) or
+        None. Candidates without a vector are missing. Empty without embeddings. Cached until a decision changes."""
+        def compute():
+            if self.embeddings is None:
+                return {}
+            current = {candidate_key(c): current_category(c, self.decisions) for c in self.candidates}
+            return closest_within_all(current, self.kept(), self.embeddings)
+        return self._cached("within", self._decisions_fingerprint(), compute)
+
+    def similarity(self, c: dict) -> tuple[str, float] | None:
+        """The closest match in the candidate's category shown in the list: live with embeddings, else the
+        one stored at generation."""
+        if self.embeddings is not None:
+            return self.within_all().get(candidate_key(c))
+        m = c.get("closest_accepted")
+        return (m["key"], m["sem"]) if m else None
+
     def near_duplicates(self) -> dict[str, tuple[str, float]]:
         """Kept paraphrases with a kept near-duplicate in their category: key -> (other key, similarity)."""
         if self.embeddings is None or self.threshold is None:
             return {}
-        return kept_near_duplicates(self.kept(), self.embeddings, self.threshold)
+        within = self.within_all()
+        return {k: m for k in self.kept() if (m := within.get(k)) and m[1] > self.threshold}
 
     # --- filters and navigation ---
 
@@ -84,8 +119,17 @@ class ReviewState:
         return reason_group(c) == f.removeprefix("reason: ")
 
     def visible(self) -> list[dict]:
-        near = self.near_duplicates() if self.filter == NEAR_DUPLICATE_FILTER else None
-        return [c for c in self.candidates if self._matches(c, near)]
+        """The candidates in the current filter, in the current sort order. Cached; don't modify the list."""
+        def compute():
+            near = self.near_duplicates() if self.filter == NEAR_DUPLICATE_FILTER else None
+            v = [c for c in self.candidates if self._matches(c, near)]
+            if self.sort == "similarity":  # most similar first; no match last. Stable: ties keep file order
+                v.sort(key=lambda c: -(m[1]) if (m := self.similarity(c)) else float("inf"))
+            elif self.sort == "category":
+                order = {k: i for i, k in enumerate(self.categories)}
+                v.sort(key=lambda c: order.get(current_category(c, self.decisions), len(order)))
+            return v
+        return self._cached("visible", (self.filter, self.sort, self._decisions_fingerprint()), compute)
 
     def current(self) -> dict | None:
         v = self.visible()
@@ -158,11 +202,29 @@ class ReviewState:
     def clear(self) -> None:
         self._change(lambda key: self.decisions.pop(key, None), advance=False)
 
-    def cycle_filter(self) -> None:
+    def _keep_current(self, change) -> None:
         keep = self.current()
-        self.filter = self.filters[(self.filters.index(self.filter) + 1) % len(self.filters)]
+        change()
         keys = [candidate_key(c) for c in self.visible()]
         self.index = keys.index(candidate_key(keep)) if keep and candidate_key(keep) in keys else 0
+
+    def cycle_filter(self) -> None:
+        def change():
+            self.filter = self.filters[(self.filters.index(self.filter) + 1) % len(self.filters)]
+        self._keep_current(change)
+
+    def cycle_sort(self) -> None:
+        """Also the order of moving through candidates on the review page."""
+        def change():
+            self.sort = SORTS[(SORTS.index(self.sort) + 1) % len(SORTS)]
+        self._keep_current(change)
+
+    def go_to(self, key: str) -> bool:
+        keys = [candidate_key(c) for c in self.visible()]
+        if key not in keys:
+            return False
+        self.index = keys.index(key)
+        return True
 
     def counts(self, category: str | None = None) -> tuple[int, int, int]:
         """(accepted, rejected, unreviewed) over all candidates, optionally of one category."""
