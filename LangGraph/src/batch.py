@@ -1,6 +1,7 @@
 """Build a workflow graph for every reviewed paraphrase of a prompt_gen run.
 
     python -m src.batch <run_dir> [--limit N] [--seed-runs N] [--concurrency N]
+    python -m src.batch <run_dir> --status [--seed-runs N] [--concurrency N]
 
 Which prompts run, and in which category they count, is read from the reviewer's
 `<run_dir>/reviewed.jsonl` (see metrics/prompt_review/FORMAT.md) and nowhere else. The
@@ -14,6 +15,10 @@ baseline for how much the graph varies for the same prompt.
 
 The `RunTracker` metrics of each prompt go to `<run_dir>/runs.jsonl` rather than METRICS_FILE,
 so a run folder holds everything about its run; they join to the results by `thread_id`.
+
+`--status` prints one line on a run in progress (or finished) and exits, without loading the
+agent: progress, errors, cost so far, and the time and cost left, estimated from the last
+results. Pass the same `--seed-runs` and `--concurrency` as the run.
 """
 
 import argparse
@@ -24,16 +29,13 @@ import logging
 import time
 from pathlib import Path
 
-from src.app import turn_config, turn_input
-from src.llm.workflow import compiled_graph
-from src.metrics import RunTracker
-
 # Not __name__: run with `python -m`, that is "__main__".
 logger = logging.getLogger("src.batch")
 
 RESULTS_FILE = "workflows.jsonl"
 RUNS_FILE = "runs.jsonl"
 SEED_CATEGORY = "seed"
+STATUS_WINDOW = 20  # recent results the --status estimate is based on
 
 
 def _read_jsonl(path: Path) -> list[dict]:
@@ -90,8 +92,43 @@ def load_results(run_dir: Path) -> list[dict]:
     ]
 
 
+def _finished_at(result: dict) -> float:
+    return time.mktime(time.strptime(result["at"], "%Y-%m-%dT%H:%M:%S")) + result["wall_ms"] / 1000
+
+
+def status(run_dir: Path, seed_runs: int, concurrency: int = 1) -> str:
+    """One line on the state of a run: progress, errors, cost so far, time and cost left."""
+    wanted = accepted_prompts(run_dir, seed_runs)
+    results = {k: r for k, r in latest_results(run_dir).items() if k in wanted}
+    done = [r for r in results.values() if not r.get("error")]
+    errors = sorted(k for k, r in results.items() if r.get("error"))
+    costs = {m["thread_id"]: m.get("cost_usd") or 0 for m in _read_jsonl(run_dir / RUNS_FILE)}
+    spent = sum(costs.get(r["thread_id"], 0) for r in results.values())
+
+    line = f"[{time.strftime('%H:%M')}] {len(done)}/{len(wanted)} done ({len(done) / max(len(wanted), 1):.0%}), {len(errors)} errors"
+    if errors:
+        line += f" ({', '.join(errors[:5])}{', ...' if len(errors) > 5 else ''})"
+    line += f" | ${spent:.2f} so far"
+
+    recent = sorted(results.values(), key=_finished_at)[-STATUS_WINDOW:]
+    left = len(wanted) - len(done)
+    if recent and left:
+        per_s = sum(r["wall_ms"] for r in recent) / 1000 / len(recent) / concurrency
+        per_usd = sum(costs.get(r["thread_id"], 0) for r in recent) / len(recent)
+        finish = time.strftime("%H:%M", time.localtime(time.time() + left * per_s))
+        line += f" | ~{left * per_s / 60:.0f} min left (until ~{finish}), ~${left * per_usd:.2f} to go, ~${spent + left * per_usd:.2f} total"
+    if recent:
+        line += f" | last: {recent[-1]['key']}, {(time.time() - _finished_at(recent[-1])) / 60:.0f} min ago"
+    return line
+
+
 async def build_one(run_dir: Path, key: str, prompt: str) -> dict:
     """Run the agent on one prompt in a fresh thread and return the result line."""
+    # Imported here so --status does not load the agent and its LLM client.
+    from src.app import turn_config, turn_input
+    from src.llm.workflow import compiled_graph
+    from src.metrics import RunTracker
+
     thread_id = f"{run_dir.name}/{key}"
     started = time.time()
     record = {"key": key, "text_sha1": _sha1(prompt), "thread_id": thread_id,
@@ -144,7 +181,13 @@ def main() -> None:
     parser.add_argument("--seed-runs", type=int, default=3, help="times to run the seed prompt as a baseline")
     parser.add_argument("--limit", type=int, help="build at most this many prompts in this call")
     parser.add_argument("--concurrency", type=int, default=1)
+    parser.add_argument("--status", action="store_true", help="print the state of the run and exit")
     args = parser.parse_args()
+    if args.status:
+        print(status(args.run_dir, args.seed_runs, args.concurrency))
+        return
+    # Set here since the agent, which configures logging on import, is only loaded with the first prompt.
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
     # RunTracker only logs a warning when it cannot write, so check up front rather than lose the metrics.
     try:
         for name in (RESULTS_FILE, RUNS_FILE):
