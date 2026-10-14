@@ -2,8 +2,11 @@
 
 All state lives in out/<run_id>/candidates.jsonl: every candidate is appended as soon as it is
 scored, and resuming a run re-reads that file. accepted.jsonl is rebuilt from it at the end.
+embeddings.jsonl holds each paraphrase's semantic embedding, for prompt-review's live similarities.
 """
 
+import base64
+import hashlib
 import json
 import shutil
 import subprocess
@@ -11,6 +14,8 @@ import time
 from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
+
+import numpy as np
 
 from prompt_gen import examples, stems, typology
 from prompt_gen.config import PACKAGE_ROOT, Config
@@ -167,6 +172,33 @@ def backfill_closest(run_dir: Path, similarities) -> dict:
             "backup": backup_status}
 
 
+def embedding_line(key: str, text: str, vector, model: str) -> dict:
+    """One line of embeddings.jsonl: the normalized vector as base64 of little-endian float32 (exact,
+    and half the size of decimal numbers), with the text's hash so a reader can check it still matches."""
+    v = np.asarray(vector, dtype="<f4")
+    return {
+        "key": key,
+        "text_sha1": hashlib.sha1(text.encode("utf-8")).hexdigest(),
+        "model": model,
+        "dim": int(v.shape[0]),
+        "vector": base64.b64encode(v.tobytes()).decode("ascii"),
+    }
+
+
+def backfill_embeddings(run_dir: Path, embed, model: str) -> dict:
+    """Append an embeddings.jsonl line for every candidate with a paraphrase that has none yet.
+    `embed(texts) -> array of normalized vectors`. Only appends; candidates.jsonl isn't touched.
+    Must not run while a run is appending to the same folder."""
+    path = run_dir / "embeddings.jsonl"
+    present = {line["key"] for line in read_jsonl(path)}
+    todo = [r for r in read_jsonl(run_dir / "candidates.jsonl")
+            if r.get("prompt") and f"{r['category']}#{r['attempt']}" not in present]
+    vectors = embed([r["prompt"] for r in todo]) if todo else []
+    for r, v in zip(todo, vectors):
+        _append(path, embedding_line(f"{r['category']}#{r['attempt']}", r["prompt"], v, model))
+    return {"written": len(todo), "present": len(present)}
+
+
 class WrittenList:
     """Paraphrases already written in one category, shown to the generator so it doesn't repeat itself.
 
@@ -201,6 +233,7 @@ class Run:
         self.run_id = run_id or f"{datetime.now():%Y%m%d-%H%M%S}_{seed.id}"
         self.dir = OUT_DIR / self.run_id
         self.candidates_path = self.dir / "candidates.jsonl"
+        self.embeddings_path = self.dir / "embeddings.jsonl"
         self.examples = examples.load(EXAMPLES_PATH)
 
     def _write_config(self, categories: list[str], n: int) -> None:
@@ -313,6 +346,9 @@ class Run:
                             )
                 record["duration_s"] = round(time.monotonic() - started, 1)
                 _append(self.candidates_path, record)
+                if record["prompt"]:  # the vector is cached from the similarity checks above
+                    vector = scorer.semantic.embed([record["prompt"]])[0]
+                    _append(self.embeddings_path, embedding_line(f"{key}#{attempts}", record["prompt"], vector, self.cfg.embeddings.semantic))
                 history.append(record)
                 written.add(record)
                 durations.append(record["duration_s"])

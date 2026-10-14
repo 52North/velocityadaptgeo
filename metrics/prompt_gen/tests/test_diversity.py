@@ -212,3 +212,39 @@ def test_backfill_refuses_when_other_fields_changed_since_the_backup(tmp_path):
         f.write(json.dumps(_c("lexical", 2, "x y")) + "\n")
     with pytest.raises(FileExistsError):
         backfill_closest(run, word_overlap)
+
+
+# --- embeddings ----------------------------------------------------------------------------------
+
+import base64  # noqa: E402
+import hashlib  # noqa: E402
+
+import numpy as np  # noqa: E402
+
+from prompt_gen.run import backfill_embeddings, embedding_line  # noqa: E402
+
+
+def fake_embed(texts):
+    rng = np.random.default_rng(0)
+    v = rng.normal(size=(len(texts), 8)).astype(np.float32)
+    return v / np.linalg.norm(v, axis=1, keepdims=True)
+
+
+def test_embedding_line_round_trip_is_exact():
+    v = fake_embed(["x"])[0]
+    line = embedding_line("lexical#1", "Münster text", v, "m")
+    assert line["text_sha1"] == hashlib.sha1("Münster text".encode()).hexdigest()
+    assert (line["key"], line["model"], line["dim"]) == ("lexical#1", "m", 8)
+    back = np.frombuffer(base64.b64decode(line["vector"]), dtype="<f4")
+    assert np.array_equal(back, v)
+
+
+def test_backfill_embeddings_appends_only_missing_keys(tmp_path):
+    run = _write_run(tmp_path, [_c("lexical", 1, "a b"), _c("lexical", 2, None, False), _c("lexical", 3, "c d")])
+    assert backfill_embeddings(run, fake_embed, "m") == {"written": 2, "present": 0}
+    assert backfill_embeddings(run, fake_embed, "m") == {"written": 0, "present": 2}
+    with (run / "candidates.jsonl").open("a") as f:  # a resumed run added a candidate
+        f.write(json.dumps(_c("syntactic", 1, "e f")) + "\n")
+    assert backfill_embeddings(run, fake_embed, "m") == {"written": 1, "present": 2}
+    lines = [json.loads(line) for line in (run / "embeddings.jsonl").read_text().splitlines()]
+    assert [line["key"] for line in lines] == ["lexical#1", "lexical#3", "syntactic#1"]

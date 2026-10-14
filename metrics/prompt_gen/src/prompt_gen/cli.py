@@ -1,4 +1,4 @@
-"""prompt-gen run | check-judge | rejudge | backfill-closest"""
+"""prompt-gen run | check-judge | rejudge | backfill-closest | backfill-embeddings"""
 
 import argparse
 import os
@@ -119,6 +119,20 @@ def cmd_backfill_closest(args) -> None:
         print("  " + m)
 
 
+def cmd_backfill_embeddings(args) -> None:
+    from sentence_transformers import SentenceTransformer
+
+    from prompt_gen import config
+    from prompt_gen.run import OUT_DIR, backfill_embeddings
+    from prompt_gen.scoring import Embedder
+
+    cfg = config.load()
+    embedder = Embedder(SentenceTransformer(cfg.embeddings.semantic, device="cpu"))
+    run_dir = OUT_DIR / args.run_id
+    report = backfill_embeddings(run_dir, embedder.embed, cfg.embeddings.semantic)
+    print(f"Wrote {report['written']} embeddings to {run_dir / 'embeddings.jsonl'} ({report['present']} already there).")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="prompt-gen")
     sub = parser.add_subparsers(required=True)
@@ -145,6 +159,10 @@ def main() -> None:
     p = sub.add_parser("backfill-closest", help="add each candidate's closest matches to an existing run (keeps candidates.jsonl.bak)")
     p.add_argument("run_id")
     p.set_defaults(func=cmd_backfill_closest)
+
+    p = sub.add_parser("backfill-embeddings", help="store each paraphrase's embedding in embeddings.jsonl, for prompt-review's live similarities")
+    p.add_argument("run_id")
+    p.set_defaults(func=cmd_backfill_embeddings)
 
     args = parser.parse_args()
     args.func(args)
