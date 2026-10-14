@@ -79,3 +79,61 @@ def test_panel_without_stored_fields_and_unknown_match():
     s = ReviewState(CANDIDATES)
     assert "prompt-gen backfill-closest" in _panel_text(cand("lexical", 1), s)
     assert "(not found in this run)" in _panel_text(_with_matches(_match("other#7", "x", 0.5), None), s)
+
+
+# --- live similarities ---------------------------------------------------------------------------
+
+from helpers import embedding_lines, embeddings_for  # noqa: E402
+
+from prompt_review.render import _body  # noqa: E402
+
+
+def _live_state(tmp_path, decisions=None):
+    return ReviewState(CANDIDATES, decisions, embeddings_for(tmp_path), threshold=0.97)
+
+
+def test_panel_shows_now_then_at_generation(tmp_path):
+    s = _live_state(tmp_path, {"lexical#2": decision("accept", "lexical")})
+    c = {**CANDIDATES[0], "closest_accepted": None, "closest_any": None}  # lexical#1 was the first: nothing earlier
+    text = _panel_text(c, s)
+    assert text.index("Now · all other kept paraphrases") < text.index("At generation · earlier gate-accepted")
+    assert "lexical#2 · similarity 0.995 ▲ over 0.970 · review: accept" in text
+    assert "no accepted paraphrase in this category yet" in text  # the stored, generation-time section
+
+
+def test_panel_same_matches_as_now_is_one_line(tmp_path):
+    s = _live_state(tmp_path)
+    m3, s2 = _match("lexical#3", "lexical 3", 0.6), _match("syntactic#2", "syntactic 2", 0.981)
+    text = _panel_text({**CANDIDATES[0], "closest_accepted": m3, "closest_any": s2}, s)
+    assert "same matches as now" in text and text.count("lexical#3 ·") == 1
+
+
+def test_panel_without_embeddings_names_the_backfill(tmp_path):
+    text = _panel_text(_with_matches(None, None), ReviewState(CANDIDATES))
+    assert "prompt-gen backfill-embeddings" in text and "no accepted paraphrase yet" in text
+    assert "Now ·" not in text
+
+
+def test_header_marks_kept_near_duplicates(tmp_path):
+    unjudged = [{**c, "judge": None, "operations_applied": []} for c in CANDIDATES]  # enough fields for the body
+    s = ReviewState(unjudged, {"lexical#2": decision("accept", "lexical")}, embeddings_for(tmp_path), threshold=0.97)
+    s.filter = "all"
+    console = Console(record=True, width=200, color_system=None)
+    console.print(_body(s, "seed", details=False))
+    assert "kept near-duplicate of lexical#2 (0.995)" in console.export_text()
+
+
+def test_summary_counts_kept_near_duplicates(tmp_path):
+    run = tmp_path / "run"
+    run.mkdir()
+    (run / "candidates.jsonl").write_text("".join(json.dumps(c) + "\n" for c in CANDIDATES))
+    (run / "config.json").write_text(json.dumps({"n_per_category": 2, "seed": {"id": "s"},
+                                                 "config": {"thresholds": {"near_duplicate_sem": 0.97}}}))
+    (run / "reviewed.jsonl").write_text(json.dumps({**CANDIDATES[1], "review": decision("accept", "lexical")}) + "\n")
+    console = Console(record=True, width=150, color_system=None)
+    print_summary(run, console)
+    assert "kept near-duplicate" not in console.export_text()  # no embeddings.jsonl: no line
+    (run / "embeddings.jsonl").write_text(embedding_lines(CANDIDATES))
+    console = Console(record=True, width=150, color_system=None)
+    print_summary(run, console)
+    assert "2 kept paraphrases have a kept near-duplicate in their category (> 0.970)." in console.export_text()

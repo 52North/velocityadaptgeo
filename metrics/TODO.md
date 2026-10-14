@@ -4,7 +4,7 @@
 
 - [ ] Investigate adding a required example to each typological category's sub-types
 - [ ] Further split the judgment calls into individual calls per verdict
-- [ ] Recalculate similarity after overriding a rejected prompt
+- [x] Recalculate similarity after overriding a rejected prompt
 - [ ] Add table view to read all prompts easily
 
 ### Potential

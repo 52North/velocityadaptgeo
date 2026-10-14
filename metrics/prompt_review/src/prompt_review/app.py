@@ -6,6 +6,7 @@ from rich.console import Console
 
 from prompt_review.data import candidate_key, categories, first_config, latest_config, load_candidates, load_decisions, save
 from prompt_review.render import footer_text, render
+from prompt_review.similarity import load_embeddings
 from prompt_review.state import ReviewState
 
 
@@ -16,8 +17,9 @@ def review(run_dir: Path) -> None:
     candidates = load_candidates(run_dir)
     seed_text = first_config(run_dir)["seed"]["text"]
     path = run_dir / "reviewed.jsonl"
-    state = ReviewState(candidates, load_decisions(path))
-    state.threshold = latest_config(run_dir)["config"]["thresholds"]["near_duplicate_sem"]
+    embeddings = load_embeddings(run_dir, candidates)
+    threshold = latest_config(run_dir)["config"]["thresholds"]["near_duplicate_sem"]
+    state = ReviewState(candidates, load_decisions(path), embeddings, threshold)
     category_keys = categories(run_dir, candidates)
     details = False
     console = Console()
@@ -81,4 +83,8 @@ def review(run_dir: Path) -> None:
                 save(path, state)
 
     a, r, u = state.counts()
+    if embeddings is not None and embeddings.warnings:
+        console.print(f"{len(embeddings.warnings)} candidate(s) without a usable stored embedding (no live similarities):", style="yellow")
+        for w in embeddings.warnings:
+            console.print("  " + w)
     console.print(f"Saved {a + r} reviews to {path} ({a} accepted, {r} rejected, {u} unreviewed).")

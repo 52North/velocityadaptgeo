@@ -12,7 +12,8 @@ from rich.table import Table
 from rich.text import Text
 
 from prompt_review.data import candidate_key, categories, latest_config, load_candidates, load_decisions, read_jsonl
-from prompt_review.state import ReviewState, SummaryRow, match_status, summarize
+from prompt_review.similarity import kept_near_duplicates, load_embeddings
+from prompt_review.state import ReviewState, SummaryRow, current_category, kept, match_status, summarize
 
 
 def word_diff(old: str, new: str) -> Text:
@@ -61,22 +62,53 @@ def _match_entry(match: dict | None, candidate: dict, state: "ReviewState", show
     return t
 
 
-def closest_panel(candidate: dict, state: "ReviewState") -> Panel:
-    """Both stored closest matches (closest_match_plan.md), labeled, with the match's current category."""
-    if "closest_accepted" not in candidate:
-        return Panel(Text("not stored; add it with the generator's `prompt-gen backfill-closest <run_id>`", style="dim"),
-                     title="Closest matches", title_align="left")
-    within, any_ = candidate["closest_accepted"], candidate["closest_any"]
+def _matches_grid(within: dict | None, any_: dict | None, candidate: dict, state: "ReviewState", category: str,
+                  empty_within: str, empty_any: str) -> Table:
     grid = Table.grid(padding=(0, 2))
     grid.add_column(style="bold", no_wrap=True)
     grid.add_column(ratio=1)
-    grid.add_row(f"Within the category\n({candidate['category']})",
-                 _match_entry(within, candidate, state, show_current=False, empty="no accepted paraphrase in this category yet"))
+    grid.add_row(f"Within the category\n({category})",
+                 _match_entry(within, candidate, state, show_current=False, empty=empty_within))
     grid.add_row("", "")
     grid.add_row("Compared with all\ncategories",
-                 _match_entry(any_, candidate, state, show_current=True, empty="no accepted paraphrase yet",
+                 _match_entry(any_, candidate, state, show_current=True, empty=empty_any,
                               repeat_text=not (within and any_ and within["key"] == any_["key"])))
-    return Panel(grid, title="Closest matches", title_align="left")
+    return grid
+
+
+def _stored_grid(candidate: dict, state: "ReviewState") -> Table | Text:
+    """The closest matches stored at generation (closest_match_plan.md)."""
+    if "closest_accepted" not in candidate:
+        return Text("not stored; add it with the generator's `prompt-gen backfill-closest <run_id>`", style="dim")
+    return _matches_grid(candidate["closest_accepted"], candidate["closest_any"], candidate, state, candidate["category"],
+                         "no accepted paraphrase in this category yet", "no accepted paraphrase yet")
+
+
+def closest_panel(candidate: dict, state: "ReviewState") -> Panel:
+    """Live closest matches among all other kept paraphrases (review_similarity_plan.md), then the ones
+    stored at generation, which explain the gate's near-duplicate check. Without embeddings, only the
+    stored ones."""
+    live = state.live(candidate)
+    if live is None:
+        if state.embeddings is None:
+            note = "live similarities need embeddings.jsonl; add it with the generator's `prompt-gen backfill-embeddings <run_id>`"
+        else:
+            note = "no usable stored embedding for this candidate; showing the matches at generation only"
+        return Panel(Group(Text(note, style="yellow"), _stored_grid(candidate, state)), title="Closest matches", title_align="left")
+
+    parts = [
+        Text("Now · all other kept paraphrases (your decision, else the gates')", style="bold underline"),
+        _matches_grid(live["within"], live["any"], candidate, state, current_category(candidate, state.decisions),
+                      "no other kept paraphrase in this category", "no other kept paraphrase"),
+        Text(""),
+        Text("At generation · earlier gate-accepted paraphrases only", style="bold underline"),
+    ]
+    stored = (candidate.get("closest_accepted"), candidate.get("closest_any"))
+    if "closest_accepted" in candidate and [m and m["key"] for m in stored] == [m and m["key"] for m in (live["within"], live["any"])]:
+        parts.append(Text("same matches as now", style="dim"))
+    else:
+        parts.append(_stored_grid(candidate, state))
+    return Panel(Group(*parts), title="Closest matches", title_align="left")
 
 
 def _badge(label: str, style: str) -> Text:
@@ -115,6 +147,10 @@ def _body(state: ReviewState, seed_text: str, details: bool) -> Group:
     else:
         moved = f" → {review['category']}" if review["category"] != c["category"] else ""
         header.append_text(_badge(f"review: {review['decision']}{moved}", "black on green" if review["decision"] == "accept" else "black on red"))
+    near = state.near_duplicates().get(key)
+    if near:
+        header.append("  ")
+        header.append_text(_badge(f"kept near-duplicate of {near[0]} ({near[1]:.3f})", "black on yellow"))
 
     info = Table.grid(padding=(0, 2))
     info.add_column(style="bold", no_wrap=True)
@@ -267,6 +303,11 @@ def print_summary(run_dir: Path, console: Console | None = None) -> None:
             f"Manual review overruled the gates on {n} of {reviewed} reviewed candidates: "
             f"{overrules.gate_rejected_accepted} gate-rejected accepted, {overrules.gate_accepted_rejected} gate-accepted rejected."
         )
+    embeddings = load_embeddings(run_dir, candidates)
+    if embeddings is not None:
+        threshold = config["config"]["thresholds"]["near_duplicate_sem"]
+        near = kept_near_duplicates(kept(candidates, decisions), embeddings, threshold)
+        console.print(f"{len(near)} kept paraphrases have a kept near-duplicate in their category (> {threshold:.3f}).")
     errors = len(raw) - len(candidates)
     if errors:
         console.print(f"{errors} generation error(s) without a paraphrase, not counted above.", style="dim")

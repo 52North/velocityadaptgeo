@@ -5,8 +5,10 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from prompt_review.data import candidate_key
+from prompt_review.similarity import Embeddings, closest_in_pool, kept_near_duplicates
 
 BASE_FILTERS = ("all", "passed gates", "rejected by gates", "unreviewed")
+NEAR_DUPLICATE_FILTER = "kept near-duplicates"  # only offered when the run has embeddings
 DEFAULT_FILTER = "passed gates"
 
 
@@ -15,19 +17,59 @@ def reason_group(c: dict) -> str | None:
     return c["reject_reason"].split(":")[0] if c.get("reject_reason") else None
 
 
+def current_category(c: dict, decisions: dict[str, dict]) -> str:
+    """The category of the candidate's manual decision (after a move) if it has one, else the generated one."""
+    review = decisions.get(candidate_key(c))
+    return review["category"] if review else c["category"]
+
+
+def kept(candidates: list[dict], decisions: dict[str, dict]) -> dict[str, str]:
+    """Kept paraphrases, key -> current category: manually accepted ones, plus unreviewed ones the gates
+    accepted. Order follows candidates.jsonl."""
+    out = {}
+    for c in candidates:
+        review = decisions.get(candidate_key(c))
+        if (review["decision"] == "accept") if review else c["accepted"]:
+            out[candidate_key(c)] = current_category(c, decisions)
+    return out
+
+
 class ReviewState:
-    def __init__(self, candidates: list[dict], decisions: dict[str, dict] | None = None):
+    def __init__(self, candidates: list[dict], decisions: dict[str, dict] | None = None,
+                 embeddings: Embeddings | None = None, threshold: float | None = None):
         self.candidates = candidates
         self.decisions = dict(decisions or {})
         self.pending_notes: dict[str, str] = {}  # notes typed before the candidate was decided
         self.by_key = {candidate_key(c): c for c in candidates}
-        self.threshold: float | None = None  # the run's near-duplicate threshold, for the closest-match panel
+        self.embeddings = embeddings  # None: no live similarities, only the stored closest_* fields
+        self.threshold = threshold  # the run's near-duplicate threshold
         reasons = sorted({r for c in candidates if (r := reason_group(c))})
-        self.filters = [*BASE_FILTERS, *(f"reason: {r}" for r in reasons)]
+        live = [NEAR_DUPLICATE_FILTER] if embeddings is not None else []
+        self.filters = [*BASE_FILTERS, *live, *(f"reason: {r}" for r in reasons)]
         self.filter = DEFAULT_FILTER
         self.index = 0  # position within visible()
 
-    def _matches(self, c: dict) -> bool:
+    # --- live similarity (review_similarity_plan.md) ---
+
+    def kept(self) -> dict[str, str]:
+        return kept(self.candidates, self.decisions)
+
+    def live(self, c: dict) -> dict | None:
+        """Closest other kept paraphrase within the candidate's current category and in any category,
+        given the decisions so far. None without embeddings or without a vector for this candidate."""
+        if self.embeddings is None:
+            return None
+        return closest_in_pool(candidate_key(c), current_category(c, self.decisions), self.kept(), self.embeddings, self.by_key)
+
+    def near_duplicates(self) -> dict[str, tuple[str, float]]:
+        """Kept paraphrases with a kept near-duplicate in their category: key -> (other key, similarity)."""
+        if self.embeddings is None or self.threshold is None:
+            return {}
+        return kept_near_duplicates(self.kept(), self.embeddings, self.threshold)
+
+    # --- filters and navigation ---
+
+    def _matches(self, c: dict, near: dict | None = None) -> bool:
         f = self.filter
         if f == "all":
             return True
@@ -37,10 +79,13 @@ class ReviewState:
             return not c["accepted"]
         if f == "unreviewed":
             return candidate_key(c) not in self.decisions
+        if f == NEAR_DUPLICATE_FILTER:
+            return candidate_key(c) in near
         return reason_group(c) == f.removeprefix("reason: ")
 
     def visible(self) -> list[dict]:
-        return [c for c in self.candidates if self._matches(c)]
+        near = self.near_duplicates() if self.filter == NEAR_DUPLICATE_FILTER else None
+        return [c for c in self.candidates if self._matches(c, near)]
 
     def current(self) -> dict | None:
         v = self.visible()

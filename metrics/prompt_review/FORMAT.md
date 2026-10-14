@@ -36,6 +36,20 @@ One JSON object per line, one per generation attempt, in generation order. The k
 | `typology` [{`key`, `name`}] | latest | all categories in order (moves, summary rows) |
 | `categories` | all | fallback for runs without `typology`: the union, `config.json` first |
 
+## `embeddings.jsonl` (generator, read only, optional)
+
+One line per candidate with a paraphrase, appended right after the candidate. Written by `prompt-gen run`, or for older runs by `prompt-gen backfill-embeddings <run_id>`. Without it, the reviewer shows only the stored `closest_*` fields.
+
+| Field | Type | Used for |
+|---|---|---|
+| `key` | str | the candidate's key |
+| `text_sha1` | str | SHA-1 of the candidate's `prompt` (UTF-8); a mismatch means the vector is not used |
+| `vector` | str | base64 of the normalized embedding as little-endian float32 |
+| `dim` | int | vector length |
+| `model` | str | the embedding model (the generator's semantic model, all-mpnet-base-v2) |
+
+From these the reviewer computes live closest matches among all kept paraphrases: a paraphrase is kept when its review decision is accept, or, without a decision, when the gates accepted it; its category is the decision's category (after a move), else the generated one.
+
 ## `reviewed.jsonl` (reviewer, rewritten in full)
 
 One line per reviewed candidate, in `candidates.jsonl` order: the full candidate record plus
