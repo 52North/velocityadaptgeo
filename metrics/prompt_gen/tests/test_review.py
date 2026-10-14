@@ -204,3 +204,66 @@ def test_print_summary_on_a_run_folder(tmp_path):
     assert "2 generation session(s)" in out and "target 2 per category" in out  # latest session's config
     assert "1 generation error(s)" in out
     assert "overruled" not in out
+
+
+# --- closest-match panel -------------------------------------------------------------------------
+
+from rich.console import Console  # noqa: E402
+
+from prompt_gen.review import closest_panel, match_status  # noqa: E402
+
+
+def _match(key, prompt, sem):
+    return {"key": key, "prompt": prompt, "sem": sem}
+
+
+def _panel_text(candidate, state):
+    console = Console(record=True, width=200, color_system=None)
+    console.print(closest_panel(candidate, state))
+    return console.export_text()
+
+
+def test_match_status():
+    s = ReviewState(CANDIDATES)
+    assert match_status("lexical#1", s.by_key, {}) == ("lexical", False, "unreviewed")
+    assert match_status("lexical#1", s.by_key, {"lexical#1": _decision("accept", "lexical")}) == ("lexical", False, "accept")
+    assert match_status("lexical#1", s.by_key, {"lexical#1": _decision("accept", "discourse")}) == ("discourse", True, "accept")
+    assert match_status("lexical#1", s.by_key, {"lexical#1": _decision("reject", "lexical")}) == ("lexical", False, "reject")
+    assert match_status("lexical#99", s.by_key, {}) is None
+
+
+def _with_matches(within, any_):
+    return {**_cand("syntactic", 2), "closest_accepted": within, "closest_any": any_}
+
+
+def test_panel_shows_both_labeled_with_current_category_and_threshold():
+    s = ReviewState(CANDIDATES, {"lexical#3": _decision("accept", "discourse")})
+    s.threshold = 0.97
+    c = _with_matches(_match("syntactic#1", "syntactic 1", 0.95), _match("lexical#3", "lexical 3", 0.99))
+    text = _panel_text(c, s)
+    assert "Within the category" in text and "(syntactic)" in text and "Compared with all" in text
+    assert "syntactic#1 · similarity 0.950 · review: unreviewed" in text           # below threshold: no marker
+    assert "lexical#3 · now in discourse (moved) · similarity 0.990 ▲ over 0.970 · review: accept" in text
+    assert "same paraphrase" not in text
+
+
+def test_panel_moving_the_match_updates_the_current_category():
+    s = ReviewState(CANDIDATES)
+    c = _with_matches(None, _match("lexical#1", "lexical 1", 0.9))
+    assert "now in lexical ·" in _panel_text(c, s)
+    s.decisions["lexical#1"] = _decision("accept", "discourse")  # moved during the review session
+    assert "now in discourse (moved)" in _panel_text(c, s)
+
+
+def test_panel_same_match_is_shown_once_and_empty_matches_have_messages():
+    s = ReviewState(CANDIDATES)
+    m = _match("syntactic#1", "syntactic 1", 0.9)
+    assert "same paraphrase as within the category" in _panel_text(_with_matches(m, m), s)
+    text = _panel_text(_with_matches(None, None), s)
+    assert "no accepted paraphrase in this category yet" in text and "no accepted paraphrase yet" in text
+
+
+def test_panel_without_stored_fields_and_unknown_match():
+    s = ReviewState(CANDIDATES)
+    assert "prompt-gen backfill-closest" in _panel_text(_cand("lexical", 1), s)
+    assert "(not found in this run)" in _panel_text(_with_matches(_match("other#7", "x", 0.5), None), s)

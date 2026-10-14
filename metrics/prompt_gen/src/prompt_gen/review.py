@@ -42,6 +42,8 @@ class ReviewState:
         self.candidates = candidates
         self.decisions = dict(decisions or {})
         self.pending_notes: dict[str, str] = {}  # notes typed before the candidate was decided
+        self.by_key = {candidate_key(c): c for c in candidates}
+        self.threshold: float | None = None  # the run's near-duplicate threshold, for the closest-match panel
         reasons = sorted({r for c in candidates if (r := reason_group(c))})
         self.filters = [*BASE_FILTERS, *(f"reason: {r}" for r in reasons)]
         self.filter = DEFAULT_FILTER
@@ -195,6 +197,71 @@ def word_diff(old: str, new: str) -> Text:
     return text
 
 
+def match_status(key: str, by_key: dict[str, dict], decisions: dict[str, dict]) -> tuple[str, bool, str] | None:
+    """(current category, moved, review status) of a matched candidate, or None if it isn't in the run.
+    The current category is the one of its manual decision when that is an accept (it may have been moved),
+    otherwise the category it was generated for."""
+    c = by_key.get(key)
+    if c is None:
+        return None
+    review = decisions.get(key)
+    if review is None:
+        return c["category"], False, "unreviewed"
+    if review["decision"] == "accept":
+        return review["category"], review["category"] != c["category"], "accept"
+    return c["category"], False, "reject"
+
+
+def _match_entry(match: dict | None, candidate: dict, state: "ReviewState", show_current: bool, empty: str,
+                 repeat_text: bool = True) -> Text:
+    """Meta line (key, current category, similarity, review status), then the match's text and its word
+    diff with the candidate. With repeat_text=False only the meta line (the text is shown above)."""
+    if match is None:
+        return Text(empty, style="dim")
+    t = Text(f"{match['key']} · ")
+    status = match_status(match["key"], state.by_key, state.decisions)
+    if status is None:
+        t.append("(not found in this run) · ", style="yellow")
+    else:
+        current, moved, _ = status
+        if show_current:
+            t.append(f"now in {current}" + (" (moved)" if moved else "") + " · ")
+        elif moved:
+            t.append(f"since moved to {current} · ", style="yellow")
+    over = state.threshold is not None and match["sem"] > state.threshold
+    t.append(f"similarity {match['sem']:.3f}", style="red" if over else "")
+    if over:
+        t.append(f" ▲ over {state.threshold:.3f}", style="red")
+    if status is not None:
+        t.append(" · review: ")
+        t.append(status[2], style={"accept": "green", "reject": "red"}.get(status[2], "dim"))
+    if not repeat_text:
+        t.append("\nsame paraphrase as within the category", style="dim")
+        return t
+    t.append("\n" + match["prompt"])
+    t.append("\ndiff, match → this candidate: ", style="dim")
+    t.append_text(word_diff(match["prompt"], candidate["prompt"]))
+    return t
+
+
+def closest_panel(candidate: dict, state: "ReviewState") -> Panel:
+    """Both stored closest matches (closest_match_plan.md), labeled, with the match's current category."""
+    if "closest_accepted" not in candidate:
+        return Panel(Text("not stored, run `prompt-gen backfill-closest <run_id>`", style="dim"),
+                     title="Closest matches", title_align="left")
+    within, any_ = candidate["closest_accepted"], candidate["closest_any"]
+    grid = Table.grid(padding=(0, 2))
+    grid.add_column(style="bold", no_wrap=True)
+    grid.add_column(ratio=1)
+    grid.add_row(f"Within the category\n({candidate['category']})",
+                 _match_entry(within, candidate, state, show_current=False, empty="no accepted paraphrase in this category yet"))
+    grid.add_row("", "")
+    grid.add_row("Compared with all\ncategories",
+                 _match_entry(any_, candidate, state, show_current=True, empty="no accepted paraphrase yet",
+                              repeat_text=not (within and any_ and within["key"] == any_["key"])))
+    return Panel(grid, title="Closest matches", title_align="left")
+
+
 def _badge(label: str, style: str) -> Text:
     return Text(f" {label} ", style=style)
 
@@ -296,6 +363,7 @@ def _body(state: ReviewState, seed_text: str, details: bool) -> Group:
         info,
     ]
     if details:
+        parts.append(closest_panel(c, state))
         parts.append(Panel(Text(c["reasoning"]), title="Generator plan", title_align="left"))
         if c.get("discarded"):
             drafts = Text()
@@ -460,6 +528,7 @@ def review(run_dir: Path) -> None:
     seed_text = json.loads((run_dir / "config.json").read_text(encoding="utf-8"))["seed"]["text"]
     path = run_dir / "reviewed.jsonl"
     state = ReviewState(candidates, load_decisions(path))
+    state.threshold = _latest_config(run_dir)["config"]["thresholds"]["near_duplicate_sem"]
     categories = [c.key for c in typology.CATEGORIES]
     details = False
     console = Console()
