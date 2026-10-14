@@ -137,3 +137,70 @@ def test_word_diff():
     assert struck.split() == ["Identify", "all", "areas"]
     assert added.split() == ["Locate", "every", "area"]
     assert "in Münster" in t.plain
+
+
+# --- summary -------------------------------------------------------------------------------------
+
+from prompt_gen.review import print_summary, summarize  # noqa: E402
+
+CATS = ["lexical", "syntactic", "discourse"]
+
+
+def _decision(decision, category):
+    return {"decision": decision, "category": category, "note": "", "at": "2026-10-14T09:00:00"}
+
+
+def test_summary_counts_and_moves():
+    candidates = [
+        _cand("lexical", 1),                          # gate accept, review accept
+        _cand("lexical", 2, False, "near_duplicate"),  # gate reject, review accept -> overrule
+        _cand("lexical", 3),                          # gate accept, moved to syntactic
+        _cand("syntactic", 1),                        # gate accept, review reject
+        _cand("syntactic", 2, False, "constraint:target"),  # unreviewed
+        _cand("discourse", 1),                        # gate accept, moved to lexical
+    ]
+    decisions = {
+        "lexical#1": _decision("accept", "lexical"),
+        "lexical#2": _decision("accept", "lexical"),
+        "lexical#3": _decision("accept", "syntactic"),
+        "syntactic#1": _decision("reject", "syntactic"),
+        "discourse#1": _decision("accept", "lexical"),
+    }
+    rows, overrules = summarize(candidates, decisions, CATS)
+    lex, syn, dis = rows
+    assert (lex.generated, lex.gate_accepted, lex.gate_rejected) == (3, 2, 1)
+    assert (lex.review_accepted, lex.review_rejected, lex.unreviewed) == (3, 0, 0)
+    assert (lex.added, lex.subtracted, lex.final) == (1, 1, 3)
+    assert (syn.review_accepted, syn.review_rejected, syn.unreviewed) == (0, 1, 1)
+    assert (syn.added, syn.subtracted, syn.final) == (1, 0, 1)
+    assert (dis.review_accepted, dis.added, dis.subtracted, dis.final) == (1, 0, 1, 0)
+    assert sum(r.added for r in rows) == sum(r.subtracted for r in rows) == 2
+    assert sum(r.final for r in rows) == sum(r.review_accepted for r in rows)
+    assert (overrules.gate_rejected_accepted, overrules.gate_accepted_rejected) == (1, 1)
+
+
+def test_summary_rejected_with_other_category_is_not_a_move():
+    rows, _ = summarize([_cand("lexical", 1)], {"lexical#1": _decision("reject", "syntactic")}, CATS)
+    assert [(r.added, r.subtracted) for r in rows] == [(0, 0), (0, 0), (0, 0)]
+
+
+def test_summary_without_reviews():
+    rows, overrules = summarize(CANDIDATES, {}, ["lexical", "syntactic"])
+    assert [(r.generated, r.unreviewed, r.final) for r in rows] == [(3, 3, 0), (2, 2, 0)]
+    assert (overrules.gate_rejected_accepted, overrules.gate_accepted_rejected) == (0, 0)
+
+
+def test_print_summary_on_a_run_folder(tmp_path):
+    from rich.console import Console
+    run = tmp_path / "run"
+    run.mkdir()
+    (run / "candidates.jsonl").write_text("".join(json.dumps(c) + "\n" for c in CANDIDATES) + json.dumps(
+        {"category": "lexical", "attempt": 9, "prompt": None, "accepted": False, "reject_reason": "generation_error: x"}) + "\n")
+    (run / "config.json").write_text(json.dumps({"n_per_category": 30, "seed": {"id": "s"}}))
+    (run / "config_20261014-090000.json").write_text(json.dumps({"n_per_category": 2, "seed": {"id": "s"}}))
+    console = Console(record=True, width=150, color_system=None)
+    print_summary(run, console)  # no reviewed.jsonl yet
+    out = console.export_text()
+    assert "2 generation session(s)" in out and "target 2 per category" in out  # latest session's config
+    assert "1 generation error(s)" in out
+    assert "overruled" not in out

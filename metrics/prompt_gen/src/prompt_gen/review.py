@@ -7,6 +7,7 @@ candidate, plus a `review` object. candidates.jsonl is only read. reviewed.jsonl
 
 import difflib
 import json
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
@@ -328,6 +329,124 @@ def footer_text(state: ReviewState, prompt: str | None = None) -> Text:
         a, r, u = state.counts(c["category"])
         t.append(f"{c['category']}: {a} accepted · {r} rejected · {u} to go")
     return t
+
+
+# --- summary -----------------------------------------------------------------------------------
+
+
+@dataclass
+class SummaryRow:
+    category: str
+    generated: int = 0
+    gate_accepted: int = 0
+    gate_rejected: int = 0
+    review_accepted: int = 0  # counted under the category the candidate was generated for
+    review_rejected: int = 0
+    unreviewed: int = 0
+    added: int = 0  # accepted in review and moved into this category
+    subtracted: int = 0  # accepted in review and moved out of this category
+
+    @property
+    def final(self) -> int:
+        return self.review_accepted - self.subtracted + self.added
+
+
+@dataclass
+class Overrules:
+    gate_rejected_accepted: int = 0
+    gate_accepted_rejected: int = 0
+
+
+def summarize(candidates: list[dict], decisions: dict[str, dict], categories: list[str]) -> tuple[list[SummaryRow], Overrules]:
+    """Per-category counts for `prompt-gen review --summary`. A move to another category counts as an
+    accept, under the category the candidate was generated for, and as subtracted there / added there."""
+    rows = {key: SummaryRow(key) for key in categories}
+    overrules = Overrules()
+    for c in candidates:
+        row = rows[c["category"]]
+        row.generated += 1
+        if c["accepted"]:
+            row.gate_accepted += 1
+        else:
+            row.gate_rejected += 1
+        review = decisions.get(candidate_key(c))
+        if review is None:
+            row.unreviewed += 1
+            continue
+        if review["decision"] == "accept":
+            row.review_accepted += 1
+            if review["category"] != c["category"]:
+                row.subtracted += 1
+                rows[review["category"]].added += 1
+            if not c["accepted"]:
+                overrules.gate_rejected_accepted += 1
+        else:
+            row.review_rejected += 1
+            if c["accepted"]:
+                overrules.gate_accepted_rejected += 1
+    return list(rows.values()), overrules
+
+
+def _latest_config(run_dir: Path) -> dict:
+    """config.json is the first session; each resumed session adds config_<time>.json."""
+    resumed = sorted(run_dir.glob("config_*.json"))
+    return json.loads((resumed[-1] if resumed else run_dir / "config.json").read_text(encoding="utf-8"))
+
+
+def print_summary(run_dir: Path, console: Console | None = None) -> None:
+    console = console or Console()
+    raw = read_jsonl(run_dir / "candidates.jsonl")
+    candidates = load_candidates(run_dir)
+    decisions = load_decisions(run_dir / "reviewed.jsonl")
+    config = _latest_config(run_dir)
+    target = config["n_per_category"]
+    rows, overrules = summarize(candidates, decisions, [c.key for c in typology.CATEGORIES])
+
+    sessions = 1 + len(list(run_dir.glob("config_*.json")))
+    last = datetime.fromtimestamp((run_dir / "candidates.jsonl").stat().st_mtime)
+    console.print(
+        f"[bold]{run_dir.name}[/]   seed {config['seed']['id']} · {sessions} generation session(s) · "
+        f"last candidate {last:%Y-%m-%d %H:%M} · target {target} per category"
+    )
+
+    table = Table(show_edge=False, pad_edge=False)
+    table.add_column("Category")
+    table.add_column("Generated", justify="right")
+    for name in ("Auto ✓", "Auto ✗", "Review ✓", "Review ✗", "Unreviewed", "Moved in", "Moved out"):
+        table.add_column(name, justify="right")
+    table.add_column("Final", justify="right")
+
+    def cells(r: SummaryRow, bold: bool = False) -> list:
+        final = Text(str(r.final), style="bold green" if r.final >= target and not bold else "bold")
+        return [r.category, str(r.generated), str(r.gate_accepted), str(r.gate_rejected), str(r.review_accepted),
+                str(r.review_rejected), str(r.unreviewed), f"+{r.added}", f"−{r.subtracted}", final]
+
+    for r in rows:
+        table.add_row(*cells(r))
+    total = SummaryRow("Total")
+    for r in rows:
+        for f in ("generated", "gate_accepted", "gate_rejected", "review_accepted", "review_rejected",
+                  "unreviewed", "added", "subtracted"):
+            setattr(total, f, getattr(total, f) + getattr(r, f))
+    table.add_section()
+    table.add_row(*cells(total, bold=True), style="bold")
+    console.print(table)
+
+    console.print(
+        "Auto = automated gates; Review = manual review, counted under the category generated for "
+        "(a move counts as an accept); Final = Review ✓ − moved out + moved in.",
+        style="dim",
+    )
+    reviewed = sum(r.review_accepted + r.review_rejected for r in rows)
+    if reviewed:
+        n = overrules.gate_rejected_accepted + overrules.gate_accepted_rejected
+        console.print(
+            f"Manual review overruled the gates on {n} of {reviewed} reviewed candidates: "
+            f"{overrules.gate_rejected_accepted} gate-rejected accepted, {overrules.gate_accepted_rejected} gate-accepted rejected."
+        )
+    errors = len(raw) - len(candidates)
+    if errors:
+        console.print(f"{errors} generation error(s) without a paraphrase, not counted above.", style="dim")
 
 
 # --- key loop ----------------------------------------------------------------------------------

@@ -96,10 +96,13 @@ def cmd_rejudge(args) -> None:
 
 
 def cmd_review(args) -> None:
-    from prompt_gen.review import review
+    from prompt_gen.review import print_summary, review
     from prompt_gen.run import OUT_DIR
 
-    review(OUT_DIR / args.run_id)
+    if args.summary:
+        print_summary(OUT_DIR / args.run_id)
+    else:
+        review(OUT_DIR / args.run_id)
 
 
 def main() -> None:
@@ -127,6 +130,7 @@ def main() -> None:
 
     p = sub.add_parser("review", help="review a run's candidates (full screen; decisions go to reviewed.jsonl)")
     p.add_argument("run_id")
+    p.add_argument("--summary", action="store_true", help="print per-category counts (generated, automated, manual, moves) and exit")
     p.set_defaults(func=cmd_review)
 
     args = parser.parse_args()
