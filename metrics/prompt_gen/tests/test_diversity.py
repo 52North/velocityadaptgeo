@@ -126,3 +126,89 @@ def test_feedback_retries_are_capped_and_the_last_draft_is_returned():
     result = _generate(g, lambda text: "too similar")
     assert result.paraphrase == "dup three"  # the caller rejects it without calling the judge
     assert len(result.discarded) == 2
+
+
+# --- closest matches -----------------------------------------------------------------------------
+
+import json  # noqa: E402
+
+from prompt_gen.run import backfill_closest, closest, closest_matches  # noqa: E402
+
+
+def word_overlap(text, others):
+    """Similarity = share of words in common, enough to rank matches deterministically."""
+    a = set(text.split())
+    return [len(a & set(o.split())) / len(a | set(o.split())) for o in others]
+
+
+def _c(category, attempt, prompt, accepted=True):
+    return {"category": category, "attempt": attempt, "prompt": prompt, "accepted": accepted}
+
+
+def test_closest_picks_most_similar_and_skips_missing_prompts():
+    pool = [_c("lexical", 1, "a b c"), _c("lexical", 2, None, False), _c("syntactic", 1, "a b x y")]
+    best = closest("a b c d", pool, word_overlap)
+    assert best == {"key": "lexical#1", "prompt": "a b c", "sem": 0.75}
+    assert closest("a b", [], word_overlap) is None
+    assert closest("a b", [_c("lexical", 1, None)], word_overlap) is None
+
+
+def test_closest_matches_same_category_vs_any_category_never_rejected():
+    earlier = [
+        _c("lexical", 1, "a b c d e", accepted=True),
+        _c("lexical", 2, "a b c d z", accepted=False),   # identical, but rejected: never a match
+        _c("syntactic", 1, "a b c d z y", accepted=True),  # closer than lexical#1, but other category
+    ]
+    m = closest_matches("a b c d z", "lexical", earlier, word_overlap)
+    assert m["closest_accepted"]["key"] == "lexical#1"
+    assert m["closest_any"]["key"] == "syntactic#1"
+    assert closest_matches("a", "discourse", earlier, word_overlap)["closest_accepted"] is None
+
+
+def _write_run(tmp_path, records):
+    run = tmp_path / "run"
+    run.mkdir()
+    (run / "candidates.jsonl").write_text("".join(json.dumps(r) + "\n" for r in records), encoding="utf-8")
+    return run
+
+
+def test_backfill_keeps_backup_and_fields(tmp_path):
+    records = [
+        {**_c("lexical", 1, "a b c"), "max_sem_same_category": None, "judge": {"x": 1}},
+        {**_c("lexical", 2, "a b c d", accepted=False), "reject_reason": "near_duplicate", "max_sem_same_category": 0.75},
+        {"category": "lexical", "attempt": 3, "prompt": None, "accepted": False, "reject_reason": "generation_error: x"},
+    ]
+    run = _write_run(tmp_path, records)
+    original = (run / "candidates.jsonl").read_bytes()
+    report = backfill_closest(run, word_overlap)
+    assert (run / "candidates.jsonl.bak").read_bytes() == original
+    assert report == {"records": 3, "with_prompt": 2, "mismatches": [], "backup": "created"}
+    new = [json.loads(line) for line in (run / "candidates.jsonl").read_text().splitlines()]
+    for old, rec in zip(records, new):
+        assert {k: v for k, v in rec.items() if not k.startswith("closest_")} == old
+    assert new[0]["closest_accepted"] is None and new[0]["closest_any"] is None
+    assert new[1]["closest_accepted"] == {"key": "lexical#1", "prompt": "a b c", "sem": 0.75}
+    assert "closest_any" not in new[2]
+
+
+def test_backfill_reports_mismatch(tmp_path):
+    run = _write_run(tmp_path, [_c("lexical", 1, "a b c"), {**_c("lexical", 2, "a b c d"), "max_sem_same_category": 0.5}])
+    assert backfill_closest(run, word_overlap)["mismatches"] == ["lexical#2: stored 0.5, recomputed 0.75"]
+
+
+def test_backfill_again_keeps_the_original_backup(tmp_path):
+    run = _write_run(tmp_path, [_c("lexical", 1, "a b c"), _c("lexical", 2, "a b c d")])
+    original = (run / "candidates.jsonl").read_bytes()
+    backfill_closest(run, word_overlap)
+    assert backfill_closest(run, word_overlap)["backup"] == "kept"  # only closest_* differ from the backup
+    assert (run / "candidates.jsonl.bak").read_bytes() == original
+
+
+def test_backfill_refuses_when_other_fields_changed_since_the_backup(tmp_path):
+    import pytest
+    run = _write_run(tmp_path, [_c("lexical", 1, "a b c")])
+    backfill_closest(run, word_overlap)
+    with (run / "candidates.jsonl").open("a") as f:  # e.g. a run appended a candidate since
+        f.write(json.dumps(_c("lexical", 2, "x y")) + "\n")
+    with pytest.raises(FileExistsError):
+        backfill_closest(run, word_overlap)

@@ -1,4 +1,4 @@
-"""prompt-gen run | check-judge | rejudge | review"""
+"""prompt-gen run | check-judge | rejudge | backfill-closest | review"""
 
 import argparse
 import os
@@ -95,6 +95,30 @@ def cmd_rejudge(args) -> None:
               f"grammatical={j.grammatical}, failed={j.failed_ids}, {j.durations_s}", flush=True)
 
 
+def cmd_backfill_closest(args) -> None:
+    from sentence_transformers import SentenceTransformer
+
+    from prompt_gen import config
+    from prompt_gen.run import OUT_DIR, backfill_closest
+    from prompt_gen.scoring import Embedder
+
+    cfg = config.load()
+    embedder = Embedder(SentenceTransformer(cfg.embeddings.semantic, device="cpu"))
+
+    def similarities(text, others):
+        vectors = embedder.embed([text, *others])
+        return [float(x) for x in vectors[1:] @ vectors[0]]
+
+    run_dir = OUT_DIR / args.run_id
+    report = backfill_closest(run_dir, similarities)
+    action = "Backed up to" if report["backup"] == "created" else "Kept the existing original backup"
+    print(f"{action} {run_dir / 'candidates.jsonl.bak'}; added closest matches to "
+          f"{report['with_prompt']} of {report['records']} records.")
+    print(f"Mismatches with the stored max_sem_same_category: {len(report['mismatches'])}")
+    for m in report["mismatches"]:
+        print("  " + m)
+
+
 def cmd_review(args) -> None:
     from prompt_gen.review import print_summary, review
     from prompt_gen.run import OUT_DIR
@@ -127,6 +151,10 @@ def main() -> None:
     p.add_argument("--limit", type=int, default=10)
     p.add_argument("--contains", help="only candidates whose prompt contains this text")
     p.set_defaults(func=cmd_rejudge)
+
+    p = sub.add_parser("backfill-closest", help="add each candidate's closest matches to an existing run (keeps candidates.jsonl.bak)")
+    p.add_argument("run_id")
+    p.set_defaults(func=cmd_backfill_closest)
 
     p = sub.add_parser("review", help="review a run's candidates (full screen; decisions go to reviewed.jsonl)")
     p.add_argument("run_id")

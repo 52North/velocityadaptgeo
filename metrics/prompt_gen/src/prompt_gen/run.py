@@ -98,6 +98,75 @@ def gate(cfg: Config, category: str, scores: dict, judgement) -> str | None:
     return None
 
 
+def closest(text: str, pool: list[dict], similarities) -> dict | None:
+    """The record in `pool` whose paraphrase is most similar to `text`, as {"key", "prompt", "sem"},
+    or None if no record in the pool has a paraphrase."""
+    pool = [r for r in pool if r.get("prompt")]
+    if not pool:
+        return None
+    sims = similarities(text, [r["prompt"] for r in pool])
+    best = max(range(len(sims)), key=sims.__getitem__)
+    r = pool[best]
+    return {"key": f"{r['category']}#{r['attempt']}", "prompt": r["prompt"], "sem": float(sims[best])}
+
+
+def closest_matches(text: str, category: str, earlier: list[dict], similarities) -> dict:
+    """Both stored matches for a candidate, from the records written before it (in file order).
+
+    closest_accepted: the closest gate-accepted paraphrase of the same category, i.e. what the
+    near-duplicate gate compared against; its sem equals max_sem_same_category.
+    closest_any: the closest gate-accepted paraphrase of any category. Rejected candidates are left out
+    of both: they will not be used, so being close to one doesn't matter."""
+    accepted = [r for r in earlier if r.get("accepted")]
+    return {
+        "closest_accepted": closest(text, [r for r in accepted if r["category"] == category], similarities),
+        "closest_any": closest(text, accepted, similarities),
+    }
+
+
+def backfill_closest(run_dir: Path, similarities) -> dict:
+    """Add closest_accepted / closest_any to every record of an existing run.
+
+    Copies candidates.jsonl to candidates.jsonl.bak first, then writes the new candidates.jsonl via a
+    temp file. If a .bak already exists (an earlier backfill), it is kept as the untouched original, and
+    the backfill only goes ahead if the current file differs from it in nothing but the closest_* fields,
+    which are recomputed anyway. Must not run while a run is appending to the file.
+    Returns counts, including mismatches between closest_accepted.sem and max_sem_same_category."""
+    path = run_dir / "candidates.jsonl"
+    backup = run_dir / "candidates.jsonl.bak"
+    records = read_jsonl(path)
+    if backup.exists():
+        def strip(rs):
+            return [{k: v for k, v in r.items() if not k.startswith("closest_")} for r in rs]
+        if strip(records) != strip(read_jsonl(backup)):
+            raise FileExistsError(
+                f"{backup} exists and candidates.jsonl differs from it in more than the closest_* fields; "
+                "move the backup away first so it is never overwritten"
+            )
+        backup_status = "kept"
+    else:
+        shutil.copy2(path, backup)
+        backup_status = "created"
+
+    mismatches = []
+    for i, r in enumerate(records):
+        if not r.get("prompt"):
+            continue
+        r.update(closest_matches(r["prompt"], r["category"], records[:i], similarities))
+        stored = r.get("max_sem_same_category")
+        found = r["closest_accepted"]["sem"] if r["closest_accepted"] else None
+        if (stored is None) != (found is None) or (stored is not None and abs(stored - found) > 1e-4):
+            mismatches.append(f"{r['category']}#{r['attempt']}: stored {stored}, recomputed {found}")
+
+    tmp = path.with_suffix(".jsonl.tmp")
+    with tmp.open("w", encoding="utf-8") as f:
+        for r in records:
+            f.write(json.dumps(r, ensure_ascii=False) + "\n")
+    tmp.replace(path)
+    return {"records": len(records), "with_prompt": sum(1 for r in records if r.get("prompt")), "mismatches": mismatches,
+            "backup": backup_status}
+
+
 class WrittenList:
     """Paraphrases already written in one category, shown to the generator so it doesn't repeat itself.
 
@@ -215,6 +284,7 @@ class Run:
                         eval_tokens=g.eval_tokens,
                         discarded=g.discarded,
                     )
+                    generation.update(closest_matches(g.paraphrase, key, history, scorer.semantic_similarities))
                     stem_result = stems.check(self.seed.text, g.paraphrase) if key in self.cfg.thresholds.stem_check else None
                     if stem_result is not None:
                         generation["stems"] = {"new": list(stem_result.new), "missing": list(stem_result.missing)}
