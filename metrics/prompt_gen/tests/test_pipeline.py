@@ -89,3 +89,16 @@ def test_stem_reason():
     assert stem_reason(stems.StemCheck((), ())) is None
     assert stem_reason(stems.StemCheck(("generate", "routes"), ())) == "stem:generate,routes"
     assert stem_reason(stems.StemCheck(("generate",), ("identify",))) == "stem:generate|missing:identify"
+
+
+def test_config_snapshot_lists_the_whole_typology(cfg, tmp_path, monkeypatch):
+    """prompt-review reads the categories from the snapshot instead of importing typology."""
+    from prompt_gen import run
+    monkeypatch.setattr(run, "_model_digest", lambda host, model: None)
+    monkeypatch.setattr(run.shutil, "copytree", lambda *a, **k: None)
+    r = run.Run.__new__(run.Run)
+    r.cfg, r.seed, r.run_id, r.dir = cfg, seeds.load("muenster_green_300m"), "test", tmp_path
+    r._write_config(["syntactic"], 30)
+    snapshot = json.loads((tmp_path / "config.json").read_text(encoding="utf-8"))
+    assert snapshot["categories"] == ["syntactic"]
+    assert snapshot["typology"] == [{"key": c.key, "name": c.name} for c in typology.CATEGORIES]

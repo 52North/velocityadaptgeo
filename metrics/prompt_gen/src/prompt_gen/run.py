@@ -214,6 +214,8 @@ class Run:
             "git_commit": _git_commit(),
             "seed": asdict(self.seed),
             "categories": categories,
+            # All categories in order, so prompt-review knows them without importing this package.
+            "typology": [{"key": c.key, "name": c.name} for c in typology.CATEGORIES],
             "n_per_category": n,
             "config": self.cfg.model_dump(),
             "model_digests": {

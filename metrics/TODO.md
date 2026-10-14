@@ -9,7 +9,7 @@
 
 ### Potential
 
-- [ ] Split reviewer code into its own module for cleaner separation of responsibilties
+- [x] Split reviewer code into its own module for cleaner separation of responsibilties
 
 ## Workflow generation and evaluation
 
