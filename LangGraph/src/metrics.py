@@ -57,7 +57,8 @@ class RunTracker(BaseCallbackHandler):
 
     run_inline = True
 
-    def __init__(self, thread_id: str):
+    def __init__(self, thread_id: str, path: str = METRICS_FILE):
+        self.path = path
         self.thread_id, self.root, self.calls, self.searches, self.nodes, self.open = thread_id, None, [], [], [], {}
         self.candidates: list[dict] = []
 
@@ -133,8 +134,8 @@ class RunTracker(BaseCallbackHandler):
             "max_visible_tools": max((c["visible_tools"] for c in self.calls), default=0),
             "cost_usd": round(total("cost_usd"), 6), "nodes": nodes, "searches": self.searches, "calls": self.calls,
         }
-        os.makedirs(os.path.dirname(METRICS_FILE) or ".", exist_ok=True)
-        with open(METRICS_FILE, "a", encoding="utf-8") as f:
+        os.makedirs(os.path.dirname(self.path) or ".", exist_ok=True)
+        with open(self.path, "a", encoding="utf-8") as f:
             f.write(json.dumps(record) + "\n")
 
 
