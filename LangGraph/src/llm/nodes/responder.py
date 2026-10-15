@@ -99,7 +99,7 @@ Write the final answer to the user now."""),
 
     try:
         reply = await llm.ainvoke(prompt)
-        answer = reply.content
+        answer = reply.text
     except Exception as exc:
         logger.exception("Responder failed to generate final answer")
         answer = f"I ran into an error while preparing the final answer: {exc}"

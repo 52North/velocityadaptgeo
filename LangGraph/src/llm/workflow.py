@@ -31,11 +31,13 @@ WORKFLOW_RECURSION_LIMIT = int(os.environ.get(
 DEFAULT_WORKFLOW_CONFIG = {"recursion_limit": WORKFLOW_RECURSION_LIMIT}
 
 llm = ChatAnthropic(
-    model=os.environ.get("ANTHROPIC_MODEL", "claude-haiku-4-5-20251001"),
-    temperature=float(os.environ.get("ANTHROPIC_TEMPERATURE", "0")),
+    model=os.environ.get("ANTHROPIC_MODEL", "claude-haiku-5-5"),
     api_key=os.environ.get("ANTHROPIC_API_KEY"),
     streaming=True,
     max_retries=int(os.environ.get("ANTHROPIC_MAX_RETRIES", "3")),
+    # Thinking is on by default and counts toward max_tokens; temperature is not settable on Haiku 5.5.
+    max_tokens=int(os.environ.get("ANTHROPIC_MAX_TOKENS", "16000")),
+    effort=os.environ.get("ANTHROPIC_EFFORT", "medium"),
 )
 
 graph = StateGraph(WorkflowState)

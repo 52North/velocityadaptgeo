@@ -47,7 +47,7 @@ async def chat_node(state: WorkflowState, llm) -> dict:
 
     try:
         reply = await llm.ainvoke(prompt)
-        answer = reply.content
+        answer = reply.text
     except Exception as exc:
         logger.exception("Chat node failed to generate a reply")
         answer = f"I ran into an error while replying: {exc}"

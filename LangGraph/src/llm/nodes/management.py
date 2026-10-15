@@ -239,7 +239,7 @@ async def management_node(state: WorkflowState, llm) -> dict:
     ]
 
     resp = await llm.ainvoke(prompt)
-    data = parse_llm_json(resp.content) or {}
+    data = parse_llm_json(resp.text) or {}
 
     next_action = data.get("next_action", "done")
     if next_action not in ALLOWED_ACTIONS:

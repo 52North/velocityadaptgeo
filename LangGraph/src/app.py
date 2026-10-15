@@ -97,7 +97,7 @@ async def chat(req: ChatRequest):
     result = await compiled_graph.ainvoke(turn_input(req.prompt), config={**turn_config(thread_id), "callbacks": [RunTracker(thread_id)]})
 
     # Last message is the assistant reply
-    assistant_message = result["messages"][-1].content
+    assistant_message = result["messages"][-1].text
 
     pretty_print_messages(result["messages"])
 

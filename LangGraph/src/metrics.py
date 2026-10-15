@@ -21,7 +21,7 @@ VARIANT = os.getenv("WORKFLOW_VARIANT", "pgvector")
 # "<model>=<input>,<output>;..." in USD per million tokens; models absent here report cost_usd=None.
 PRICES_PER_MTOK = {
     m: (float(i), float(o))
-    for m, _, io in (e.partition("=") for e in os.getenv("MODEL_PRICES_PER_MTOK", "claude-haiku-4-5-20251001=1.0,5.0").split(";") if e.strip())
+    for m, _, io in (e.partition("=") for e in os.getenv("MODEL_PRICES_PER_MTOK", "claude-haiku-5-5=0.10,0.50").split(";") if e.strip())
     for i, _, o in [io.partition(",")]
 }
 

@@ -48,10 +48,10 @@ services:
         required: false
     environment:
       <<: [*postgres, *ollama, *pygeoapi]
-      ANTHROPIC_MODEL: claude-haiku-4-5-20251001
-      ANTHROPIC_TEMPERATURE: "0"
+      ANTHROPIC_MODEL: claude-haiku-5-5
+      ANTHROPIC_EFFORT: medium
       ANTHROPIC_MAX_RETRIES: "3"
-      MODEL_PRICES_PER_MTOK: claude-haiku-4-5-20251001=1.0,5.0
+      MODEL_PRICES_PER_MTOK: claude-haiku-5-5=0.10,0.50
       MAX_WORKFLOW_ITERATIONS: "16"
       MAX_MAP_FEATURES: "3000"
       HTTP_TIMEOUT: "30"

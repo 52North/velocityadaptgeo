@@ -148,7 +148,7 @@ async def build_one(run_dir: Path, key: str, prompt: str) -> dict:
         "workflow_graph": state.get("workflow_graph") or {"nodes": [], "edges": []},
         "last_validation": state.get("last_validation"),
         "unmet_capabilities": state.get("unmet_capabilities") or [],
-        "response": state["messages"][-1].content if state.get("messages") else None,
+        "response": state["messages"][-1].text if state.get("messages") else None,
     }
 
 
