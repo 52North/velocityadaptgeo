@@ -7,19 +7,15 @@ class PointCloudSegmentationProcessor(BaseProcessor):
     def __init__(self, processor_def):
         process_metadata = {
             "id": "pointcloud-ground-segmentation",
-            "title": (
-                "LiDAR Point-Cloud Ground Classification and Semantic "
-                "Segmentation via Progressive Morphological Filtering"
-            ),
+            "title": "LiDAR Point-Cloud Ground and Object Classification",
             "description": (
-                "Classifies an unstructured LiDAR point cloud into ground and "
-                "non-ground returns using a progressive morphological filter "
-                "with adaptively-scaled structuring elements, then assigns "
-                "semantic class labels (vegetation, building, water, bare-earth) "
-                "to the non-ground returns via a rule-based decision tree over "
-                "local height, intensity and return-density descriptors, and "
-                "derives a bare-earth digital terrain model from the resulting "
-                "ground surface."
+                "Classifies a LiDAR point cloud into ground and non-ground points (ground "
+                "filtering or point-cloud segmentation) with a progressive morphological "
+                "filter, then labels the non-ground points as vegetation, building or "
+                "water from their height, intensity and density. Heights are in metres in "
+                "the point cloud's own projected CRS. Also returns a bare-earth digital "
+                "terrain model built from the ground points. Prepares elevation data - "
+                "for example a terrain model for flood modelling or tree heights."
             ),
             "keywords": [
                 "point-cloud",
@@ -28,38 +24,44 @@ class PointCloudSegmentationProcessor(BaseProcessor):
                 "semantic-segmentation",
                 "digital-terrain-model",
                 "morphological-filter",
+                "elevation",
             ],
             "inputs": {
                 "pointCloud": {
-                    "title": "Reference to the input LiDAR point cloud (COPC/LAZ URI)",
+                    "title": "LiDAR point cloud (COPC or LAZ URI)",
                     "schema": {"type": "object"},
                     "required": True,
                 },
                 "structuringElementSchedule": {
-                    "title": "Progressive sequence of morphological structuring-element window sizes",
-                    "schema": {"type": "array"},
+                    "title": "Increasing filter window sizes, in metres",
+                    "schema": {"type": "array", "items": {"type": "number"}},
                     "required": False,
                 },
                 "slopeToleranceCurve": {
-                    "title": "Slope-dependent elevation-difference tolerance curve used by the ground filter",
+                    "title": "Slope-dependent height tolerance used by the ground filter",
                     "schema": {"type": "object"},
                     "required": False,
                 },
                 "semanticClasses": {
-                    "title": "Subset of semantic classes to assign to non-ground returns",
-                    "schema": {"type": "array"},
+                    "title": "Classes to assign to non-ground points, e.g. ['vegetation', 'building']",
+                    "schema": {"type": "array", "items": {"type": "string"}},
                     "required": False,
                 },
             },
             "outputs": {
                 "classifiedPointCloud": {
-                    "title": "Point cloud with per-point ground/semantic class labels",
+                    "title": "Point cloud with a ground or object class label on every point",
                     "schema": {"type": "object"},
                 },
                 "terrainModel": {
-                    "title": "Bare-earth digital terrain model derived from classified ground returns",
+                    "title": "Bare-earth digital terrain model built from the ground points (raster)",
                     "schema": {"type": "object"},
                 },
+            },
+            "example": {
+                "inputs": {
+                    "pointCloud": {"href": "https://example.org/tile.copc.laz"},
+                }
             },
         }
 

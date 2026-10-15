@@ -26,12 +26,11 @@ class MultiRingBufferProcessor(BaseProcessor):
             "description": (
                 "Builds concentric distance bands (a multi-ring or graduated buffer) "
                 "around a set of features by dissolving a buffer at each threshold "
-                "distance and subtracting the next smaller one, so the output rings "
-                "tile the surroundings without overlapping. Distances are measured in "
-                "metres in a local UTM projection. Also returns the dissolved outer "
-                "coverage, the area within reach of any feature. Shows how far away "
-                "each location is from the nearest feature in graduated zones - for "
-                "example how close residents are to the nearest park or cool refuge."
+                "distance and subtracting the next smaller one, so the rings tile the "
+                "surroundings without overlapping. Distances are measured in metres in a "
+                "local UTM projection. Also returns the dissolved outer coverage. Shows "
+                "how far each location is from the nearest feature in graduated zones - "
+                "for example how close residents are to the nearest park or cool refuge."
             ),
             "keywords": [
                 "buffer",
@@ -58,11 +57,11 @@ class MultiRingBufferProcessor(BaseProcessor):
             },
             "outputs": {
                 "rings": {
-                    "title": "Non-overlapping distance bands, each with innerDistance/outerDistance/label",
+                    "title": "Non-overlapping distance bands, each with innerDistance/outerDistance/label (GeoJSON FeatureCollection, EPSG:4326)",
                     "schema": {"type": "object"},
                 },
                 "coverage": {
-                    "title": "Dissolved area within the largest distance of any feature",
+                    "title": "Dissolved area within the largest distance of any feature (GeoJSON, EPSG:4326)",
                     "schema": {"type": "object"},
                 },
                 "maxDistance": {

@@ -7,39 +7,38 @@ class RasterPansharpeningProcessor(BaseProcessor):
     def __init__(self, processor_def):
         process_metadata = {
             "id": "raster-pansharpening",
-            "title": (
-                "Multi-Resolution Pansharpening, Radiometric Harmonisation and "
-                "Overview Pyramid Generation"
-            ),
+            "title": "Pansharpening of Satellite Imagery",
             "description": (
-                "Fuses a high-resolution panchromatic band with a "
-                "lower-resolution multispectral image using a "
-                "component-substitution or multi-resolution-analysis "
-                "pansharpening algorithm, harmonises radiometry against a "
-                "reference reflectance profile, and materialises a "
-                "cloud-optimised, power-of-two overview pyramid of the fused "
-                "product."
+                "Sharpens a lower-resolution multispectral satellite image with a "
+                "high-resolution panchromatic band (pansharpening or image fusion), using "
+                "Brovey, Gram-Schmidt or wavelet methods, and harmonises its radiometry "
+                "against a reference reflectance profile. The result keeps the "
+                "panchromatic band's pixel size and CRS and is written as a "
+                "cloud-optimised GeoTIFF with overviews. Also returns per-band "
+                "fusion-quality metrics. Produces sharper colour imagery - for example to "
+                "map buildings or tree crowns."
             ),
             "keywords": [
                 "pansharpening",
+                "image-fusion",
                 "remote-sensing",
-                "raster-fusion",
+                "satellite-imagery",
                 "radiometric-harmonisation",
                 "cloud-optimised-geotiff",
             ],
             "inputs": {
                 "panchromaticBand": {
-                    "title": "High-resolution panchromatic band reference (COG URI)",
+                    "title": "High-resolution panchromatic band (COG URI)",
                     "schema": {"type": "object"},
                     "required": True,
                 },
                 "multispectralBands": {
-                    "title": "Lower-resolution multispectral band stack reference (COG URI)",
+                    "title": "Lower-resolution multispectral band stack (COG URI)",
                     "schema": {"type": "object"},
                     "required": True,
                 },
                 "pansharpeningMethod": {
-                    "title": "Fusion algorithm ('Brovey', 'Gram-Schmidt', 'wavelet-MRA')",
+                    "title": "Fusion method, e.g. 'Brovey', 'Gram-Schmidt' or 'wavelet-MRA'",
                     "schema": {"type": "string"},
                     "required": False,
                 },
@@ -51,13 +50,19 @@ class RasterPansharpeningProcessor(BaseProcessor):
             },
             "outputs": {
                 "fusedImage": {
-                    "title": "Pansharpened, radiometrically-harmonised image with generated overview pyramid",
+                    "title": "Pansharpened image with overviews (cloud-optimised GeoTIFF)",
                     "schema": {"type": "object"},
                 },
                 "qualityMetrics": {
                     "title": "Per-band spectral and spatial fusion-quality metrics (e.g. ERGAS, SAM)",
                     "schema": {"type": "object"},
                 },
+            },
+            "example": {
+                "inputs": {
+                    "panchromaticBand": {"href": "https://example.org/pan.tif"},
+                    "multispectralBands": {"href": "https://example.org/ms.tif"},
+                }
             },
         }
 

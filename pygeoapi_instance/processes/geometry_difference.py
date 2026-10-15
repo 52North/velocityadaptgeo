@@ -34,19 +34,19 @@ class GeometryDifferenceProcessor(BaseProcessor):
             ],
             "inputs": {
                 "subject": {
-                    "title": "Geometry to subtract from, e.g. the study-area boundary (GeoJSON)",
+                    "title": "Geometry to subtract from, e.g. the study-area boundary (GeoJSON, EPSG:4326)",
                     "schema": {"type": "object"},
                     "required": True,
                 },
                 "subtrahend": {
-                    "title": "Geometry to remove, e.g. the area within reach (GeoJSON)",
+                    "title": "Geometry to remove, e.g. the area within reach (GeoJSON, EPSG:4326)",
                     "schema": {"type": "object"},
                     "required": True,
                 },
             },
             "outputs": {
                 "result": {
-                    "title": "The part of the subject not covered by the subtrahend",
+                    "title": "The part of the subject not covered by the subtrahend (GeoJSON, EPSG:4326)",
                     "schema": {"type": "object"},
                 },
                 "areaSqm": {

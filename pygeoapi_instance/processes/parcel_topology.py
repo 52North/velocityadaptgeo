@@ -7,54 +7,62 @@ class ParcelTopologyProcessor(BaseProcessor):
     def __init__(self, processor_def):
         process_metadata = {
             "id": "parcel-topology-validation",
-            "title": "Cadastral Parcel Topology Validation and Rule-Based Auto-Correction",
+            "title": "Cadastral Parcel Topology Validation and Repair",
             "description": (
-                "Validates a set of cadastral parcel polygons against a "
-                "configurable rule set (no self-intersection, no gaps beyond a "
-                "tolerance, no unexplained overlaps, shared-boundary snapping), "
-                "reports every violation with its geometric location, and "
-                "optionally applies a rule-ordered auto-correction pass "
-                "(snapping, gap-closing, sliver removal) while preserving parcel "
-                "area within a declared tolerance."
+                "Checks cadastral parcel polygons for topology errors (topology "
+                "validation or geometry repair) - self-intersections, gaps and overlaps "
+                "between neighbours, shared boundaries that do not meet - and reports "
+                "each violation with its location. Can then fix them by snapping, closing "
+                "gaps and removing slivers while keeping each parcel's area within a "
+                "tolerance. Tolerances are in metres. Cleans a land register before "
+                "analysis - for example before merging parcel data from two surveys."
             ),
             "keywords": [
                 "cadastre",
+                "land-parcels",
                 "topology-validation",
                 "geometry-repair",
+                "quality-control",
                 "sliver-removal",
-                "land-parcels",
+                "snapping",
             ],
             "inputs": {
                 "parcels": {
-                    "title": "Cadastral parcel polygons to validate (GeoJSON FeatureCollection of Polygons)",
+                    "title": "Parcel polygons to validate (GeoJSON FeatureCollection, EPSG:4326)",
                     "schema": {"type": "object"},
                     "required": True,
                 },
                 "toleranceRules": {
-                    "title": "Named tolerance thresholds for gap, overlap and snapping checks (metres)",
+                    "title": "Named gap, overlap and snapping tolerances, in metres",
                     "schema": {"type": "object"},
                     "required": False,
                 },
                 "autoCorrect": {
-                    "title": "Whether to apply the rule-ordered auto-correction pass after validation",
-                    "schema": {"type": "string"},
+                    "title": "Whether to apply the auto-correction pass after validation",
+                    "schema": {"type": "boolean"},
                     "required": False,
                 },
                 "areaChangeTolerance": {
-                    "title": "Maximum permitted relative parcel-area change introduced by auto-correction",
+                    "title": "Largest relative parcel-area change auto-correction may introduce, e.g. 0.01",
                     "schema": {"type": "number"},
                     "required": False,
                 },
             },
             "outputs": {
                 "violations": {
-                    "title": "List of detected topology violations with rule id and violating geometry",
+                    "title": "Detected topology violations, each with its rule id and violating geometry",
                     "schema": {"type": "object"},
                 },
                 "correctedParcels": {
-                    "title": "Auto-corrected parcel geometries, present only if autoCorrect was requested",
+                    "title": "Corrected parcels (GeoJSON FeatureCollection, EPSG:4326), only when autoCorrect is set",
                     "schema": {"type": "object"},
                 },
+            },
+            "example": {
+                "inputs": {
+                    "parcels": {"type": "FeatureCollection", "features": []},
+                    "autoCorrect": False,
+                }
             },
         }
 

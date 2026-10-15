@@ -65,7 +65,7 @@ class OsmWaterBodiesProcessor(OsmGreenAreasProcessor):
             },
             "outputs": {
                 "features": {
-                    "title": "Open-water polygons (GeoJSON FeatureCollection)",
+                    "title": "Open-water polygons (GeoJSON FeatureCollection, EPSG:4326)",
                     "schema": {"type": "object"},
                 },
                 "count": {

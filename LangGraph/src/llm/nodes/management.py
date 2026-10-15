@@ -72,6 +72,12 @@ Rules:
   the first search is for geocoding, and only the next one for buffering.
 - Build the graph one capability at a time and only answer "done" once every
   capability the goal needs is present as a node.
+- Write each search query from the USER GOAL, not from the catalog. Name the operation
+  and the form of result the goal asks for ("noise zones every 50 m out to 200 m from
+  a motorway", not just "a buffer"), plus the inputs it works on. Do NOT copy
+  implementation details - projections, algorithms, libraries, data sources - from the
+  descriptions in RECENT CANDIDATE PROCESSES: those describe how one process works,
+  and a query that demands them rejects every other process that does the same job.
 - The graph is never discarded. It only ever grows or is edited: a new message
   extends or corrects what is already there ("now also buffer that result", "drop the
   second step"). If the user moves on to a different task, add its capabilities to the

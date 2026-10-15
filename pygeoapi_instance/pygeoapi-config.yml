@@ -261,7 +261,7 @@ resources:
           type: object
       autoCorrect:
         schema:
-          type: string
+          type: boolean
       areaChangeTolerance:
         schema:
           type: number

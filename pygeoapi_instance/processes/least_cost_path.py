@@ -7,35 +7,40 @@ class LeastCostPathProcessor(BaseProcessor):
     def __init__(self, processor_def):
         process_metadata = {
             "id": "least-cost-path-routing",
-            "title": "Anisotropic Least-Cost Path Routing over a Multi-Factor Friction Surface",
+            "title": "Least-Cost Path Routing over a Friction Surface",
             "description": (
-                "Computes the minimum cumulative-cost path between an origin and "
-                "destination through a rasterised friction surface synthesised from "
-                "slope, land-cover resistance, and directional (anisotropic) "
-                "traversal penalties, using an 8-connected Dijkstra/A* accumulation "
-                "graph with optional barrier masking."
+                "Finds the cheapest route between an origin and a destination across open "
+                "terrain (least-cost path or cost-distance routing), accumulating a "
+                "travel cost built from slope, land-cover resistance and "
+                "direction-dependent uphill penalties over an 8-connected grid, with "
+                "optional impassable barriers. Costs accumulate on the friction raster's "
+                "own grid. Returns the path with its cumulative cost per vertex, and the "
+                "total cost. Plans cross-country routes - for example a hiking trail or a "
+                "pipeline corridor."
             ),
             "keywords": [
                 "routing",
                 "least-cost-path",
-                "anisotropic",
+                "cost-distance",
                 "friction-surface",
+                "anisotropic",
                 "graph-traversal",
                 "terrain-analysis",
+                "corridor-planning",
             ],
             "inputs": {
                 "origin": {
-                    "title": "Origin point (GeoJSON Point, source CRS)",
+                    "title": "Origin point (GeoJSON Point, EPSG:4326)",
                     "schema": {"type": "object"},
                     "required": True,
                 },
                 "destination": {
-                    "title": "Destination point (GeoJSON Point, source CRS)",
+                    "title": "Destination point (GeoJSON Point, EPSG:4326)",
                     "schema": {"type": "object"},
                     "required": True,
                 },
                 "frictionSurface": {
-                    "title": "Reference to friction raster (COG/Zarr URI) or inline cost grid",
+                    "title": "Friction raster (COG or Zarr URI) or inline cost grid",
                     "schema": {"type": "object"},
                     "required": True,
                 },
@@ -48,20 +53,27 @@ class LeastCostPathProcessor(BaseProcessor):
                     "required": False,
                 },
                 "barrierMask": {
-                    "title": "Optional vector mask of impassable cells (GeoJSON Polygon/MultiPolygon)",
+                    "title": "Impassable areas to route around (GeoJSON Polygon or MultiPolygon, EPSG:4326)",
                     "schema": {"type": "object"},
                     "required": False,
                 },
             },
             "outputs": {
                 "path": {
-                    "title": "Least-cost path (GeoJSON LineString) with per-vertex cumulative cost",
+                    "title": "Least-cost path with per-vertex cumulative cost (GeoJSON LineString, EPSG:4326)",
                     "schema": {"type": "object"},
                 },
                 "cumulativeCost": {
                     "title": "Total accumulated cost of the resolved path",
                     "schema": {"type": "number"},
                 },
+            },
+            "example": {
+                "inputs": {
+                    "origin": {"type": "Point", "coordinates": [7.60, 51.95]},
+                    "destination": {"type": "Point", "coordinates": [7.68, 51.99]},
+                    "frictionSurface": {"href": "https://example.org/friction.tif"},
+                }
             },
         }
 

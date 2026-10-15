@@ -28,15 +28,13 @@ class CoreAreaMetricsProcessor(BaseProcessor):
             "id": "core-area-metrics",
             "title": "Interior Core Area and Shape Compactness of Polygons",
             "description": (
-                "Measures how much genuine interior each polygon has, as opposed to "
-                "edge. Erodes every feature inward by an edge width in metres, in a "
-                "local UTM projection, to obtain its core - the part far enough from the "
-                "boundary to be unaffected by what surrounds it - and reports the core "
-                "area, the core's share of the total, and the Polsby-Popper compactness "
-                "of the outline. Distinguishes a broad, sheltered patch from a long thin "
-                "strip of the same area: a narrow treeline offers little deep shade, "
-                "while a compact grove has a cool interior. Returns both the eroded core "
-                "geometries and the original features annotated with their metrics."
+                "Measures how much genuine interior each polygon has, as opposed to edge. "
+                "Erodes every feature inward by an edge width, measured in metres in a "
+                "local UTM projection, to obtain its core, and reports the core area, the "
+                "core's share of the total and the Polsby-Popper compactness of the "
+                "outline. Returns the eroded cores and the input features annotated with "
+                "their metrics. Tells a broad, sheltered patch from a thin strip of the "
+                "same area - for example a compact, cool grove from a narrow treeline."
             ),
             "keywords": [
                 "core-area",
@@ -65,7 +63,7 @@ class CoreAreaMetricsProcessor(BaseProcessor):
             },
             "outputs": {
                 "cores": {
-                    "title": "Eroded interior cores of the features that have one",
+                    "title": "Eroded interior cores of the features that have one (GeoJSON FeatureCollection, EPSG:4326)",
                     "schema": {"type": "object"},
                 },
                 "features": {

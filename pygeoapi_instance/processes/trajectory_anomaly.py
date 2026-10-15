@@ -7,18 +7,16 @@ class TrajectoryAnomalyProcessor(BaseProcessor):
     def __init__(self, processor_def):
         process_metadata = {
             "id": "trajectory-anomaly-detection",
-            "title": (
-                "Spatiotemporal Anomaly and Behavioural Change-Point Detection in "
-                "Moving-Object Trajectory Streams"
-            ),
+            "title": "Anomaly Detection in Moving-Object Tracks",
             "description": (
-                "Segments a stream of moving-object position reports (AIS, GPS, "
-                "ADS-B) into stop/move episodes, extracts kinematic features "
-                "(speed, heading-change, sinuosity), and flags trajectories whose "
-                "local density or kinematic profile deviates from a learned "
-                "baseline via density-based clustering and change-point "
-                "statistics, surfacing candidate anomalies such as loitering, "
-                "course deviation or rendezvous."
+                "Flags unusual behaviour in the tracks of ships, vehicles or aircraft "
+                "(trajectory anomaly detection) by splitting AIS, GPS or ADS-B position "
+                "reports into stops and moves, deriving speed, heading change and "
+                "sinuosity, and comparing them with a learned baseline through density "
+                "clustering and change-point statistics. Distances are in metres, "
+                "durations in seconds. Returns the anomalous segments with type and "
+                "confidence, and the stop and move episodes. Spots loitering or course "
+                "deviations at sea."
             ),
             "keywords": [
                 "trajectory-analysis",
@@ -26,42 +24,46 @@ class TrajectoryAnomalyProcessor(BaseProcessor):
                 "moving-objects",
                 "change-point-detection",
                 "AIS",
+                "GPS",
                 "density-clustering",
+                "maritime-surveillance",
             ],
             "inputs": {
                 "trajectoryStream": {
-                    "title": (
-                        "Time-ordered moving-object position reports (GeoJSON "
-                        "FeatureCollection of Points with timestamp/id properties)"
-                    ),
+                    "title": "Time-ordered position reports with timestamp and id (GeoJSON FeatureCollection, EPSG:4326)",
                     "schema": {"type": "object"},
                     "required": True,
                 },
                 "baselineProfile": {
-                    "title": "Reference to a previously learned baseline kinematic/density profile",
+                    "title": "Previously learned baseline profile of normal movement",
                     "schema": {"type": "object"},
                     "required": False,
                 },
                 "clusteringEpsilon": {
-                    "title": "Spatial neighbourhood radius (metres) used by the density-based clustering step",
+                    "title": "Neighbourhood radius for density clustering, in metres",
                     "schema": {"type": "number"},
                     "required": False,
                 },
                 "minEpisodeDuration": {
-                    "title": "Minimum duration (seconds) for a stop episode to be considered significant",
+                    "title": "Shortest stop episode to keep, in seconds",
                     "schema": {"type": "number"},
                     "required": False,
                 },
             },
             "outputs": {
                 "anomalies": {
-                    "title": "Flagged trajectory segments with anomaly type and confidence score",
+                    "title": "Anomalous track segments with anomaly type and confidence (GeoJSON FeatureCollection, EPSG:4326)",
                     "schema": {"type": "object"},
                 },
                 "episodes": {
-                    "title": "Extracted stop/move episode segmentation of the input trajectories",
+                    "title": "Stop and move episodes of the input tracks (GeoJSON FeatureCollection, EPSG:4326)",
                     "schema": {"type": "object"},
                 },
+            },
+            "example": {
+                "inputs": {
+                    "trajectoryStream": {"type": "FeatureCollection", "features": []},
+                }
             },
         }
 

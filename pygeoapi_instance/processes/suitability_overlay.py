@@ -7,38 +7,37 @@ class SuitabilityOverlayProcessor(BaseProcessor):
     def __init__(self, processor_def):
         process_metadata = {
             "id": "multicriteria-suitability-overlay",
-            "title": (
-                "Multi-Criteria Weighted-Overlay Suitability Analysis with "
-                "Analytic-Hierarchy-Process Weighting"
-            ),
+            "title": "Multi-Criteria Site Suitability Overlay",
             "description": (
-                "Derives a normalised site-suitability surface by reclassifying an "
-                "arbitrary set of input raster or vector criteria onto a common "
-                "ordinal scale, deriving criterion weights from a pairwise "
-                "Analytic Hierarchy Process (AHP) comparison matrix, and combining "
-                "the weighted layers through a configurable overlay operator "
-                "(weighted-linear-combination, ordered-weighted-average, or fuzzy-AND)."
+                "Scores every location for how well it suits a purpose (site suitability "
+                "or weighted-overlay analysis) by rescaling several criterion layers to a "
+                "common scale, weighting them from a pairwise Analytic Hierarchy Process "
+                "(AHP) comparison, and combining them by weighted sum, ordered weighted "
+                "average or fuzzy AND. Layers are combined on one grid in their shared "
+                "projected CRS. Returns a 0-1 suitability surface and the derived "
+                "weights. Ranks candidate sites - for example where to place a wind farm."
             ),
             "keywords": [
                 "site-suitability",
+                "weighted-overlay",
                 "multi-criteria-decision-analysis",
                 "AHP",
-                "weighted-overlay",
                 "land-use-planning",
+                "site-selection",
             ],
             "inputs": {
                 "criteriaLayers": {
-                    "title": "Set of criterion layers, each with a raster/vector reference and a reclassification ramp",
-                    "schema": {"type": "array"},
+                    "title": "Criterion layers, each a raster or vector reference with a reclassification ramp",
+                    "schema": {"type": "array", "items": {"type": "object"}},
                     "required": True,
                 },
                 "pairwiseComparisonMatrix": {
-                    "title": "Pairwise AHP comparison matrix used to derive normalised criterion weights",
+                    "title": "Pairwise AHP comparison matrix the criterion weights are derived from",
                     "schema": {"type": "object"},
                     "required": True,
                 },
                 "overlayOperator": {
-                    "title": "Combination operator applied across weighted criteria ('WLC', 'OWA', 'fuzzy-AND')",
+                    "title": "Combination operator, e.g. 'WLC', 'OWA' or 'fuzzy-AND'",
                     "schema": {"type": "string"},
                     "required": False,
                 },
@@ -50,13 +49,19 @@ class SuitabilityOverlayProcessor(BaseProcessor):
             },
             "outputs": {
                 "suitabilitySurface": {
-                    "title": "Normalised suitability surface (0-1) as a georeferenced raster",
+                    "title": "Suitability surface from 0 to 1 (raster)",
                     "schema": {"type": "object"},
                 },
                 "derivedWeights": {
                     "title": "Criterion weights derived from the AHP eigenvector solution",
                     "schema": {"type": "object"},
                 },
+            },
+            "example": {
+                "inputs": {
+                    "criteriaLayers": [],
+                    "pairwiseComparisonMatrix": {},
+                }
             },
         }
 

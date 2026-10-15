@@ -7,59 +7,68 @@ class MultimodalIsochroneProcessor(BaseProcessor):
     def __init__(self, processor_def):
         process_metadata = {
             "id": "multimodal-isochrone",
-            "title": "Multimodal Isochrone Generation across Combined Walk, Cycle and Scheduled-Transit Networks",
+            "title": "Walk, Cycle and Transit Travel-Time Isochrones",
             "description": (
-                "Builds a time-expanded multimodal graph that couples a "
-                "pedestrian/cycling street network with a scheduled-transit "
-                "timetable (GTFS-style stop times, transfers and headways), "
-                "executes a multi-criteria time-dependent shortest-path expansion "
-                "from a departure point and time, and contours the "
-                "reachable-in-time frontier into isochrone polygons at one or "
-                "more travel-time thresholds."
+                "Maps the area reachable from a departure point within given travel times "
+                "(isochrones or travel-time catchments) by walking, cycling and scheduled "
+                "public transit, over the street network and a GTFS-style timetable. "
+                "Travel times are in minutes along the network, not straight-line "
+                "distance. Returns one reachable-area polygon per time threshold and the "
+                "transit stops reached. Measures real accessibility - for example which "
+                "schools a district reaches within 30 minutes by bus."
             ),
             "keywords": [
                 "isochrone",
+                "travel-time",
+                "accessibility-analysis",
                 "multimodal-routing",
                 "time-dependent-routing",
+                "public-transit",
                 "GTFS",
-                "accessibility-analysis",
             ],
             "inputs": {
                 "origin": {
-                    "title": "Departure location (GeoJSON Point)",
+                    "title": "Departure location (GeoJSON Point, EPSG:4326)",
                     "schema": {"type": "object"},
                     "required": True,
                 },
                 "departureTime": {
-                    "title": "Departure timestamp used to enter the time-expanded transit graph",
+                    "title": "Departure time (ISO-8601 timestamp)",
                     "schema": {"type": "string"},
                     "required": True,
                 },
                 "travelTimeThresholds": {
-                    "title": "Travel-time cutoffs at which isochrone contours are generated (minutes)",
-                    "schema": {"type": "array"},
+                    "title": "Travel-time cutoffs in minutes, one isochrone each",
+                    "schema": {"type": "array", "items": {"type": "number"}},
                     "required": True,
                 },
                 "transitTimetable": {
-                    "title": "Reference to the scheduled-transit timetable feed (GTFS-style)",
+                    "title": "Transit timetable feed (GTFS URI)",
                     "schema": {"type": "object"},
                     "required": False,
                 },
                 "modalWeights": {
-                    "title": "Relative preference weights applied to walk, cycle and transit legs during path expansion",
+                    "title": "Relative preference weights for walk, cycle and transit legs",
                     "schema": {"type": "object"},
                     "required": False,
                 },
             },
             "outputs": {
                 "isochrones": {
-                    "title": "Reachable-in-time frontier polygons, one per travel-time threshold",
+                    "title": "Reachable-area polygons, one per travel-time threshold (GeoJSON FeatureCollection, EPSG:4326)",
                     "schema": {"type": "object"},
                 },
                 "reachedStops": {
-                    "title": "Transit stops/nodes captured within each isochrone threshold",
+                    "title": "Transit stops reached within each threshold (GeoJSON FeatureCollection, EPSG:4326)",
                     "schema": {"type": "object"},
                 },
+            },
+            "example": {
+                "inputs": {
+                    "origin": {"type": "Point", "coordinates": [7.6261, 51.9607]},
+                    "departureTime": "2026-07-01T08:00:00Z",
+                    "travelTimeThresholds": [10, 20, 30],
+                }
             },
         }
 

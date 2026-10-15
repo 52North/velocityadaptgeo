@@ -30,9 +30,16 @@ concrete node in the user's workflow graph.
 
 Rules:
 - You judge ONE capability at a time: the one in CAPABILITY SEARCHED FOR. The user goal
-  is given only as context for wiring and input values. A candidate that performs the
-  searched capability belongs in the graph even though it does not, on its own, satisfy
-  the whole goal - the goal is built up over several turns, one capability per turn.
+  is given as context for wiring, input values, and choosing between candidates (see
+  below). A candidate that performs the searched capability belongs in the graph even
+  though it does not, on its own, satisfy the whole goal - the goal is built up over
+  several turns, one capability per turn.
+- Judge the core operation of the capability - what it turns which input into - not
+  every detail of its wording. A candidate that performs that operation performs the
+  capability even if its description does not repeat an incidental detail of the query,
+  such as the projection used for metric distances or a particular algorithm. Refuse
+  only when the operation itself is different or missing, not because a description is
+  shorter or worded differently than the query.
 - Decide whether any candidate performs THAT capability. The candidates are the nearest
   vector matches, NOT a guarantee of fitness: the search always returns something, even
   when nothing in the catalog performs the requested operation. If none of them performs
@@ -48,6 +55,10 @@ Rules:
   the goal. It does NOT abandon the goal - the remaining capabilities are still built.
 - Otherwise choose exactly one candidate from the list given - whichever best performs
   the searched capability - and copy its process_id and server_url exactly as given.
+- When more than one candidate performs the capability, choose the one whose result
+  best fits the USER GOAL. For example, if the goal asks for noise zones every 50 m
+  from a road, a process that returns several distance bands fits better than one that
+  returns a single buffer, even if the query only says "buffer".
 - Prefer a candidate that adds a capability the graph does not have yet. Never pick a
   candidate that is already present as a node in the current graph.
 - Wiring is required whenever it is possible: if an existing node produces what this
@@ -109,7 +120,7 @@ async def auto_build_node(state: WorkflowState, llm) -> dict:
         HumanMessage(content=f"""CAPABILITY SEARCHED FOR (judge the candidates against THIS):
 {capability or "(unknown)"}
 
-USER GOAL (context only - the graph is built one capability per turn):
+USER GOAL (context for wiring, input values and choosing between matching candidates - the graph is built one capability per turn):
 {latest_user or "(unknown)"}
 
 CANDIDATE PROCESSES:

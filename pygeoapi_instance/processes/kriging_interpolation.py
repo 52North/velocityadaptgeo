@@ -7,37 +7,41 @@ class KrigingInterpolationProcessor(BaseProcessor):
     def __init__(self, processor_def):
         process_metadata = {
             "id": "bayesian-spatiotemporal-kriging",
-            "title": "Bayesian Spatiotemporal Kriging Interpolation for Sparse Sensor Networks",
+            "title": "Spatiotemporal Kriging of Sparse Sensor Readings",
             "description": (
-                "Fits a hierarchical Bayesian variogram model jointly across space "
-                "and time to interpolate a continuous field (e.g. air quality, soil "
-                "moisture) from irregularly-sampled, gap-afflicted sensor "
-                "observations, returning posterior mean and credible-interval "
-                "surfaces at arbitrary query geometries and timestamps."
+                "Interpolates a continuous field such as air quality or soil moisture "
+                "from scattered, gappy sensor readings (spatiotemporal or Bayesian "
+                "kriging), fitting a variogram jointly across space and time. Distances "
+                "are measured in metres in a local UTM projection. Returns the estimated "
+                "mean field at the query geometry and timestamps, with credible-interval "
+                "bounds on it. Fills the gaps between monitoring stations - for example "
+                "estimating hourly air pollution across a city from a handful of sensors."
             ),
             "keywords": [
                 "interpolation",
                 "kriging",
+                "spatial-interpolation",
                 "bayesian",
                 "spatiotemporal",
                 "geostatistics",
                 "sensor-network",
                 "uncertainty-quantification",
+                "air-quality",
             ],
             "inputs": {
                 "observations": {
-                    "title": "Sensor observation collection (GeoJSON FeatureCollection with timestamp + value properties)",
+                    "title": "Sensor readings with timestamp and value properties (GeoJSON FeatureCollection, EPSG:4326)",
                     "schema": {"type": "object"},
                     "required": True,
                 },
                 "queryGeometry": {
-                    "title": "Geometry defining the interpolation domain (Point, LineString, Polygon or Grid)",
+                    "title": "Points, line or area to evaluate the field at (GeoJSON, EPSG:4326)",
                     "schema": {"type": "object"},
                     "required": True,
                 },
                 "targetTimestamps": {
-                    "title": "ISO-8601 timestamps at which the posterior field should be evaluated",
-                    "schema": {"type": "array"},
+                    "title": "ISO-8601 timestamps to evaluate the field at",
+                    "schema": {"type": "array", "items": {"type": "string"}},
                     "required": True,
                 },
                 "variogramModel": {
@@ -49,20 +53,27 @@ class KrigingInterpolationProcessor(BaseProcessor):
                     "required": False,
                 },
                 "credibleInterval": {
-                    "title": "Width of the posterior credible interval to report (e.g. 0.95)",
+                    "title": "Width of the credible interval to report, e.g. 0.95",
                     "schema": {"type": "number"},
                     "required": False,
                 },
             },
             "outputs": {
                 "posteriorMean": {
-                    "title": "Interpolated posterior mean field",
+                    "title": "Interpolated mean field at the query geometry and timestamps",
                     "schema": {"type": "object"},
                 },
                 "posteriorUncertainty": {
-                    "title": "Per-cell credible-interval bounds of the posterior field",
+                    "title": "Lower and upper credible-interval bounds of the field",
                     "schema": {"type": "object"},
                 },
+            },
+            "example": {
+                "inputs": {
+                    "observations": {"type": "FeatureCollection", "features": []},
+                    "queryGeometry": {"type": "Point", "coordinates": [7.6261, 51.9607]},
+                    "targetTimestamps": ["2026-07-01T14:00:00Z"],
+                }
             },
         }
 

@@ -77,7 +77,7 @@ class OsmGreenAreasProcessor(BaseProcessor):
             },
             "outputs": {
                 "features": {
-                    "title": "Matching land-cover polygons (GeoJSON FeatureCollection)",
+                    "title": "Matching land-cover polygons (GeoJSON FeatureCollection, EPSG:4326)",
                     "schema": {"type": "object"},
                 },
                 "count": {
