@@ -255,3 +255,58 @@ def test_visible_cache_follows_direct_decision_changes():
     assert len(s.visible()) == 5
     s.decisions["lexical#1"] = decision("accept", "lexical")  # changed without decide()
     assert "lexical#1" not in keys(s.visible())
+
+
+# --- accepted/rejected filter (review_accepted_filter_plan.md) ---
+
+
+def test_status_follows_the_current_decision():
+    s = ReviewState(
+        CANDIDATES,
+        {
+            "lexical#1": decision("reject", "lexical"),  # gate-accepted, rejected
+            "lexical#2": decision("accept", "lexical"),  # gate-rejected, accepted
+            "syntactic#2": decision("accept", "lexical"),  # moved: counts as accept
+        },
+    )
+    s.filter = "all"
+    s.status = "currently accepted"
+    accepted = keys(s.visible())
+    assert accepted == ["lexical#2", "lexical#3", "syntactic#2"]
+    s.status = "currently rejected"
+    rejected = keys(s.visible())
+    assert rejected == ["lexical#1", "syntactic#1"]
+    assert sorted(accepted + rejected) == sorted(keys(CANDIDATES))  # a partition
+
+
+def test_status_combines_with_the_filter():
+    s = ReviewState(CANDIDATES, {"lexical#2": decision("accept", "lexical")})
+    s.filter, s.status = "rejected by gates", "currently accepted"
+    assert keys(s.visible()) == ["lexical#2"]  # gate rejections overruled in review
+    assert s.filter_label() == "rejected by gates · currently accepted"
+    s.status = "any"
+    assert s.filter_label() == "rejected by gates"
+
+
+def test_cycle_status_wraps_and_keeps_current_when_possible():
+    s = ReviewState(CANDIDATES)
+    s.filter = "all"
+    s.move(2)  # lexical#3, gate-accepted
+    s.cycle_status()
+    assert s.status == "currently accepted" and current_key(s) == "lexical#3"
+    s.cycle_status()
+    assert s.status == "currently rejected" and s.index == 0
+    s.cycle_status()
+    assert s.status == "any"
+
+
+def test_deciding_under_currently_accepted_removes_the_candidate():
+    s = ReviewState(CANDIDATES)
+    s.filter, s.status = "all", "currently accepted"
+    s.decide("reject")  # lexical#1 leaves the filter, lands on the next
+    assert "lexical#1" not in keys(s.visible()) and current_key(s) == "lexical#3"
+    s.filter, s.status = "all", "currently accepted"
+    s.decisions["lexical#2"] = decision("accept", "lexical")
+    assert s.go_to("lexical#2")
+    s.clear()  # undo the overrule: gate-rejected again
+    assert "lexical#2" not in keys(s.visible())

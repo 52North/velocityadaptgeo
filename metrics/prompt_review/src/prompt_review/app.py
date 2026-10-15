@@ -30,7 +30,7 @@ from prompt_review.render import (
 from prompt_review.similarity import load_embeddings
 from prompt_review.state import ReviewState
 
-LIST_HELP = "↑/↓ PgUp/PgDn move · Enter open · a accept · r reject · u undo · f filter · s sort · q quit"
+LIST_HELP = "↑/↓ PgUp/PgDn move · Enter open · a accept · r reject · u undo · f filter · k accepted/rejected · s sort · q quit"
 
 
 class NoteScreen(ModalScreen[str | None]):
@@ -91,6 +91,7 @@ class ListScreen(Screen):
         Binding("r", "decide('reject')", "reject"),
         Binding("u", "undo", "undo"),
         Binding("f", "filter", "filter"),
+        Binding("k", "status", "accepted/rejected"),
         Binding("s", "sort", "sort"),
         Binding("q", "app.quit", "quit"),
         Binding("escape", "app.quit", "quit", show=False),
@@ -169,7 +170,7 @@ class ListScreen(Screen):
         source = "live" if s.embeddings is not None else "at generation"
         self.query_one("#list-header", Static).update(
             f"[b]{self.app.run_name}[/b]   {a + r}/{len(s.candidates)} reviewed ({a} accepted, {r} rejected) · "
-            f"filter: {s.filter} ({len(s.visible())}) · sort: {s.sort} · similarity: {source}"
+            f"filter: {s.filter_label()} ({len(s.visible())}) · sort: {s.sort} · similarity: {source}"
         )
 
     def on_data_table_row_highlighted(self, event: DataTable.RowHighlighted) -> None:
@@ -199,6 +200,10 @@ class ListScreen(Screen):
         self.state.cycle_filter()
         self.refresh_rows()
 
+    def action_status(self) -> None:
+        self.state.cycle_status()
+        self.refresh_rows()
+
     def action_sort(self) -> None:
         self.state.cycle_sort()
         self.refresh_rows()
@@ -219,6 +224,7 @@ class ReviewScreen(Screen):
         Binding("g", "next_unreviewed", "unreviewed"),
         Binding("d", "details", "details"),
         Binding("f", "filter", "filter"),
+        Binding("k", "status", "accepted/rejected"),
         Binding("s", "sort", "sort"),
         Binding("escape", "app.pop_screen", "list"),
         Binding("q", "app.quit", "quit"),
@@ -277,6 +283,10 @@ class ReviewScreen(Screen):
 
     def action_filter(self) -> None:
         self.state.cycle_filter()
+        self.show()
+
+    def action_status(self) -> None:
+        self.state.cycle_status()
         self.show()
 
     def action_sort(self) -> None:

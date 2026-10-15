@@ -12,6 +12,8 @@ NEAR_DUPLICATE_FILTER = (
     "kept near-duplicates"  # only offered when the run has embeddings
 )
 DEFAULT_FILTER = "passed gates"
+# Second filter on top of the first: the current decision (manual, else the gates'), see is_kept().
+STATUSES = ("any", "currently accepted", "currently rejected")
 SORTS = ("file order", "similarity", "category")
 
 
@@ -26,15 +28,21 @@ def current_category(c: dict, decisions: dict[str, dict]) -> str:
     return review["category"] if review else c["category"]
 
 
+def is_kept(c: dict, decisions: dict[str, dict]) -> bool:
+    """Currently accepted: the manual decision is accept (a move is an accept), or there is none and the
+    gates accepted it."""
+    review = decisions.get(candidate_key(c))
+    return (review["decision"] == "accept") if review else c["accepted"]
+
+
 def kept(candidates: list[dict], decisions: dict[str, dict]) -> dict[str, str]:
     """Kept paraphrases, key -> current category: manually accepted ones, plus unreviewed ones the gates
     accepted. Order follows candidates.jsonl."""
-    out = {}
-    for c in candidates:
-        review = decisions.get(candidate_key(c))
-        if (review["decision"] == "accept") if review else c["accepted"]:
-            out[candidate_key(c)] = current_category(c, decisions)
-    return out
+    return {
+        candidate_key(c): current_category(c, decisions)
+        for c in candidates
+        if is_kept(c, decisions)
+    }
 
 
 class ReviewState:
@@ -63,6 +71,7 @@ class ReviewState:
         live = [NEAR_DUPLICATE_FILTER] if embeddings is not None else []
         self.filters = [*BASE_FILTERS, *live, *(f"reason: {r}" for r in reasons)]
         self.filter = DEFAULT_FILTER
+        self.status = STATUSES[0]
         self.sort = SORTS[0]
         # Category order for sorting; the run's typology order when given.
         self.categories = list(
@@ -135,7 +144,15 @@ class ReviewState:
 
     # --- filters and navigation ---
 
+    def filter_label(self) -> str:
+        """The filter and, when set, the status filter, for headers and messages."""
+        return self.filter + (f" · {self.status}" if self.status != "any" else "")
+
     def _matches(self, c: dict, near: dict | None = None) -> bool:
+        if self.status != "any" and is_kept(c, self.decisions) != (
+            self.status == "currently accepted"
+        ):
+            return False
         f = self.filter
         if f == "all":
             return True
@@ -173,7 +190,9 @@ class ReviewState:
             return v
 
         return self._cached(
-            "visible", (self.filter, self.sort, self._decisions_fingerprint()), compute
+            "visible",
+            (self.filter, self.status, self.sort, self._decisions_fingerprint()),
+            compute,
         )
 
     def current(self) -> dict | None:
@@ -268,6 +287,14 @@ class ReviewState:
             self.filter = self.filters[
                 (self.filters.index(self.filter) + 1) % len(self.filters)
             ]
+
+        self._keep_current(change)
+
+    def cycle_status(self) -> None:
+        """Any, currently accepted, currently rejected; combines with the filter."""
+
+        def change():
+            self.status = STATUSES[(STATUSES.index(self.status) + 1) % len(STATUSES)]
 
         self._keep_current(change)
 

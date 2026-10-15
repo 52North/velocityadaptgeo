@@ -28,6 +28,7 @@ List:
 | a / r | accept / reject, then move on |
 | u | undo the decision |
 | f | cycle the filter |
+| k | cycle the accepted/rejected filter: any, currently accepted, currently rejected |
 | s | cycle the sort: file order, similarity (most similar first), category |
 | q / Esc | quit |
 
@@ -44,9 +45,11 @@ Review page:
 | g | next unreviewed |
 | d | details: closest matches, generator plan, discarded drafts, judge output |
 | ↑ / ↓, PgUp / PgDn | scroll the page |
-| f / s | cycle the filter / sort |
+| f / k / s | cycle the filter / accepted/rejected filter / sort |
 | Esc | back to the list |
 | q | quit |
 
 Filters: all, passed gates (the default), rejected by gates, unreviewed, kept near-duplicates (with embeddings), one per reject reason.
+
+The accepted/rejected filter (`k`) applies on top of them: **any** (the default), **currently accepted** or **currently rejected**. Currently accepted means accepted in review (a move to another category counts), or not reviewed yet and accepted by the gates; the paraphrases that would be used if the review stopped now. For example "rejected by gates · currently accepted" lists the gate rejections overruled in review.
 

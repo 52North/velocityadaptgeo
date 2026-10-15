@@ -204,3 +204,29 @@ def test_works_without_embeddings(tmp_path):
 
     sort, has_filter = _drive(app, steps)
     assert sort == "similarity" and not has_filter
+
+
+def test_status_key_in_the_list_and_on_the_review_page(tmp_path):
+    run = _run(tmp_path)
+    app = build_app(run)
+
+    async def steps(pilot):
+        await pilot.press("k")  # passed gates · currently accepted: all three
+        await pilot.pause()
+        table = app.screen.query_one(DataTable)
+        before = [k.value for k in table.rows]
+        await pilot.press("r")  # reject lexical#1: leaves the list
+        await pilot.pause()
+        after = [k.value for k in table.rows]
+        await pilot.press("enter", "k")  # currently rejected, on the review page
+        await pilot.pause()
+        on_page = app.state.status, [current_key(app.state)]
+        await pilot.press("escape")
+        await pilot.pause()
+        return before, after, on_page, [k.value for k in table.rows]
+
+    before, after, on_page, rejected_rows = _drive(app, steps)
+    assert before == ["lexical#1", "lexical#3", "syntactic#2"]
+    assert after == ["lexical#3", "syntactic#2"]
+    assert on_page == ("currently rejected", ["lexical#1"])
+    assert rejected_rows == ["lexical#1"]

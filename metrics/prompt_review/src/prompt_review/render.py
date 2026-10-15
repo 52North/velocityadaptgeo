@@ -190,7 +190,7 @@ def _body(state: ReviewState, seed_text: str, details: bool) -> Group:
     if c is None:
         return Group(
             Text(
-                f"No candidates match the filter '{state.filter}'. Press f to change it, q to quit."
+                f"No candidates match the filter '{state.filter_label()}'. Press f or k to change it, q to quit."
             )
         )
 
@@ -203,8 +203,8 @@ def _body(state: ReviewState, seed_text: str, details: bool) -> Group:
     )
     header.append("   ")
     header.append(f"{c['category']}", style="bold")
-    header.append(f" · attempt {c['attempt']} · filter: {state.filter}")
-    if state.filter != "all":
+    header.append(f" · attempt {c['attempt']} · filter: {state.filter_label()}")
+    if state.filter != "all" or state.status != "any":
         header.append(f" ({state.index + 1}/{len(visible)})")
     header.append("   ")
     header.append_text(
@@ -357,7 +357,7 @@ def _body(state: ReviewState, seed_text: str, details: bool) -> Group:
 
 KEYS_HELP = (
     "←/→ move · a accept · r reject · c category · n note · u undo · g unreviewed · d details · "
-    "f filter · s sort · ↑/↓ scroll · Esc list · q quit"
+    "f filter · k accepted/rejected · s sort · ↑/↓ scroll · Esc list · q quit"
 )
 
 
@@ -425,7 +425,7 @@ def list_preview(c: dict | None, state: ReviewState) -> Text:
     """Full text of the highlighted row, and its closest match in the category."""
     if c is None:
         return Text(
-            f"No candidates match the filter '{state.filter}'. Press f to change it.",
+            f"No candidates match the filter '{state.filter_label()}'. Press f or k to change it.",
             style="dim",
         )
     key = candidate_key(c)
