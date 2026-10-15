@@ -2,6 +2,7 @@
 
     python -m src.batch <run_dir> [--limit N] [--seed-runs N] [--seed-only] [--concurrency N]
     python -m src.batch <run_dir> --status [--seed-runs N] [--seed-only] [--concurrency N]
+    python -m src.batch <run_dir> --summary [--seed-only] [--expect a,b,c,...]
 
 Which prompts run, and in which category they count, is read from the reviewer's
 `<run_dir>/reviewed.jsonl` (see metrics/prompt_review/FORMAT.md) and nowhere else. The
@@ -16,10 +17,16 @@ leaving the paraphrases for a later call.
 
 The `RunTracker` metrics of each prompt go to `<run_dir>/runs.jsonl` rather than METRICS_FILE,
 so a run folder holds everything about its run; they join to the results by `thread_id`.
+Each result also keeps the run's `decision_history` (the manager's steps and the auto_builder's
+decisions with their reasoning), so a wrong graph can be traced without re-running it.
 
 `--status` prints one line on a run in progress (or finished) and exits, without loading the
 agent: progress, errors, cost so far, and the time and cost left, estimated from the last
 results. Pass the same `--seed-runs`, `--seed-only` and `--concurrency` as the run.
+
+`--summary` prints the graph structures, parameters and unmet capabilities of the results and
+exits, also without loading the agent; `--expect` names the correct chain of process types, to
+count how often it is built and whether the seed runs have settled (see `src/batch_summary.py`).
 """
 
 import argparse
@@ -151,6 +158,9 @@ async def build_one(run_dir: Path, key: str, prompt: str) -> dict:
         "last_validation": state.get("last_validation"),
         "unmet_capabilities": state.get("unmet_capabilities") or [],
         "response": state["messages"][-1].text if state.get("messages") else None,
+        # The manager's planned steps and the auto_builder's decisions, each with its reasoning, so
+        # a wrong graph can be traced to the step that went wrong without re-running it.
+        "decision_history": state.get("decision_history") or [],
     }
 
 
@@ -185,7 +195,19 @@ def main() -> None:
     parser.add_argument("--limit", type=int, help="build at most this many prompts in this call")
     parser.add_argument("--concurrency", type=int, default=1)
     parser.add_argument("--status", action="store_true", help="print the state of the run and exit")
+    parser.add_argument("--summary", action="store_true", help="summarise the results and exit")
+    parser.add_argument("--expect", help="with --summary: the correct chain of process types, comma-separated")
     args = parser.parse_args()
+    if args.expect and not args.summary:
+        parser.error("--expect only applies to --summary")
+    if args.summary:
+        from src.batch_summary import summary
+
+        chain = [p.strip() for p in args.expect.split(",")] if args.expect else None
+        if chain is not None and len(chain) < 2:
+            parser.error("--expect needs at least two process types")
+        print(summary(args.run_dir, args.seed_only, chain))
+        return
     if args.seed_only and args.seed_runs < 1:
         parser.error("--seed-only needs --seed-runs of at least 1")
     if args.status:
