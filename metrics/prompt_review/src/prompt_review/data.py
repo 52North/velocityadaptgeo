@@ -6,6 +6,7 @@ rename) after every change, since moving back lets you change a decision.
 """
 
 import json
+from collections.abc import Sequence
 from pathlib import Path
 
 
@@ -66,7 +67,7 @@ def first_config(run_dir: Path) -> dict:
     return _read(run_dir / "config.json")
 
 
-def categories(run_dir: Path, candidates: list[dict] = ()) -> list[str]:
+def categories(run_dir: Path, candidates: Sequence[dict] = ()) -> list[str]:
     """All category keys, in typology order. From the `typology` field of the latest config snapshot;
     runs from before that field fall back to the union of the sessions' `categories`, config.json first,
     plus any category that only appears in the candidates."""

@@ -50,22 +50,29 @@ def _parse(path: Path) -> ET.Element:
     return ET.fromstring(text)
 
 
+def _text(el: ET.Element, tag: str) -> str:
+    text = el.findtext(tag)
+    if text is None:
+        raise ValueError(f"<{el.tag}> has no <{tag}>")
+    return text
+
+
 def load_pairs(raw_dir: Path) -> list[Pair]:
-    sentences = {}
+    sentences: dict[int, tuple[str, str]] = {}
     for p in _parse(raw_dir / "text_pairs.xml"):
         if p.findtext("etpc_label") == "1":
-            sentences[int(p.findtext("pair_id"))] = (
-                p.findtext("sent1_raw").strip(),
-                p.findtext("sent2_raw").strip(),
+            sentences[int(_text(p, "pair_id"))] = (
+                _text(p, "sent1_raw").strip(),
+                _text(p, "sent2_raw").strip(),
             )
 
     relations = defaultdict(list)
     for r in _parse(raw_dir / "textual_paraphrases.xml"):
         if r.findtext("sense_preserving") != "yes":
             continue
-        relations[int(r.findtext("pair_id"))].append(
+        relations[int(_text(r, "pair_id"))].append(
             Relation(
-                int(r.findtext("type_id")),
+                int(_text(r, "type_id")),
                 (r.findtext("s1_text") or "").strip(),
                 (r.findtext("s2_text") or "").strip(),
             )

@@ -125,9 +125,9 @@ def test_panel_without_stored_fields_and_unknown_match():
 
 # --- live similarities ---------------------------------------------------------------------------
 
-from helpers import embedding_lines, embeddings_for  # noqa: E402
+from helpers import embedding_lines, embeddings_for
 
-from prompt_review.render import _body  # noqa: E402
+from prompt_review.render import _body
 
 
 def _live_state(tmp_path, decisions=None):

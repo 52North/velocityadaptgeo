@@ -20,8 +20,7 @@ _STEMMER = snowballstemmer.stemmer("english")
 
 # Determiners, prepositions, conjunctions, pronouns, auxiliaries and modals. Quantifiers such as
 # "all"/"every" are not listed: swapping them is a lexical change, not a morphological one.
-FUNCTION_WORDS = frozenset(
-    """
+_FUNCTION_WORDS_TEXT = """
 a an the this that these those there here which who whom whose what
 of to in on at for from by with within without into onto up down over under about as than
 and or but nor so if then
@@ -29,8 +28,8 @@ i me my we us our you your it its they them their he him his she her
 is are was were be been being am do does did done have has had having
 can could should would will shall may might must
 please not no
-""".split()
-)
+"""
+FUNCTION_WORDS = frozenset(_FUNCTION_WORDS_TEXT.split())
 
 _WORD = re.compile(r"[^\W\d_]+")
 

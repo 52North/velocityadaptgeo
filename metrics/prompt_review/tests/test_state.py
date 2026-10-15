@@ -1,6 +1,5 @@
-from helpers import CANDIDATES, cand, decision, keys
+from helpers import CANDIDATES, cand, current_key, decision, keys
 
-from prompt_review.data import candidate_key
 from prompt_review.state import ReviewState, match_status, summarize
 
 
@@ -15,9 +14,9 @@ def test_default_filter_and_reason_filters():
 def test_navigation_clamps_at_both_ends():
     s = ReviewState(CANDIDATES)
     s.move(-1)
-    assert candidate_key(s.current()) == "lexical#1"
+    assert current_key(s) == "lexical#1"
     s.move(10)
-    assert candidate_key(s.current()) == "syntactic#2"
+    assert current_key(s) == "syntactic#2"
     s.first()
     assert s.index == 0
 
@@ -27,7 +26,7 @@ def test_decide_advances_and_records():
     s.decide("accept")
     assert s.decisions["lexical#1"]["decision"] == "accept"
     assert s.decisions["lexical#1"]["category"] == "lexical"
-    assert candidate_key(s.current()) == "lexical#3"
+    assert current_key(s) == "lexical#3"
     s.decide("accept", "discourse")
     assert s.decisions["lexical#3"]["category"] == "discourse"
 
@@ -36,14 +35,14 @@ def test_decide_on_last_stays_on_last():
     s = ReviewState(CANDIDATES)
     s.last()
     s.decide("reject")
-    assert candidate_key(s.current()) == "syntactic#2"
+    assert current_key(s) == "syntactic#2"
 
 
 def test_decide_in_unreviewed_filter_lands_on_next():
     s = ReviewState(CANDIDATES)
     s.filter = "unreviewed"
     s.decide("accept")
-    assert candidate_key(s.current()) == "lexical#2"
+    assert current_key(s) == "lexical#2"
     assert "lexical#1" not in keys(s.visible())
 
 
@@ -55,7 +54,7 @@ def test_clear_and_next_unreviewed():
     assert "lexical#1" not in s.decisions
     s.decide("accept")  # auto-advances to lexical#3
     assert s.next_unreviewed()  # the next unreviewed after the current one
-    assert candidate_key(s.current()) == "syntactic#2"
+    assert current_key(s) == "syntactic#2"
 
 
 def test_note_before_and_afterdecision():
@@ -75,7 +74,7 @@ def test_cycle_filter_keeps_current_when_possible():
     s.filter = "all"
     s.index = 2  # lexical#3
     s.cycle_filter()  # -> passed gates, which contains lexical#3
-    assert s.filter == "passed gates" and candidate_key(s.current()) == "lexical#3"
+    assert s.filter == "passed gates" and current_key(s) == "lexical#3"
     s.cycle_filter()  # -> rejected by gates, which doesn't
     assert s.filter == "rejected by gates" and s.index == 0
     for _ in range(len(s.filters) - 2):
@@ -166,9 +165,9 @@ def test_match_status():
 
 # --- sorting (review_table_plan.md) --------------------------------------------------------------
 
-from helpers import embeddings_for  # noqa: E402
+from helpers import embeddings_for
 
-from prompt_review.state import SORTS  # noqa: E402
+from prompt_review.state import SORTS
 
 
 def test_sort_by_similarity_and_category(tmp_path):
@@ -208,9 +207,9 @@ def test_sort_keeps_the_current_candidate_and_sets_the_review_order(tmp_path):
     s.filter = "all"
     s.go_to("lexical#3")
     s.cycle_sort()  # similarity
-    assert candidate_key(s.current()) == "lexical#3"
+    assert current_key(s) == "lexical#3"
     s.move(1)  # moving follows the sorted order
-    assert candidate_key(s.current()) == "syntactic#1"
+    assert current_key(s) == "syntactic#1"
 
 
 def test_category_sort_follows_moves():

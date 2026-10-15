@@ -2,8 +2,10 @@
 
 import asyncio
 import json
+from typing import cast
 
-from helpers import CANDIDATES, embedding_lines
+from helpers import CANDIDATES, current_key, embedding_lines
+from textual.widgets import DataTable
 
 from prompt_review.app import (
     CategoryScreen,
@@ -12,7 +14,7 @@ from prompt_review.app import (
     ReviewScreen,
     build_app,
 )
-from prompt_review.data import candidate_key, load_decisions
+from prompt_review.data import load_decisions
 
 # Enough fields for the review page: rejected before judging, so no scores or judge output.
 RECORDS = [
@@ -54,7 +56,7 @@ def _drive(app, steps):
 
 
 def _cursor_key(app):
-    table = app.screen.query_one("DataTable")
+    table = app.screen.query_one(DataTable)
     return list(table.rows)[table.cursor_row].value
 
 
@@ -62,7 +64,7 @@ def test_starts_on_the_list_with_one_row_per_visible_candidate(tmp_path):
     app = build_app(_run(tmp_path))
 
     async def steps(pilot):
-        table = app.screen.query_one("DataTable")
+        table = app.screen.query_one(DataTable)
         return type(app.screen), table.row_count, [k.value for k in table.rows]
 
     screen, n, keys = _drive(app, steps)
@@ -77,12 +79,12 @@ def test_open_accept_and_return_to_the_same_row(tmp_path):
     async def steps(pilot):
         await pilot.press("down", "enter")
         await pilot.pause()
-        opened = (type(app.screen), candidate_key(app.state.current()))
+        opened = (type(app.screen), current_key(app.state))
         await pilot.press("r")  # reject lexical#3: auto-advances to syntactic#2
         await pilot.press("left")  # back to lexical#3
         await pilot.press("escape")
         await pilot.pause()
-        table = app.screen.query_one("DataTable")
+        table = app.screen.query_one(DataTable)
         row = table.get_row("lexical#3")
         return opened, type(app.screen), _cursor_key(app), str(row[4])
 
@@ -117,10 +119,10 @@ def test_filter_and_sort_in_the_list(tmp_path):
 
     async def steps(pilot):
         app.state.filter = "all"
-        app.screen.refresh_rows()
+        cast(ListScreen, app.screen).refresh_rows()
         await pilot.press("s")  # similarity
         await pilot.pause()
-        table = app.screen.query_one("DataTable")
+        table = app.screen.query_one(DataTable)
         return (
             app.state.sort,
             [k.value for k in table.rows],
@@ -142,9 +144,7 @@ def test_filter_cycles_through_all_filters(tmp_path):
             await pilot.press("f")
             await pilot.pause()
             seen.append(app.state.filter)
-            assert app.screen.query_one("DataTable").row_count == len(
-                app.state.visible()
-            )
+            assert app.screen.query_one(DataTable).row_count == len(app.state.visible())
         return seen
 
     seen = _drive(app, steps)
@@ -186,7 +186,7 @@ def test_category_move_with_a_number_key(tmp_path):
         assert isinstance(app.screen, CategoryScreen)
         await pilot.press("3")  # discourse
         await pilot.pause()
-        return type(app.screen), candidate_key(app.state.current())
+        return type(app.screen), current_key(app.state)
 
     screen, current = _drive(app, steps)
     assert screen is ReviewScreen and current == "lexical#3"  # moved on after accepting

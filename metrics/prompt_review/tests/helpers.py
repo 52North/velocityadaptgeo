@@ -83,3 +83,10 @@ def embeddings_for(tmp_path, candidates=CANDIDATES, vectors=VECTORS):
 
     (tmp_path / "embeddings.jsonl").write_text(embedding_lines(candidates, vectors))
     return load_embeddings(tmp_path, candidates)
+
+
+def current_key(state) -> str:
+    """Key of the state's current candidate, which must exist."""
+    c = state.current()
+    assert c is not None
+    return candidate_key(c)

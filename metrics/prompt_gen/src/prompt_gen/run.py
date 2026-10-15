@@ -14,6 +14,7 @@ import time
 from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 
@@ -382,11 +383,13 @@ class Run:
                         written.entries,
                         sampling_seed=cat_index * 1000 + attempts * 10,
                         target=target,
-                        feedback=lambda text: near_duplicate_feedback(
-                            text,
-                            accepted,
-                            scorer.semantic_similarities,
-                            self.cfg.thresholds.near_duplicate_sem,
+                        feedback=lambda text, accepted=accepted: (
+                            near_duplicate_feedback(
+                                text,
+                                accepted,
+                                scorer.semantic_similarities,
+                                self.cfg.thresholds.near_duplicate_sem,
+                            )
                         ),
                     )
                 except GenerationError as e:
@@ -396,15 +399,15 @@ class Run:
                         reject_reason=f"generation_error: {e}",
                     )
                 else:
-                    generation = dict(
-                        prompt=g.paraphrase,
-                        operations_applied=g.operations_applied,
-                        reasoning=g.reasoning,
-                        sampling_seed=g.sampling_seed,
-                        generation_attempts=g.attempts,
-                        eval_tokens=g.eval_tokens,
-                        discarded=g.discarded,
-                    )
+                    generation: dict[str, Any] = {
+                        "prompt": g.paraphrase,
+                        "operations_applied": g.operations_applied,
+                        "reasoning": g.reasoning,
+                        "sampling_seed": g.sampling_seed,
+                        "generation_attempts": g.attempts,
+                        "eval_tokens": g.eval_tokens,
+                        "discarded": g.discarded,
+                    }
                     generation.update(
                         closest_matches(
                             g.paraphrase, key, history, scorer.semantic_similarities

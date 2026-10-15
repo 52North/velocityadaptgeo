@@ -10,7 +10,10 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = ["pytest>=8.4.2"]
+dev = [
+    "pytest>=8.4.2",
+    "ruff>=0.17.0",
+]
 
 [project.scripts]
 prompt-review = "prompt_review.cli:main"

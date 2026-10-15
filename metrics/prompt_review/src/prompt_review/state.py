@@ -146,7 +146,7 @@ class ReviewState:
         if f == "unreviewed":
             return candidate_key(c) not in self.decisions
         if f == NEAR_DUPLICATE_FILTER:
-            return candidate_key(c) in near
+            return candidate_key(c) in (near or {})
         return reason_group(c) == f.removeprefix("reason: ")
 
     def visible(self) -> list[dict]:

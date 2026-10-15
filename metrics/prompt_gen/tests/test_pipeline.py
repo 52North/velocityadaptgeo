@@ -1,4 +1,5 @@
 import json
+from typing import Literal
 
 import pytest
 
@@ -42,7 +43,9 @@ def test_seed_loads_with_trap_set():
     assert any(t.relative for t in seed.trap_set)
 
 
-def _judgement(*statuses: str, grammatical: bool = True) -> Judgement:
+def _judgement(
+    *statuses: Literal["kept", "relative", "failed"], grammatical: bool = True
+) -> Judgement:
     return Judgement(
         verdicts=[
             ConstraintVerdict(id=f"c{i}", reason="", status=s)

@@ -74,19 +74,21 @@ class FakeClient:
 
 def test_call_b_runs_even_when_a_constraint_fails():
     judge = Judge.__new__(Judge)
-    judge.config = type("C", (), {"model": "m", "think": False, "temperature": 0.0})()
+    judge.config = type(  # type: ignore[assignment]
+        "C", (), {"model": "m", "think": False, "temperature": 0.0}
+    )()
     judge.num_ctx = 8192
-    judge.client = FakeClient()
+    judge.client = client = FakeClient()  # type: ignore[assignment]
     j = judge.check(SEED, typology.get("lexical"), "Identified all areas in Münster")
     assert j.failed_ids == ["target"]
-    assert len(judge.client.calls) == 2
+    assert len(client.calls) == 2
     assert (
-        "# Constraints" in judge.client.calls[0]
-        and "Paraphrase operations" not in judge.client.calls[0]
+        "# Constraints" in client.calls[0]
+        and "Paraphrase operations" not in client.calls[0]
     )
     assert (
-        "Paraphrase operations" in judge.client.calls[1]
-        and "# Constraints" not in judge.client.calls[1]
+        "Paraphrase operations" in client.calls[1]
+        and "# Constraints" not in client.calls[1]
     )
     assert not j.grammatical
     assert j.corrected == "Identify all areas in Münster."

@@ -15,7 +15,7 @@ review that overrules the constraint verdict still has the category and grammar 
 
 import re
 import time
-from typing import Literal
+from typing import Literal, TypeVar
 
 import ollama
 from pydantic import BaseModel
@@ -24,6 +24,8 @@ from prompt_gen import typology
 from prompt_gen.config import JudgeConfig
 from prompt_gen.seeds import Seed
 from prompt_gen.stems import StemCheck
+
+_Output = TypeVar("_Output", bound=BaseModel)
 
 
 class ConstraintVerdict(BaseModel):
@@ -192,8 +194,8 @@ class Judge:
         self.client = ollama.Client(host=host)
 
     def _ask(
-        self, system: str, candidate: str, schema: type[BaseModel]
-    ) -> tuple[BaseModel, dict[str, float]]:
+        self, system: str, candidate: str, schema: type[_Output]
+    ) -> tuple[_Output, dict[str, float]]:
         started = time.monotonic()
         response = self.client.chat(
             model=self.config.model,
@@ -215,7 +217,7 @@ class Judge:
                 (response.prompt_eval_duration or 0) / 1e9, 1
             ),  # high = prompt cache miss
         }
-        return schema.model_validate_json(response.message.content), timing
+        return schema.model_validate_json(response.message.content or ""), timing
 
     def check_constraints(
         self, seed: Seed, candidate: str

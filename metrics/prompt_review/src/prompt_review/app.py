@@ -2,10 +2,11 @@
 one. Both share one ReviewState, so filter, sort order, position and decisions carry over."""
 
 from pathlib import Path
+from typing import ClassVar, cast
 
 from rich.console import Console
 from textual.app import App, ComposeResult
-from textual.binding import Binding
+from textual.binding import Binding, BindingType
 from textual.containers import Vertical, VerticalScroll
 from textual.screen import ModalScreen, Screen
 from textual.widgets import DataTable, Input, OptionList, Static
@@ -33,7 +34,7 @@ LIST_HELP = "↑/↓ PgUp/PgDn move · Enter open · a accept · r reject · u u
 
 
 class NoteScreen(ModalScreen[str | None]):
-    BINDINGS = [Binding("escape", "cancel", "Cancel")]
+    BINDINGS: ClassVar[list[BindingType]] = [Binding("escape", "cancel", "Cancel")]
 
     def __init__(self, initial: str):
         super().__init__()
@@ -54,7 +55,7 @@ class NoteScreen(ModalScreen[str | None]):
 class CategoryScreen(ModalScreen[str | None]):
     """Pick the category to accept the candidate into: a number key, or ↑/↓ and Enter."""
 
-    BINDINGS = [Binding("escape", "cancel", "Cancel")]
+    BINDINGS: ClassVar[list[BindingType]] = [Binding("escape", "cancel", "Cancel")]
 
     def __init__(self, categories: list[str]):
         super().__init__()
@@ -85,7 +86,7 @@ class CategoryScreen(ModalScreen[str | None]):
 
 
 class ListScreen(Screen):
-    BINDINGS = [
+    BINDINGS: ClassVar[list[BindingType]] = [
         Binding("a", "decide('accept')", "accept"),
         Binding("r", "decide('reject')", "reject"),
         Binding("u", "undo", "undo"),
@@ -100,6 +101,10 @@ class ListScreen(Screen):
         self.shown: list[str] = []  # keys in table order
         self.cells: dict[str, list] = {}
         self.prompt_width = 0
+
+    @property
+    def app(self) -> "ReviewApp":  # type: ignore[override]
+        return cast("ReviewApp", super().app)
 
     @property
     def state(self) -> ReviewState:
@@ -160,7 +165,7 @@ class ListScreen(Screen):
 
     def show_header(self) -> None:
         s = self.state
-        a, r, u = s.counts()
+        a, r, _ = s.counts()
         source = "live" if s.embeddings is not None else "at generation"
         self.query_one("#list-header", Static).update(
             f"[b]{self.app.run_name}[/b]   {a + r}/{len(s.candidates)} reviewed ({a} accepted, {r} rejected) · "
@@ -201,7 +206,7 @@ class ListScreen(Screen):
 
 class ReviewScreen(Screen):
     # Priority, so the scroll container's own left/right/home/end don't take them.
-    BINDINGS = [
+    BINDINGS: ClassVar[list[BindingType]] = [
         Binding("left", "move(-1)", "previous", priority=True),
         Binding("right", "move(1)", "next", priority=True),
         Binding("home", "first", "first", priority=True),
@@ -218,6 +223,10 @@ class ReviewScreen(Screen):
         Binding("escape", "app.pop_screen", "list"),
         Binding("q", "app.quit", "quit"),
     ]
+
+    @property
+    def app(self) -> "ReviewApp":  # type: ignore[override]
+        return cast("ReviewApp", super().app)
 
     @property
     def state(self) -> ReviewState:

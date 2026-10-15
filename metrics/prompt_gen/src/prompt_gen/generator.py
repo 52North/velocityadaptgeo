@@ -185,7 +185,9 @@ class Generator:
             )
             tokens += response.eval_count or 0
             try:
-                output = GeneratorOutput.model_validate_json(response.message.content)
+                output = GeneratorOutput.model_validate_json(
+                    response.message.content or ""
+                )
                 paraphrase = " ".join(output.paraphrase.split())
                 if not paraphrase:
                     raise ValueError("empty paraphrase")

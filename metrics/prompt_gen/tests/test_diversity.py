@@ -1,3 +1,5 @@
+from typing import cast
+
 from prompt_gen import seeds, typology
 from prompt_gen.generator import used_openings, user_prompt
 from prompt_gen.run import WrittenList
@@ -106,6 +108,7 @@ def test_near_duplicate_feedback_names_the_closest_accepted():
     assert near_duplicate_feedback("A x", [], fake_similarities, 0.97) is None
     assert near_duplicate_feedback("A x", ["B y"], fake_similarities, 0.97) is None
     msg = near_duplicate_feedback("A x", ["B y", "A z"], fake_similarities, 0.97)
+    assert msg is not None
     assert '"A z"' in msg and "clearly different structure" in msg
 
 
@@ -150,7 +153,7 @@ def _generator(paraphrases, feedback_retries=2):
         feedback_retries=feedback_retries,
     )
     g.strict, g.num_ctx = True, 8192
-    g.client = ScriptedClient(paraphrases)
+    g.client = ScriptedClient(paraphrases)  # type: ignore[assignment]
     return g
 
 
@@ -174,19 +177,20 @@ def test_feedback_retry_sends_feedback_and_keeps_discarded_drafts():
     result = _generate(
         g, lambda text: "too similar" if text.startswith("dup") else None
     )
+    client = cast(ScriptedClient, g.client)
     assert result.paraphrase == "fresh"
     assert [d["prompt"] for d in result.discarded] == ["dup one", "dup two"]
     assert result.attempts == 3 and result.eval_tokens == 30
     # the third call saw both drafts and both feedback messages, in order
-    assert g.client.conversations[2][-4:] == [
-        g.client.conversations[2][-4],
+    assert client.conversations[2][-4:] == [
+        client.conversations[2][-4],
         "too similar",
-        g.client.conversations[2][-2],
+        client.conversations[2][-2],
         "too similar",
     ]
     assert (
-        '"dup one"' in g.client.conversations[2][-4]
-        and '"dup two"' in g.client.conversations[2][-2]
+        '"dup one"' in client.conversations[2][-4]
+        and '"dup two"' in client.conversations[2][-2]
     )
 
 
@@ -201,9 +205,9 @@ def test_feedback_retries_are_capped_and_the_last_draft_is_returned():
 
 # --- closest matches -----------------------------------------------------------------------------
 
-import json  # noqa: E402
+import json
 
-from prompt_gen.run import backfill_closest, closest, closest_matches  # noqa: E402
+from prompt_gen.run import backfill_closest, closest, closest_matches
 
 
 def word_overlap(text, others):
@@ -339,12 +343,12 @@ def test_backfill_refuses_when_other_fields_changed_since_the_backup(tmp_path):
 
 # --- embeddings ----------------------------------------------------------------------------------
 
-import base64  # noqa: E402
-import hashlib  # noqa: E402
+import base64
+import hashlib
 
-import numpy as np  # noqa: E402
+import numpy as np
 
-from prompt_gen.run import backfill_embeddings, embedding_line  # noqa: E402
+from prompt_gen.run import backfill_embeddings, embedding_line
 
 
 def fake_embed(texts):

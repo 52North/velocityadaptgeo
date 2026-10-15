@@ -50,6 +50,7 @@ def test_changed_text_and_missing_lines_get_no_vector(tmp_path):
         )
     )
     e = load_embeddings(tmp_path, CANDIDATES)
+    assert e is not None
     assert e.keys == ["lexical#1", "lexical#2"]
     assert e.warnings == [
         "lexical#3: stored embedding is for a different text",
@@ -98,6 +99,7 @@ def test_live_excludes_itself_and_considers_later_candidates(emb):
         CANDIDATES[0]
     )  # lexical#1: the only later kept ones are lexical#3 and syntactic#2
     assert _keys(live) == ("lexical#3", "syntactic#2")
+    assert live is not None
     assert (
         live["within"]["sem"] == pytest.approx(0.6)
         and live["within"]["prompt"] == "lexical 3"
@@ -113,6 +115,7 @@ def test_accepting_a_gate_rejected_candidate_makes_it_a_match(emb):
     s = _state(emb)
     s.decisions["lexical#2"] = decision("accept", "lexical")
     live = s.live(CANDIDATES[0])
+    assert live is not None
     assert _keys(live) == ("lexical#2", "lexical#2") and live["within"][
         "sem"
     ] == pytest.approx(0.995, abs=1e-3)
