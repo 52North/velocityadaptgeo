@@ -1,7 +1,7 @@
 """Build a workflow graph for every reviewed paraphrase of a prompt_gen run.
 
-    python -m src.batch <run_dir> [--limit N] [--seed-runs N] [--concurrency N]
-    python -m src.batch <run_dir> --status [--seed-runs N] [--concurrency N]
+    python -m src.batch <run_dir> [--limit N] [--seed-runs N] [--seed-only] [--concurrency N]
+    python -m src.batch <run_dir> --status [--seed-runs N] [--seed-only] [--concurrency N]
 
 Which prompts run, and in which category they count, is read from the reviewer's
 `<run_dir>/reviewed.jsonl` (see metrics/prompt_review/FORMAT.md) and nowhere else. The
@@ -11,14 +11,15 @@ re-run: `load_results` joins them with the current decisions. A paraphrase accep
 is picked up by the next batch run; one rejected later is left out by `load_results`.
 
 The seed prompt runs `--seed-runs` times under the keys `seed#1`, `seed#2`, ..., as the
-baseline for how much the graph varies for the same prompt.
+baseline for how much the graph varies for the same prompt. `--seed-only` runs just those,
+leaving the paraphrases for a later call.
 
 The `RunTracker` metrics of each prompt go to `<run_dir>/runs.jsonl` rather than METRICS_FILE,
 so a run folder holds everything about its run; they join to the results by `thread_id`.
 
 `--status` prints one line on a run in progress (or finished) and exits, without loading the
 agent: progress, errors, cost so far, and the time and cost left, estimated from the last
-results. Pass the same `--seed-runs` and `--concurrency` as the run.
+results. Pass the same `--seed-runs`, `--seed-only` and `--concurrency` as the run.
 """
 
 import argparse
@@ -57,12 +58,13 @@ def seed_prompt(run_dir: Path) -> str:
     return json.loads((run_dir / "config.json").read_text(encoding="utf-8"))["seed"]["text"]
 
 
-def accepted_prompts(run_dir: Path, seed_runs: int = 0) -> dict[str, dict]:
+def accepted_prompts(run_dir: Path, seed_runs: int = 0, seed_only: bool = False) -> dict[str, dict]:
     """Key -> {prompt, category} for every paraphrase currently accepted in review, plus the seed runs.
 
     The category is the reviewer's (after a move), not the one the paraphrase was generated for.
+    With `seed_only` the paraphrases are left out and only the seed runs are returned.
     """
-    selected = {
+    selected = {} if seed_only else {
         _key(r): {"prompt": r["prompt"], "category": r["review"]["category"]}
         for r in _read_jsonl(run_dir / "reviewed.jsonl")
         if r["review"]["decision"] == "accept"
@@ -96,9 +98,9 @@ def _finished_at(result: dict) -> float:
     return time.mktime(time.strptime(result["at"], "%Y-%m-%dT%H:%M:%S")) + result["wall_ms"] / 1000
 
 
-def status(run_dir: Path, seed_runs: int, concurrency: int = 1) -> str:
+def status(run_dir: Path, seed_runs: int, concurrency: int = 1, seed_only: bool = False) -> str:
     """One line on the state of a run: progress, errors, cost so far, time and cost left."""
-    wanted = accepted_prompts(run_dir, seed_runs)
+    wanted = accepted_prompts(run_dir, seed_runs, seed_only)
     results = {k: r for k, r in latest_results(run_dir).items() if k in wanted}
     done = [r for r in results.values() if not r.get("error")]
     errors = sorted(k for k, r in results.items() if r.get("error"))
@@ -152,10 +154,10 @@ async def build_one(run_dir: Path, key: str, prompt: str) -> dict:
     }
 
 
-async def build_all(run_dir: Path, seed_runs: int, limit: int | None, concurrency: int) -> None:
+async def build_all(run_dir: Path, seed_runs: int, limit: int | None, concurrency: int, seed_only: bool = False) -> None:
     """Build the accepted prompts that have no successful result yet, appending one line each."""
     done = {k for k, r in latest_results(run_dir).items() if not r.get("error")}
-    todo = [(k, s["prompt"]) for k, s in accepted_prompts(run_dir, seed_runs).items() if k not in done]
+    todo = [(k, s["prompt"]) for k, s in accepted_prompts(run_dir, seed_runs, seed_only).items() if k not in done]
     todo = todo[:limit] if limit is not None else todo
     logger.info("%d to build, %d already done", len(todo), len(done))
 
@@ -179,12 +181,15 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("run_dir", type=Path)
     parser.add_argument("--seed-runs", type=int, default=3, help="times to run the seed prompt as a baseline")
+    parser.add_argument("--seed-only", action="store_true", help="run only the seed prompt, no paraphrases")
     parser.add_argument("--limit", type=int, help="build at most this many prompts in this call")
     parser.add_argument("--concurrency", type=int, default=1)
     parser.add_argument("--status", action="store_true", help="print the state of the run and exit")
     args = parser.parse_args()
+    if args.seed_only and args.seed_runs < 1:
+        parser.error("--seed-only needs --seed-runs of at least 1")
     if args.status:
-        print(status(args.run_dir, args.seed_runs, args.concurrency))
+        print(status(args.run_dir, args.seed_runs, args.concurrency, args.seed_only))
         return
     # Set here since the agent, which configures logging on import, is only loaded with the first prompt.
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
@@ -194,7 +199,7 @@ def main() -> None:
             open(args.run_dir / name, "a").close()
     except OSError as exc:
         parser.error(f"cannot write to {args.run_dir}: {exc}")
-    asyncio.run(build_all(args.run_dir, args.seed_runs, args.limit, args.concurrency))
+    asyncio.run(build_all(args.run_dir, args.seed_runs, args.limit, args.concurrency, args.seed_only))
 
 
 if __name__ == "__main__":
