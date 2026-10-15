@@ -34,10 +34,14 @@ def load(path: Path) -> dict[str, CategoryExamples]:
             raise ValueError(f"{path}: no examples for category {category.key!r}")
         extra = set(entry["spans"]) - category.type_ids
         if extra:
-            raise ValueError(f"{path}: {category.key} lists type ids {sorted(extra)} that belong to another category")
+            raise ValueError(
+                f"{path}: {category.key} lists type ids {sorted(extra)} that belong to another category"
+            )
         missing = category.type_ids - set(entry["spans"])
         if missing:
-            raise ValueError(f"{path}: {category.key} has no span examples for type ids {sorted(missing)}")
+            raise ValueError(
+                f"{path}: {category.key} has no span examples for type ids {sorted(missing)}"
+            )
         spans = tuple(
             Span(type_id, s["from"], s["to"], s.get("pair"), s.get("note"))
             for type_id, items in entry["spans"].items()

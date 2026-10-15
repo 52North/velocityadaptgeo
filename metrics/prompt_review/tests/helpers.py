@@ -3,9 +3,17 @@
 from prompt_review.data import candidate_key
 
 
-def cand(category: str, attempt: int, accepted: bool = True, reason: str | None = None) -> dict:
-    return {"category": category, "attempt": attempt, "prompt": f"{category} {attempt}", "accepted": accepted,
-            "reject_reason": reason, "judge": {}}
+def cand(
+    category: str, attempt: int, accepted: bool = True, reason: str | None = None
+) -> dict:
+    return {
+        "category": category,
+        "attempt": attempt,
+        "prompt": f"{category} {attempt}",
+        "accepted": accepted,
+        "reject_reason": reason,
+        "judge": {},
+    }
 
 
 CANDIDATES = [
@@ -22,7 +30,12 @@ def keys(cands):
 
 
 def decision(decision, category):
-    return {"decision": decision, "category": category, "note": "", "at": "2026-10-14T09:00:00"}
+    return {
+        "decision": decision,
+        "category": category,
+        "note": "",
+        "at": "2026-10-14T09:00:00",
+    }
 
 
 # Unit vectors for CANDIDATES, chosen so the similarities are easy to reason about:
@@ -51,12 +64,22 @@ def embedding_lines(candidates, vectors=VECTORS) -> str:
             continue
         v = np.asarray(vectors[key], dtype="<f4")
         v = v / np.linalg.norm(v)
-        out.append(json.dumps({"key": key, "text_sha1": hashlib.sha1(c["prompt"].encode()).hexdigest(), "model": "m",
-                               "dim": len(v), "vector": base64.b64encode(v.astype("<f4").tobytes()).decode()}))
+        out.append(
+            json.dumps(
+                {
+                    "key": key,
+                    "text_sha1": hashlib.sha1(c["prompt"].encode()).hexdigest(),
+                    "model": "m",
+                    "dim": len(v),
+                    "vector": base64.b64encode(v.astype("<f4").tobytes()).decode(),
+                }
+            )
+        )
     return "".join(line + "\n" for line in out)
 
 
 def embeddings_for(tmp_path, candidates=CANDIDATES, vectors=VECTORS):
     from prompt_review.similarity import load_embeddings
+
     (tmp_path / "embeddings.jsonl").write_text(embedding_lines(candidates, vectors))
     return load_embeddings(tmp_path, candidates)

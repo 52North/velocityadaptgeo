@@ -87,8 +87,17 @@ def same_text(a: str, b: str) -> bool:
 def _constraints_block(seed: Seed) -> str:
     blocks = []
     for c in seed.constraints:
-        allowed = "kept, relative or failed" if c.relative else "kept or failed (relative is not allowed here)"
-        lines = [f"## {c.id}", c.requirement, f"Allowed statuses: {allowed}", f"kept, e.g.: {'; '.join(c.accept)}"]
+        allowed = (
+            "kept, relative or failed"
+            if c.relative
+            else "kept or failed (relative is not allowed here)"
+        )
+        lines = [
+            f"## {c.id}",
+            c.requirement,
+            f"Allowed statuses: {allowed}",
+            f"kept, e.g.: {'; '.join(c.accept)}",
+        ]
         if c.relative:
             lines.append(f"relative, e.g.: {'; '.join(c.relative)}")
         lines.append(f"failed, e.g.: {'; '.join(c.reject)}")
@@ -136,14 +145,20 @@ def _stem_fact(result: StemCheck | None) -> str:
     if result is None:
         return ""
     if result.passed:
-        return ("\nFact, checked by a word-stem comparison: every content word of the rewritten request is a form "
-                "of a word in the original, and no word of the original is missing. Do not claim otherwise.\n")
-    return ("\nFact, checked by a word-stem comparison: the rewritten request uses words that are not forms of "
-            f"words in the original ({', '.join(result.new) or 'none'}), and drops words of the original "
-            f"({', '.join(result.missing) or 'none'}).\n")
+        return (
+            "\nFact, checked by a word-stem comparison: every content word of the rewritten request is a form "
+            "of a word in the original, and no word of the original is missing. Do not claim otherwise.\n"
+        )
+    return (
+        "\nFact, checked by a word-stem comparison: the rewritten request uses words that are not forms of "
+        f"words in the original ({', '.join(result.new) or 'none'}), and drops words of the original "
+        f"({', '.join(result.missing) or 'none'}).\n"
+    )
 
 
-def category_grammar_prompt(seed: Seed, category: typology.Category, stem_result: StemCheck | None = None) -> str:
+def category_grammar_prompt(
+    seed: Seed, category: typology.Category, stem_result: StemCheck | None = None
+) -> str:
     return f"""You analyze rewritten requests for a geospatial analysis assistant. You do two things.
 
 # 1. Paraphrase operations
@@ -176,27 +191,44 @@ class Judge:
         self.num_ctx = num_ctx
         self.client = ollama.Client(host=host)
 
-    def _ask(self, system: str, candidate: str, schema: type[BaseModel]) -> tuple[BaseModel, dict[str, float]]:
+    def _ask(
+        self, system: str, candidate: str, schema: type[BaseModel]
+    ) -> tuple[BaseModel, dict[str, float]]:
         started = time.monotonic()
         response = self.client.chat(
             model=self.config.model,
-            messages=[{"role": "system", "content": system}, {"role": "user", "content": f"Rewritten request:\n{candidate}"}],
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": f"Rewritten request:\n{candidate}"},
+            ],
             think=self.config.think,
             format=schema.model_json_schema(),
-            options={"temperature": self.config.temperature, "seed": 0, "num_ctx": self.num_ctx},
+            options={
+                "temperature": self.config.temperature,
+                "seed": 0,
+                "num_ctx": self.num_ctx,
+            },
         )
         timing = {
             "total": round(time.monotonic() - started, 1),
-            "prompt": round((response.prompt_eval_duration or 0) / 1e9, 1),  # high = prompt cache miss
+            "prompt": round(
+                (response.prompt_eval_duration or 0) / 1e9, 1
+            ),  # high = prompt cache miss
         }
         return schema.model_validate_json(response.message.content), timing
 
-    def check_constraints(self, seed: Seed, candidate: str) -> tuple[list[ConstraintVerdict], dict[str, float]]:
-        output, timing = self._ask(constraints_prompt(seed), candidate, ConstraintOutput)
+    def check_constraints(
+        self, seed: Seed, candidate: str
+    ) -> tuple[list[ConstraintVerdict], dict[str, float]]:
+        output, timing = self._ask(
+            constraints_prompt(seed), candidate, ConstraintOutput
+        )
         expected = [c.id for c in seed.constraints]
         got = [v.id for v in output.verdicts]
         if got != expected:
-            raise ValueError(f"judge returned constraint ids {got}, expected {expected}")
+            raise ValueError(
+                f"judge returned constraint ids {got}, expected {expected}"
+            )
         # "relative" only exists for constraints that define relative phrasings; elsewhere it means kept.
         for verdict, constraint in zip(output.verdicts, seed.constraints):
             if verdict.status == "relative" and not constraint.relative:
@@ -205,22 +237,41 @@ class Judge:
         return output.verdicts, timing
 
     def check_category_grammar(
-        self, seed: Seed, category: typology.Category, candidate: str, stem_result: StemCheck | None = None
+        self,
+        seed: Seed,
+        category: typology.Category,
+        candidate: str,
+        stem_result: StemCheck | None = None,
     ) -> tuple[CategoryGrammarOutput, dict[str, float]]:
-        output, timing = self._ask(category_grammar_prompt(seed, category, stem_result), candidate, CategoryGrammarOutput)
+        output, timing = self._ask(
+            category_grammar_prompt(seed, category, stem_result),
+            candidate,
+            CategoryGrammarOutput,
+        )
         output.corrected = " ".join(output.corrected.split())
         return output, timing
 
-    def check(self, seed: Seed, category: typology.Category, candidate: str, stem_result: StemCheck | None = None) -> Judgement:
+    def check(
+        self,
+        seed: Seed,
+        category: typology.Category,
+        candidate: str,
+        stem_result: StemCheck | None = None,
+    ) -> Judgement:
         verdicts, timing_a = self.check_constraints(seed, candidate)
         # Always run, even after a failed constraint: review may overrule the constraint verdict.
-        b, timing_b = self.check_category_grammar(seed, category, candidate, stem_result)
+        b, timing_b = self.check_category_grammar(
+            seed, category, candidate, stem_result
+        )
         return combine(verdicts, b, candidate, timing_a, timing_b)
 
 
 def combine(
-    verdicts: list[ConstraintVerdict], b: CategoryGrammarOutput, candidate: str,
-    timing_a: dict[str, float] | None = None, timing_b: dict[str, float] | None = None,
+    verdicts: list[ConstraintVerdict],
+    b: CategoryGrammarOutput,
+    candidate: str,
+    timing_a: dict[str, float] | None = None,
+    timing_b: dict[str, float] | None = None,
 ) -> Judgement:
     durations = {f"constraints_{k}": v for k, v in (timing_a or {}).items()}
     durations |= {f"category_grammar_{k}": v for k, v in (timing_b or {}).items()}

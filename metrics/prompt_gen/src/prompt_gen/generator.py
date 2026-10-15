@@ -15,7 +15,9 @@ from prompt_gen.seeds import Seed
 
 class GeneratorOutput(BaseModel):
     # Field order matters: the model writes its plan before the paraphrase (short-reasoning CoT).
-    reasoning: str = Field(description="Plan written BEFORE the paraphrase, at most 150 words.")
+    reasoning: str = Field(
+        description="Plan written BEFORE the paraphrase, at most 150 words."
+    )
     operations_applied: list[str]
     paraphrase: str
 
@@ -29,24 +31,29 @@ class Generation:
     attempts: int
     duration_s: float
     eval_tokens: int
-    discarded: list[dict] = field(default_factory=list)  # drafts rejected by the feedback check, with the feedback
+    discarded: list[dict] = field(
+        default_factory=list
+    )  # drafts rejected by the feedback check, with the feedback
 
 
 class GenerationError(RuntimeError):
     pass
 
 
-def system_prompt(category: typology.Category, examples: CategoryExamples, seed: Seed, strict: bool) -> str:
+def system_prompt(
+    category: typology.Category, examples: CategoryExamples, seed: Seed, strict: bool
+) -> str:
     types = "\n".join(f"- {t.name}: {t.description}" for t in category.types)
     type_names = {t.id: t.name for t in category.types}
     spans = "\n".join(
-        f'- [{type_names[s.type_id]}] "{s.source}" -> "{s.target}"' + (f" ({s.note})" if s.note else "")
+        f'- [{type_names[s.type_id]}] "{s.source}" -> "{s.target}"'
+        + (f" ({s.note})" if s.note else "")
         for s in examples.spans
     )
     constraints = "\n".join(f"- {c.requirement}" for c in seed.constraints)
     if not strict:
         relative_rule = (
-            'You may also state a value or a set of features more vaguely, as a real user might '
+            "You may also state a value or a set of features more vaguely, as a real user might "
             '(e.g. "a short walk", "recreational green space").'
         )
     else:
@@ -89,10 +96,17 @@ hard constraint in your planned version.
 3. `paraphrase`: the paraphrase only, as natural English that a real user could type."""
 
 
-TAG_TEXT = {"accepted": "accepted", "rejected": "rejected: too similar to an accepted one"}
+TAG_TEXT = {
+    "accepted": "accepted",
+    "rejected": "rejected: too similar to an accepted one",
+}
 
 
-def user_prompt(seed: Seed, written: list[tuple[str, str]], target: typology.ParaphraseType | None = None) -> str:
+def user_prompt(
+    seed: Seed,
+    written: list[tuple[str, str]],
+    target: typology.ParaphraseType | None = None,
+) -> str:
     """`written`: (paraphrase, "accepted" | "rejected") in the order written. New entries only ever go at
     the end, and the target operation comes last, so Ollama can reuse the processed prompt prefix."""
     prompt = f"Seed request:\n{seed.text}"
@@ -145,7 +159,10 @@ class Generator:
         feedback is sent back in the same conversation, up to `feedback_retries` times; the last draft is
         returned even if it still has feedback, and the caller decides what to do with it."""
         messages = [
-            {"role": "system", "content": system_prompt(category, examples, seed, self.strict)},
+            {
+                "role": "system",
+                "content": system_prompt(category, examples, seed, self.strict),
+            },
             {"role": "user", "content": user_prompt(seed, written, target)},
         ]
         started = time.monotonic()
@@ -160,7 +177,11 @@ class Generator:
                 messages=messages,
                 think=self.config.think,
                 format=GeneratorOutput.model_json_schema(),
-                options={"temperature": self.config.temperature, "seed": sampling_seed + call - 1, "num_ctx": self.num_ctx},
+                options={
+                    "temperature": self.config.temperature,
+                    "seed": sampling_seed + call - 1,
+                    "num_ctx": self.num_ctx,
+                },
             )
             tokens += response.eval_count or 0
             try:
@@ -171,9 +192,15 @@ class Generator:
                 if paraphrase.casefold() == seed.text.casefold():
                     raise ValueError("copied the seed")
             except (ValidationError, ValueError) as e:
-                errors.append(f"invalid JSON: {e.errors()[0]['msg']}" if isinstance(e, ValidationError) else str(e))
+                errors.append(
+                    f"invalid JSON: {e.errors()[0]['msg']}"
+                    if isinstance(e, ValidationError)
+                    else str(e)
+                )
                 if len(errors) >= self.config.max_retries:
-                    raise GenerationError(f"no valid paraphrase after {len(errors)} invalid outputs: {errors}") from None
+                    raise GenerationError(
+                        f"no valid paraphrase after {len(errors)} invalid outputs: {errors}"
+                    ) from None
                 continue
             message = feedback(paraphrase) if feedback else None
             if message and len(discarded) < self.config.feedback_retries:
@@ -186,7 +213,9 @@ class Generator:
             return Generation(
                 paraphrase=paraphrase,
                 operations_applied=output.operations_applied,
-                reasoning="\n\n".join(filter(None, [response.message.thinking, output.reasoning])),
+                reasoning="\n\n".join(
+                    filter(None, [response.message.thinking, output.reasoning])
+                ),
                 sampling_seed=sampling_seed + call - 1,
                 attempts=call,
                 duration_s=time.monotonic() - started,

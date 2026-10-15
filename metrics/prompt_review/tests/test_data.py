@@ -33,7 +33,9 @@ def _run(tmp_path, records, *configs):
     """configs: config.json first, then the resumed sessions' snapshots."""
     run = tmp_path / "run"
     run.mkdir()
-    (run / "candidates.jsonl").write_text("".join(json.dumps(r) + "\n" for r in records))
+    (run / "candidates.jsonl").write_text(
+        "".join(json.dumps(r) + "\n" for r in records)
+    )
     for i, cfg in enumerate(configs):
         name = "config.json" if i == 0 else f"config_20261014-09000{i}.json"
         (run / name).write_text(json.dumps(cfg))
@@ -41,16 +43,33 @@ def _run(tmp_path, records, *configs):
 
 
 def test_categories_from_typology_in_the_latest_config(tmp_path):
-    typology = [{"key": k, "name": k.title()} for k in ("lexical", "syntactic", "discourse")]
-    run = _run(tmp_path, CANDIDATES, {"categories": ["syntactic"]}, {"categories": ["syntactic"], "typology": typology})
+    typology = [
+        {"key": k, "name": k.title()} for k in ("lexical", "syntactic", "discourse")
+    ]
+    run = _run(
+        tmp_path,
+        CANDIDATES,
+        {"categories": ["syntactic"]},
+        {"categories": ["syntactic"], "typology": typology},
+    )
     assert categories(run) == ["lexical", "syntactic", "discourse"]
 
 
 def test_categories_fallback_is_the_union_of_sessions_config_json_first(tmp_path):
-    run = _run(tmp_path, CANDIDATES, {"categories": ["lexical", "syntactic"]}, {"categories": ["discourse", "lexical"]})
+    run = _run(
+        tmp_path,
+        CANDIDATES,
+        {"categories": ["lexical", "syntactic"]},
+        {"categories": ["discourse", "lexical"]},
+    )
     assert categories(run) == ["lexical", "syntactic", "discourse"]
     # a category that only appears in the candidates is added at the end
-    assert categories(run, [cand("other", 1)]) == ["lexical", "syntactic", "discourse", "other"]
+    assert categories(run, [cand("other", 1)]) == [
+        "lexical",
+        "syntactic",
+        "discourse",
+        "other",
+    ]
 
 
 def test_duplicate_key_raises(tmp_path):
@@ -60,6 +79,12 @@ def test_duplicate_key_raises(tmp_path):
 
 
 def test_load_candidates_leaves_out_generation_errors(tmp_path):
-    error = {"category": "lexical", "attempt": 9, "prompt": None, "accepted": False, "reject_reason": "generation_error: x"}
+    error = {
+        "category": "lexical",
+        "attempt": 9,
+        "prompt": None,
+        "accepted": False,
+        "reject_reason": "generation_error: x",
+    }
     run = _run(tmp_path, [*CANDIDATES, error], {})
     assert len(load_candidates(run)) == len(CANDIDATES)

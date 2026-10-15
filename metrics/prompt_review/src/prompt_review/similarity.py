@@ -20,7 +20,9 @@ class Embeddings:
     keys: list[str]  # candidates with a usable vector, in candidates.jsonl order
     sims: np.ndarray  # cosine similarities, len(keys) x len(keys)
     model: str | None = None
-    warnings: list[str] = field(default_factory=list)  # candidates without a usable vector
+    warnings: list[str] = field(
+        default_factory=list
+    )  # candidates without a usable vector
 
     def __post_init__(self) -> None:
         self.index = {k: i for i, k in enumerate(self.keys)}
@@ -53,14 +55,22 @@ def load_embeddings(run_dir: Path, candidates: list[dict]) -> Embeddings | None:
     return Embeddings(keys, matrix @ matrix.T, model, warnings)
 
 
-def closest_in_pool(key: str, category: str, pool: dict[str, str], emb: Embeddings, by_key: dict[str, dict]) -> dict | None:
+def closest_in_pool(
+    key: str,
+    category: str,
+    pool: dict[str, str],
+    emb: Embeddings,
+    by_key: dict[str, dict],
+) -> dict | None:
     """The closest other paraphrase of `pool` (key -> current category) to `key`, within `category` and
     in any category, as {"within": match, "any": match}, each {"key", "prompt", "sem"} or None.
     None when `key` itself has no vector. Ties go to the earlier candidate, as in the generator."""
     i = emb.index.get(key)
     if i is None:
         return None
-    others = [(emb.index[k], k, cat) for k, cat in pool.items() if k != key and k in emb.index]
+    others = [
+        (emb.index[k], k, cat) for k, cat in pool.items() if k != key and k in emb.index
+    ]
     others.sort()  # candidates.jsonl order
     row = emb.sims[i]
 
@@ -69,12 +79,21 @@ def closest_in_pool(key: str, category: str, pool: dict[str, str], emb: Embeddin
             return None
         j = int(np.argmax(row[[e[0] for e in entries]]))
         k = entries[j][1]
-        return {"key": k, "prompt": by_key[k]["prompt"], "sem": float(row[entries[j][0]])}
+        return {
+            "key": k,
+            "prompt": by_key[k]["prompt"],
+            "sem": float(row[entries[j][0]]),
+        }
 
-    return {"within": best([e for e in others if e[2] == category]), "any": best(others)}
+    return {
+        "within": best([e for e in others if e[2] == category]),
+        "any": best(others),
+    }
 
 
-def closest_within_all(current: dict[str, str], pool: dict[str, str], emb: Embeddings) -> dict[str, tuple[str, float] | None]:
+def closest_within_all(
+    current: dict[str, str], pool: dict[str, str], emb: Embeddings
+) -> dict[str, tuple[str, float] | None]:
     """For every candidate in `current` (key -> current category) that has a vector: the closest other
     paraphrase of `pool` (key -> current category) in the same category, as (key, similarity), or None.
     One matrix operation for all candidates, for the list view. Ties go to the earlier candidate."""
@@ -98,7 +117,13 @@ def closest_within_all(current: dict[str, str], pool: dict[str, str], emb: Embed
     return out
 
 
-def kept_near_duplicates(kept: dict[str, str], emb: Embeddings, threshold: float) -> dict[str, tuple[str, float]]:
+def kept_near_duplicates(
+    kept: dict[str, str], emb: Embeddings, threshold: float
+) -> dict[str, tuple[str, float]]:
     """Kept paraphrases whose closest other kept paraphrase in the same category is above the threshold:
     key -> (that paraphrase's key, similarity). Both members of a pair are listed."""
-    return {k: m for k, m in closest_within_all(kept, kept, emb).items() if m and m[1] > threshold}
+    return {
+        k: m
+        for k, m in closest_within_all(kept, kept, emb).items()
+        if m and m[1] > threshold
+    }

@@ -20,7 +20,8 @@ _STEMMER = snowballstemmer.stemmer("english")
 
 # Determiners, prepositions, conjunctions, pronouns, auxiliaries and modals. Quantifiers such as
 # "all"/"every" are not listed: swapping them is a lexical change, not a morphological one.
-FUNCTION_WORDS = frozenset("""
+FUNCTION_WORDS = frozenset(
+    """
 a an the this that these those there here which who whom whose what
 of to in on at for from by with within without into onto up down over under about as than
 and or but nor so if then
@@ -28,7 +29,8 @@ i me my we us our you your it its they them their he him his she her
 is are was were be been being am do does did done have has had having
 can could should would will shall may might must
 please not no
-""".split())
+""".split()
+)
 
 _WORD = re.compile(r"[^\W\d_]+")
 
@@ -83,4 +85,6 @@ def check(seed: str, candidate: str) -> StemCheck:
 
     new = {s for s in cand_stems if not any(same_family(s, t) for t in seed_stems)}
     missing = {t for t in seed_stems if not any(same_family(s, t) for s in cand_stems)}
-    return StemCheck(tuple(first_word(cand_words, new)), tuple(first_word(seed_words, missing)))
+    return StemCheck(
+        tuple(first_word(cand_words, new)), tuple(first_word(seed_words, missing))
+    )

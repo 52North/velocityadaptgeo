@@ -50,15 +50,27 @@ def load(seed_id: str, seeds_dir: Path = SEEDS_DIR) -> Seed:
         id=seed_id,
         text=" ".join((folder / "prompt.txt").read_text(encoding="utf-8").split()),
         constraints=tuple(
-            Constraint(c["id"], c["requirement"], tuple(c["accept"]), tuple(c["reject"]), tuple(c.get("relative", ())))
+            Constraint(
+                c["id"],
+                c["requirement"],
+                tuple(c["accept"]),
+                tuple(c["reject"]),
+                tuple(c.get("relative", ())),
+            )
             for c in data["constraints"]
         ),
         trap_set=tuple(
-            TrapCase(" ".join(t["text"].split()), t["pass"], t["reason"], tuple(t.get("relative", ())))
+            TrapCase(
+                " ".join(t["text"].split()),
+                t["pass"],
+                t["reason"],
+                tuple(t.get("relative", ())),
+            )
             for t in data.get("trap_set", [])
         ),
         grammar_set=tuple(
-            GrammarCase(" ".join(g["text"].split()), g["grammatical"], g["reason"]) for g in data.get("grammar_set", [])
+            GrammarCase(" ".join(g["text"].split()), g["grammatical"], g["reason"])
+            for g in data.get("grammar_set", [])
         ),
     )
 

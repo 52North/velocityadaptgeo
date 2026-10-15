@@ -98,12 +98,14 @@ CATS = ["lexical", "syntactic", "discourse"]
 
 def test_summary_counts_and_moves():
     candidates = [
-        cand("lexical", 1),                          # gate accept, review accept
-        cand("lexical", 2, False, "near_duplicate"),  # gate reject, review accept -> overrule
-        cand("lexical", 3),                          # gate accept, moved to syntactic
-        cand("syntactic", 1),                        # gate accept, review reject
+        cand("lexical", 1),  # gate accept, review accept
+        cand(
+            "lexical", 2, False, "near_duplicate"
+        ),  # gate reject, review accept -> overrule
+        cand("lexical", 3),  # gate accept, moved to syntactic
+        cand("syntactic", 1),  # gate accept, review reject
         cand("syntactic", 2, False, "constraint:target"),  # unreviewed
-        cand("discourse", 1),                        # gate accept, moved to lexical
+        cand("discourse", 1),  # gate accept, moved to lexical
     ]
     decisions = {
         "lexical#1": decision("accept", "lexical"),
@@ -122,26 +124,43 @@ def test_summary_counts_and_moves():
     assert (dis.review_accepted, dis.added, dis.subtracted, dis.final) == (1, 0, 1, 0)
     assert sum(r.added for r in rows) == sum(r.subtracted for r in rows) == 2
     assert sum(r.final for r in rows) == sum(r.review_accepted for r in rows)
-    assert (overrules.gate_rejected_accepted, overrules.gate_accepted_rejected) == (1, 1)
+    assert (overrules.gate_rejected_accepted, overrules.gate_accepted_rejected) == (
+        1,
+        1,
+    )
 
 
 def test_summary_rejected_with_other_category_is_not_a_move():
-    rows, _ = summarize([cand("lexical", 1)], {"lexical#1": decision("reject", "syntactic")}, CATS)
+    rows, _ = summarize(
+        [cand("lexical", 1)], {"lexical#1": decision("reject", "syntactic")}, CATS
+    )
     assert [(r.added, r.subtracted) for r in rows] == [(0, 0), (0, 0), (0, 0)]
 
 
 def test_summary_without_reviews():
     rows, overrules = summarize(CANDIDATES, {}, ["lexical", "syntactic"])
-    assert [(r.generated, r.unreviewed, r.final) for r in rows] == [(3, 3, 0), (2, 2, 0)]
-    assert (overrules.gate_rejected_accepted, overrules.gate_accepted_rejected) == (0, 0)
+    assert [(r.generated, r.unreviewed, r.final) for r in rows] == [
+        (3, 3, 0),
+        (2, 2, 0),
+    ]
+    assert (overrules.gate_rejected_accepted, overrules.gate_accepted_rejected) == (
+        0,
+        0,
+    )
 
 
 def test_match_status():
     s = ReviewState(CANDIDATES)
     assert match_status("lexical#1", s.by_key, {}) == ("lexical", False, "unreviewed")
-    assert match_status("lexical#1", s.by_key, {"lexical#1": decision("accept", "lexical")}) == ("lexical", False, "accept")
-    assert match_status("lexical#1", s.by_key, {"lexical#1": decision("accept", "discourse")}) == ("discourse", True, "accept")
-    assert match_status("lexical#1", s.by_key, {"lexical#1": decision("reject", "lexical")}) == ("lexical", False, "reject")
+    assert match_status(
+        "lexical#1", s.by_key, {"lexical#1": decision("accept", "lexical")}
+    ) == ("lexical", False, "accept")
+    assert match_status(
+        "lexical#1", s.by_key, {"lexical#1": decision("accept", "discourse")}
+    ) == ("discourse", True, "accept")
+    assert match_status(
+        "lexical#1", s.by_key, {"lexical#1": decision("reject", "lexical")}
+    ) == ("lexical", False, "reject")
     assert match_status("lexical#99", s.by_key, {}) is None
 
 
@@ -153,17 +172,33 @@ from prompt_review.state import SORTS  # noqa: E402
 
 
 def test_sort_by_similarity_and_category(tmp_path):
-    s = ReviewState(CANDIDATES, None, embeddings_for(tmp_path), 0.97, ["syntactic", "lexical"])
+    s = ReviewState(
+        CANDIDATES, None, embeddings_for(tmp_path), 0.97, ["syntactic", "lexical"]
+    )
     s.filter = "all"
     assert s.sort == "file order" and keys(s.visible()) == keys(CANDIDATES)
     s.cycle_sort()
     # within category, live: lexical#2 -> lexical#1 0.995, lexical#1 -> lexical#3 0.6, lexical#3 -> lexical#1 0.6,
     # syntactic#1 -> syntactic#2 0.196, syntactic#2: no other kept syntactic one (last)
     assert s.sort == "similarity"
-    assert keys(s.visible()) == ["lexical#2", "lexical#1", "lexical#3", "syntactic#1", "syntactic#2"]
+    assert keys(s.visible()) == [
+        "lexical#2",
+        "lexical#1",
+        "lexical#3",
+        "syntactic#1",
+        "syntactic#2",
+    ]
     s.cycle_sort()
-    assert s.sort == "category"  # the given category order, file order within a category
-    assert keys(s.visible()) == ["syntactic#1", "syntactic#2", "lexical#1", "lexical#2", "lexical#3"]
+    assert (
+        s.sort == "category"
+    )  # the given category order, file order within a category
+    assert keys(s.visible()) == [
+        "syntactic#1",
+        "syntactic#2",
+        "lexical#1",
+        "lexical#2",
+        "lexical#3",
+    ]
     s.cycle_sort()
     assert s.sort == SORTS[0]
 
@@ -179,17 +214,40 @@ def test_sort_keeps_the_current_candidate_and_sets_the_review_order(tmp_path):
 
 
 def test_category_sort_follows_moves():
-    s = ReviewState(CANDIDATES, {"syntactic#2": decision("accept", "lexical")}, categories=["lexical", "syntactic"])
+    s = ReviewState(
+        CANDIDATES,
+        {"syntactic#2": decision("accept", "lexical")},
+        categories=["lexical", "syntactic"],
+    )
     s.filter, s.sort = "all", "category"
-    assert keys(s.visible()) == ["lexical#1", "lexical#2", "lexical#3", "syntactic#2", "syntactic#1"]
+    assert keys(s.visible()) == [
+        "lexical#1",
+        "lexical#2",
+        "lexical#3",
+        "syntactic#2",
+        "syntactic#1",
+    ]
 
 
 def test_similarity_sort_without_embeddings_uses_the_stored_matches():
-    stored = [{**c, "closest_accepted": {"key": "x", "prompt": "x", "sem": sem} if sem else None}
-              for c, sem in zip(CANDIDATES, [None, 0.9, 0.5, 0.99, None])]
+    stored = [
+        {
+            **c,
+            "closest_accepted": {"key": "x", "prompt": "x", "sem": sem}
+            if sem
+            else None,
+        }
+        for c, sem in zip(CANDIDATES, [None, 0.9, 0.5, 0.99, None])
+    ]
     s = ReviewState(stored)
     s.filter, s.sort = "all", "similarity"
-    assert keys(s.visible()) == ["syntactic#1", "lexical#2", "lexical#3", "lexical#1", "syntactic#2"]
+    assert keys(s.visible()) == [
+        "syntactic#1",
+        "lexical#2",
+        "lexical#3",
+        "lexical#1",
+        "syntactic#2",
+    ]
 
 
 def test_visible_cache_follows_direct_decision_changes():

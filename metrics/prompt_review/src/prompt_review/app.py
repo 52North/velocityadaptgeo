@@ -10,8 +10,22 @@ from textual.containers import Vertical, VerticalScroll
 from textual.screen import ModalScreen, Screen
 from textual.widgets import DataTable, Input, OptionList, Static
 
-from prompt_review.data import candidate_key, categories, first_config, latest_config, load_candidates, load_decisions, save
-from prompt_review.render import LIST_COLUMNS, _body, footer_text, list_preview, list_row
+from prompt_review.data import (
+    candidate_key,
+    categories,
+    first_config,
+    latest_config,
+    load_candidates,
+    load_decisions,
+    save,
+)
+from prompt_review.render import (
+    LIST_COLUMNS,
+    _body,
+    footer_text,
+    list_preview,
+    list_row,
+)
 from prompt_review.similarity import load_embeddings
 from prompt_review.state import ReviewState
 
@@ -49,13 +63,20 @@ class CategoryScreen(ModalScreen[str | None]):
     def compose(self) -> ComposeResult:
         with Vertical(classes="dialog"):
             yield Static("Accept into category  (number or Enter, Esc to cancel)")
-            yield OptionList(*(f"{i} {name}" for i, name in enumerate(self.categories, 1)), id="categories")
+            yield OptionList(
+                *(f"{i} {name}" for i, name in enumerate(self.categories, 1)),
+                id="categories",
+            )
 
     def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
         self.dismiss(self.categories[event.option_index])
 
     def on_key(self, event) -> None:
-        if event.character and event.character.isdigit() and 1 <= int(event.character) <= len(self.categories):
+        if (
+            event.character
+            and event.character.isdigit()
+            and 1 <= int(event.character) <= len(self.categories)
+        ):
             event.stop()
             self.dismiss(self.categories[int(event.character) - 1])
 
@@ -97,7 +118,9 @@ class ListScreen(Screen):
         self.refresh_rows()
 
     def _prompt_width(self) -> int:
-        fixed = sum(w for _, w in LIST_COLUMNS if w) + 2 * len(LIST_COLUMNS) + 2  # cell padding, scrollbar
+        fixed = (
+            sum(w for _, w in LIST_COLUMNS if w) + 2 * len(LIST_COLUMNS) + 2
+        )  # cell padding, scrollbar
         return max(20, self.size.width - fixed)
 
     def refresh_rows(self) -> None:
@@ -123,13 +146,17 @@ class ListScreen(Screen):
                 key = candidate_key(c)
                 row = list_row(c, self.state, width)
                 for (label, _), old, new in zip(LIST_COLUMNS, self.cells[key], row):
-                    if str(old) != str(new) or getattr(old, "style", None) != getattr(new, "style", None):
+                    if str(old) != str(new) or getattr(old, "style", None) != getattr(
+                        new, "style", None
+                    ):
                         table.update_cell(key, label, new)
                 self.cells[key] = row
         if visible:
             table.move_cursor(row=self.state.index)
         self.show_header()
-        self.query_one("#preview", Static).update(list_preview(self.state.current(), self.state))
+        self.query_one("#preview", Static).update(
+            list_preview(self.state.current(), self.state)
+        )
 
     def show_header(self) -> None:
         s = self.state
@@ -143,7 +170,9 @@ class ListScreen(Screen):
     def on_data_table_row_highlighted(self, event: DataTable.RowHighlighted) -> None:
         if event.cursor_row < len(self.state.visible()):
             self.state.index = event.cursor_row
-            self.query_one("#preview", Static).update(list_preview(self.state.current(), self.state))
+            self.query_one("#preview", Static).update(
+                list_preview(self.state.current(), self.state)
+            )
 
     def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
         self.state.index = event.cursor_row
@@ -206,7 +235,9 @@ class ReviewScreen(Screen):
         self.show(top=False)
 
     def show(self, top: bool = True) -> None:
-        self.query_one("#body", Static).update(_body(self.state, self.app.seed_text, self.app.details))
+        self.query_one("#body", Static).update(
+            _body(self.state, self.app.seed_text, self.app.details)
+        )
         self.query_one("#review-footer", Static).update(footer_text(self.state))
         if top:
             self.query_one("#scroll", VerticalScroll).scroll_home(animate=False)
@@ -269,7 +300,9 @@ class ReviewScreen(Screen):
         if c is None:
             return
         key = candidate_key(c)
-        existing = self.state.decisions.get(key, {}).get("note") or self.state.pending_notes.get(key, "")
+        existing = self.state.decisions.get(key, {}).get(
+            "note"
+        ) or self.state.pending_notes.get(key, "")
 
         def done(note: str | None) -> None:
             if note is not None:
@@ -293,7 +326,14 @@ class ReviewApp(App):
     #categories { height: auto; }
     """
 
-    def __init__(self, state: ReviewState, seed_text: str, categories: list[str], save_path: Path, run_name: str):
+    def __init__(
+        self,
+        state: ReviewState,
+        seed_text: str,
+        categories: list[str],
+        save_path: Path,
+        run_name: str,
+    ):
         super().__init__()
         self.state = state
         self.seed_text = seed_text
@@ -313,9 +353,16 @@ def build_app(run_dir: Path, save_path: Path | None = None) -> ReviewApp:
     candidates = load_candidates(run_dir)
     category_keys = categories(run_dir, candidates)
     path = save_path or run_dir / "reviewed.jsonl"
-    state = ReviewState(candidates, load_decisions(run_dir / "reviewed.jsonl"), load_embeddings(run_dir, candidates),
-                        latest_config(run_dir)["config"]["thresholds"]["near_duplicate_sem"], category_keys)
-    return ReviewApp(state, first_config(run_dir)["seed"]["text"], category_keys, path, run_dir.name)
+    state = ReviewState(
+        candidates,
+        load_decisions(run_dir / "reviewed.jsonl"),
+        load_embeddings(run_dir, candidates),
+        latest_config(run_dir)["config"]["thresholds"]["near_duplicate_sem"],
+        category_keys,
+    )
+    return ReviewApp(
+        state, first_config(run_dir)["seed"]["text"], category_keys, path, run_dir.name
+    )
 
 
 def review(run_dir: Path) -> None:
@@ -323,8 +370,13 @@ def review(run_dir: Path) -> None:
     app.run()
     state, console = app.state, Console()
     if state.embeddings is not None and state.embeddings.warnings:
-        console.print(f"{len(state.embeddings.warnings)} candidate(s) without a usable stored embedding (no live similarities):", style="yellow")
+        console.print(
+            f"{len(state.embeddings.warnings)} candidate(s) without a usable stored embedding (no live similarities):",
+            style="yellow",
+        )
         for w in state.embeddings.warnings:
             console.print("  " + w)
     a, r, u = state.counts()
-    console.print(f"Saved {a + r} reviews to {app.save_path} ({a} accepted, {r} rejected, {u} unreviewed).")
+    console.print(
+        f"Saved {a + r} reviews to {app.save_path} ({a} accepted, {r} rejected, {u} unreviewed)."
+    )

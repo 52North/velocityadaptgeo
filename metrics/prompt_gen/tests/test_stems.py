@@ -5,7 +5,11 @@ import pytest
 from prompt_gen import seeds, stems
 
 SEED = seeds.load("muenster_green_300m").text
-FIRST_RUN = (Path(__file__).parent / "data" / "first_run_morphological.txt").read_text(encoding="utf-8").splitlines()
+FIRST_RUN = (
+    (Path(__file__).parent / "data" / "first_run_morphological.txt")
+    .read_text(encoding="utf-8")
+    .splitlines()
+)
 
 
 @pytest.mark.parametrize("candidate", FIRST_RUN)
@@ -51,11 +55,22 @@ def test_spelling_change_is_not_morphological():
     assert stems.check(SEED, SEED.replace("Münster", "Muenster")).new == ("muenster",)
 
 
-@pytest.mark.parametrize("a, b", [("walk", "walkabl"), ("visual", "visualiz"), ("identifi", "identif"), ("distanc", "distant")])
+@pytest.mark.parametrize(
+    "a, b",
+    [
+        ("walk", "walkabl"),
+        ("visual", "visualiz"),
+        ("identifi", "identif"),
+        ("distanc", "distant"),
+    ],
+)
 def test_same_family(a, b):
     assert stems.same_family(a, b)
 
 
-@pytest.mark.parametrize("a, b", [("park", "parti"), ("area", "arena"), ("creat", "recreat"), ("map", "mapl")])
+@pytest.mark.parametrize(
+    "a, b",
+    [("park", "parti"), ("area", "arena"), ("creat", "recreat"), ("map", "mapl")],
+)
 def test_different_family(a, b):
     assert not stems.same_family(a, b)

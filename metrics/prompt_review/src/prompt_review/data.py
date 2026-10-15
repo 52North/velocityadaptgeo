@@ -28,7 +28,9 @@ def load_candidates(run_dir: Path) -> list[dict]:
     for r in records:
         key = candidate_key(r)
         if key in seen:
-            raise ValueError(f"duplicate candidate key {key} in {run_dir / 'candidates.jsonl'}")
+            raise ValueError(
+                f"duplicate candidate key {key} in {run_dir / 'candidates.jsonl'}"
+            )
         seen.add(key)
     return [c for c in records if c.get("prompt")]
 
@@ -75,4 +77,6 @@ def categories(run_dir: Path, candidates: list[dict] = ()) -> list[str]:
         keys = []
         for cfg in configs:
             keys += [k for k in cfg.get("categories", []) if k not in keys]
-    return keys + list(dict.fromkeys(c["category"] for c in candidates if c["category"] not in keys))
+    return keys + list(
+        dict.fromkeys(c["category"] for c in candidates if c["category"] not in keys)
+    )

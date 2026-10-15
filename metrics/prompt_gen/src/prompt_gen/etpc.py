@@ -32,13 +32,16 @@ class Pair:
     relations: tuple[Relation, ...]
 
     def categories(self) -> set[str]:
-        return {BY_TYPE_ID[r.type_id].key for r in self.relations if r.type_id in BY_TYPE_ID}
+        return {
+            BY_TYPE_ID[r.type_id].key for r in self.relations if r.type_id in BY_TYPE_ID
+        }
 
     def is_pure(self, category: str) -> bool:
         """True if every change in the pair belongs to `category` (identity spans aside)."""
         changes = [r for r in self.relations if r.type_id != IDENTITY_TYPE_ID]
         return bool(changes) and all(
-            r.type_id in BY_TYPE_ID and BY_TYPE_ID[r.type_id].key == category for r in changes
+            r.type_id in BY_TYPE_ID and BY_TYPE_ID[r.type_id].key == category
+            for r in changes
         )
 
 
@@ -51,14 +54,21 @@ def load_pairs(raw_dir: Path) -> list[Pair]:
     sentences = {}
     for p in _parse(raw_dir / "text_pairs.xml"):
         if p.findtext("etpc_label") == "1":
-            sentences[int(p.findtext("pair_id"))] = (p.findtext("sent1_raw").strip(), p.findtext("sent2_raw").strip())
+            sentences[int(p.findtext("pair_id"))] = (
+                p.findtext("sent1_raw").strip(),
+                p.findtext("sent2_raw").strip(),
+            )
 
     relations = defaultdict(list)
     for r in _parse(raw_dir / "textual_paraphrases.xml"):
         if r.findtext("sense_preserving") != "yes":
             continue
         relations[int(r.findtext("pair_id"))].append(
-            Relation(int(r.findtext("type_id")), (r.findtext("s1_text") or "").strip(), (r.findtext("s2_text") or "").strip())
+            Relation(
+                int(r.findtext("type_id")),
+                (r.findtext("s1_text") or "").strip(),
+                (r.findtext("s2_text") or "").strip(),
+            )
         )
 
     return [
