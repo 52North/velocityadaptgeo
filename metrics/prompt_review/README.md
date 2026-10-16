@@ -17,7 +17,7 @@ With the run's `embeddings.jsonl` (written by the generator; for older runs `pro
 
 ## Screens and keys
 
-The reviewer starts on a **list** of all candidates in the current filter: one line each, with the run number, key, current category (`→` when moved), the gates' result, your decision, the similarity to the closest kept paraphrase in its category (red over the near-duplicate threshold) and the start of the prompt. The highlighted row's full text and closest match are shown below the table. Enter opens the **review page** for that candidate; Esc returns to the list at the same row. Both share the filter, sort order and position.
+The reviewer starts on a **list** of all candidates in the current filter: one line each, with the run number, key, current category (`→` when moved), the gates' result, your decision, the similarity to the closest kept paraphrase in its category (red over the near-duplicate threshold), the semantic similarity to the seed (the generator's `sem` score) and the start of the prompt. The highlighted row's full text and closest match are shown below the table. Enter opens the **review page** for that candidate; Esc returns to the list at the same row. Both share the filter, sort order and position.
 
 List:
 
@@ -29,7 +29,7 @@ List:
 | u | undo the decision |
 | f | cycle the filter |
 | k | cycle the accepted/rejected filter: any, currently accepted, currently rejected |
-| s | cycle the sort: file order, similarity (most similar first), category |
+| s | cycle the sort: file order, similarity (most similar first), category, seed similarity (most similar to the seed first) |
 | q / Esc | quit |
 
 Review page:

@@ -135,6 +135,28 @@ def test_filter_and_sort_in_the_list(tmp_path):
     assert sim == "0.995"
 
 
+def test_seed_similarity_column_and_sort_in_the_list(tmp_path):
+    run = _run(tmp_path)
+    scored = [{**r, "sem": sem} for r, sem in zip(RECORDS, [0.8, 0.9, 0.95, 0.7, 0.85])]
+    del scored[1]["sem"]  # no score: shown as "—", sorted last
+    (run / "candidates.jsonl").write_text("".join(json.dumps(r) + "\n" for r in scored))
+    app = build_app(run)
+
+    async def steps(pilot):
+        app.state.filter = "all"
+        cast(ListScreen, app.screen).refresh_rows()
+        await pilot.press("s", "s", "s")  # similarity, category, seed similarity
+        await pilot.pause()
+        table = app.screen.query_one(DataTable)
+        seed = {k.value: str(table.get_row(k.value)[6]) for k in table.rows}
+        return app.state.sort, [k.value for k in table.rows], seed
+
+    sort, keys, seed = _drive(app, steps)
+    assert sort == "seed similarity"
+    assert keys == ["lexical#3", "syntactic#2", "lexical#1", "syntactic#1", "lexical#2"]
+    assert seed["lexical#3"] == "0.950" and seed["lexical#2"] == "—"
+
+
 def test_filter_cycles_through_all_filters(tmp_path):
     app = build_app(_run(tmp_path))
 

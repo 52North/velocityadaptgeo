@@ -199,6 +199,8 @@ def test_sort_by_similarity_and_category(tmp_path):
         "lexical#3",
     ]
     s.cycle_sort()
+    assert s.sort == "seed similarity"
+    s.cycle_sort()
     assert s.sort == SORTS[0]
 
 
@@ -246,6 +248,23 @@ def test_similarity_sort_without_embeddings_uses_the_stored_matches():
         "lexical#3",
         "lexical#1",
         "syntactic#2",
+    ]
+
+
+def test_seed_similarity_sort():
+    scored = [
+        {**c, "sem": sem} if sem is not None else c
+        for c, sem in zip(CANDIDATES, [0.8, None, 0.95, 0.7, 0.8])
+    ]
+    s = ReviewState(scored)
+    s.filter, s.sort = "all", "seed similarity"
+    # most similar to the seed first, ties in file order, no score last
+    assert keys(s.visible()) == [
+        "lexical#3",
+        "lexical#1",
+        "syntactic#2",
+        "syntactic#1",
+        "lexical#2",
     ]
 
 

@@ -14,7 +14,8 @@ NEAR_DUPLICATE_FILTER = (
 DEFAULT_FILTER = "passed gates"
 # Second filter on top of the first: the current decision (manual, else the gates'), see is_kept().
 STATUSES = ("any", "currently accepted", "currently rejected")
-SORTS = ("file order", "similarity", "category")
+# "similarity": to the closest kept paraphrase in the category; "seed similarity": to the seed (stored `sem`).
+SORTS = ("file order", "similarity", "category", "seed similarity")
 
 
 def reason_group(c: dict) -> str | None:
@@ -26,6 +27,11 @@ def current_category(c: dict, decisions: dict[str, dict]) -> str:
     """The category of the candidate's manual decision (after a move) if it has one, else the generated one."""
     review = decisions.get(candidate_key(c))
     return review["category"] if review else c["category"]
+
+
+def seed_similarity(c: dict) -> float | None:
+    """Semantic similarity of the paraphrase to the seed, as scored by the generator (`sem`)."""
+    return c.get("sem")
 
 
 def is_kept(c: dict, decisions: dict[str, dict]) -> bool:
@@ -179,6 +185,12 @@ class ReviewState:
             ):  # most similar first; no match last. Stable: ties keep file order
                 v.sort(
                     key=lambda c: -(m[1]) if (m := self.similarity(c)) else float("inf")
+                )
+            elif self.sort == "seed similarity":  # most similar to the seed first
+                v.sort(
+                    key=lambda c: (
+                        -s if (s := seed_similarity(c)) is not None else float("inf")
+                    )
                 )
             elif self.sort == "category":
                 order = {k: i for i, k in enumerate(self.categories)}

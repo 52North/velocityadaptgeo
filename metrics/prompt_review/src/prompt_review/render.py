@@ -25,6 +25,7 @@ from prompt_review.state import (
     kept,
     match_status,
     reason_group,
+    seed_similarity,
     summarize,
 )
 
@@ -380,6 +381,7 @@ LIST_COLUMNS = (
     ("Gate", 15),
     ("Review", 7),
     ("Sim", 6),
+    ("Seed", 6),
     ("Prompt", None),
 )
 
@@ -396,11 +398,12 @@ def _sim_text(state: ReviewState, sem: float) -> Text:
 
 def list_row(c: dict, state: ReviewState, prompt_width: int) -> list:
     """One table row: number in the run, key, current category, gate, review, closest similarity in the
-    category, and the prompt cut to one line."""
+    category, similarity to the seed, and the prompt cut to one line."""
     key = candidate_key(c)
     review = state.decisions.get(key)
     current = current_category(c, state.decisions)
     match = state.similarity(c)
+    seed = seed_similarity(c)
     return [
         Text(str(state.number[key]), style="dim"),
         key,
@@ -417,6 +420,7 @@ def list_row(c: dict, state: ReviewState, prompt_width: int) -> list:
             style="green" if review["decision"] == "accept" else "red",
         ),
         Text("—", style="dim") if match is None else _sim_text(state, match[1]),
+        Text("—", style="dim") if seed is None else Text(f"{seed:.3f}"),
         _cut(c["prompt"], prompt_width),
     ]
 
