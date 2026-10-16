@@ -12,6 +12,7 @@ from src.llm.nodes import (
     builder_node,
     chat_node,
     management_node,
+    mcp_retriever_node,
     responder_node,
     retriever_node,
     validator_node,
@@ -30,6 +31,13 @@ WORKFLOW_RECURSION_LIMIT = int(os.environ.get(
 ))
 DEFAULT_WORKFLOW_CONFIG = {"recursion_limit": WORKFLOW_RECURSION_LIMIT}
 
+# How the retriever finds candidate processes: a pgvector catalog search (top 5), or every
+# tool of the MCP server in `mcp/`. Everything else in the graph is the same for both.
+RETRIEVERS = {"pgvector": retriever_node, "mcp": mcp_retriever_node}
+VARIANT = os.environ.get("WORKFLOW_VARIANT", "pgvector")
+if VARIANT not in RETRIEVERS:
+    raise ValueError(f"WORKFLOW_VARIANT must be one of {', '.join(RETRIEVERS)}, not {VARIANT!r}")
+
 llm = ChatAnthropic(
     model=os.environ.get("ANTHROPIC_MODEL", "claude-haiku-5-5"),
     api_key=os.environ.get("ANTHROPIC_API_KEY"),
@@ -43,8 +51,8 @@ llm = ChatAnthropic(
 graph = StateGraph(WorkflowState)
 
 graph.add_node("manager",       partial(management_node, llm=llm))
-graph.add_node("retriever",     partial(retriever_node,  llm=llm))
-graph.add_node("auto_build",    partial(auto_build_node, llm=llm))
+graph.add_node("retriever",     partial(RETRIEVERS[VARIANT], llm=llm))
+graph.add_node("auto_build",    partial(auto_build_node, llm=llm, variant=VARIANT))
 graph.add_node("builder",       builder_node)
 graph.add_node("validator",     validator_node)
 graph.add_node("responder",     partial(responder_node,  llm=llm))

@@ -14,6 +14,11 @@ x-pygeoapi: &pygeoapi
   LOCAL_PYGEOAPI_HOST: localhost:5000
   LOCAL_PYGEOAPI_INTERNAL: pygeoapi:80
 
+# Remote OGC API servers, besides the local pygeoapi. The catalog crawler and the MCP server
+# read the same list, so both workflow variants see the same processes.
+x-ogc-servers: &ogc-servers
+  OGC_SERVERS: https://demo.pygeoapi.io/master/,https://maps.ecere.com/ogcapi/
+
 services:
   pygeoapi:
     build: ./pygeoapi_instance
@@ -55,7 +60,9 @@ services:
       MAX_WORKFLOW_ITERATIONS: "16"
       MAX_MAP_FEATURES: "3000"
       HTTP_TIMEOUT: "30"
+      # pgvector (catalog search) or mcp (every tool of the mcp service); src.batch --variant overrides it.
       WORKFLOW_VARIANT: pgvector
+      MCP_URL: http://mcp:8001/mcp
       METRICS_FILE: metrics/runs.jsonl
     volumes:
       - ./metrics:/app/metrics
@@ -67,6 +74,20 @@ services:
         condition: service_healthy
       ollama-pull:
         condition: service_completed_successfully
+    restart: unless-stopped
+
+  # Tools for the mcp workflow variant; the tool list is crawled once at startup.
+  mcp:
+    build: ./mcp
+    environment:
+      <<: [*pygeoapi, *ogc-servers]
+    dns:
+      - 8.8.8.8
+    ports:
+      - "8001:8001"
+    depends_on:
+      pygeoapi:
+        condition: service_started
     restart: unless-stopped
 
   ollama:
@@ -119,8 +140,7 @@ services:
       context: ./ogc_database
       dockerfile: Dockerfile
     environment:
-      <<: [*postgres, *ollama, *pygeoapi]
-      OGC_SERVERS: https://demo.pygeoapi.io/master/,https://maps.ecere.com/ogcapi/
+      <<: [*postgres, *ollama, *pygeoapi, *ogc-servers]
       HTTP_TIMEOUT: "30"
       CONCURRENT_REQUESTS: "5"
     dns:

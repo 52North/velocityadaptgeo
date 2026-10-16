@@ -1,8 +1,8 @@
 """Build a workflow graph for every reviewed paraphrase of a prompt_gen run.
 
-    python -m src.batch <run_dir> [--limit N] [--seed-runs N] [--seed-only] [--concurrency N]
-    python -m src.batch <run_dir> --status [--seed-runs N] [--seed-only] [--concurrency N]
-    python -m src.batch <run_dir> --summary [--seed-only] [--expect a,b,c,...]
+    python -m src.batch <run_dir> [--variant V] [--limit N] [--seed-runs N] [--seed-only] [--concurrency N]
+    python -m src.batch <run_dir> [--variant V] --status [--seed-runs N] [--seed-only] [--concurrency N]
+    python -m src.batch <run_dir> [--variant V] --summary [--seed-only] [--expect a,b,c,...]
 
 Which prompts run, and in which category they count, is read from the reviewer's
 `<run_dir>/reviewed.jsonl` (see metrics/prompt_review/FORMAT.md) and nowhere else. The
@@ -20,6 +20,12 @@ so a run folder holds everything about its run; they join to the results by `thr
 Each result also keeps the run's `decision_history` (the manager's steps and the auto_builder's
 decisions with their reasoning), so a wrong graph can be traced without re-running it.
 
+`--variant` (default `WORKFLOW_VARIANT`, else pgvector) picks how the agent finds processes:
+pgvector catalog search, or every tool of the MCP server. Each variant keeps its own results on
+the same reviewed prompts: pgvector in `workflows.jsonl` with thread ids `<run_id>/<key>`, any
+other variant in `workflows.<variant>.jsonl` with thread ids `<run_id>/<variant>/<key>`. Their
+metrics share `runs.jsonl` (every record carries its `variant`).
+
 `--status` prints one line on a run in progress (or finished) and exits, without loading the
 agent: progress, errors, cost so far, and the time and cost left, estimated from the last
 results. Pass the same `--seed-runs`, `--seed-only` and `--concurrency` as the run.
@@ -34,6 +40,7 @@ import asyncio
 import hashlib
 import json
 import logging
+import os
 import time
 from pathlib import Path
 
@@ -42,6 +49,8 @@ logger = logging.getLogger("src.batch")
 
 RESULTS_FILE = "workflows.jsonl"
 RUNS_FILE = "runs.jsonl"
+VARIANTS = ("pgvector", "mcp")  # src.llm.workflow.RETRIEVERS; not imported, so --status stays agent-free
+DEFAULT_VARIANT = "pgvector"
 SEED_CATEGORY = "seed"
 STATUS_WINDOW = 20  # recent results the --status estimate is based on
 
@@ -59,6 +68,15 @@ def _key(candidate: dict) -> str:
 
 def _sha1(text: str) -> str:
     return hashlib.sha1(text.encode("utf-8")).hexdigest()
+
+
+def results_file(variant: str = DEFAULT_VARIANT) -> str:
+    """The results file of a variant; the bare name is pgvector's, as before there were variants."""
+    return RESULTS_FILE if variant == DEFAULT_VARIANT else f"workflows.{variant}.jsonl"
+
+
+def thread_id(run_dir: Path, key: str, variant: str = DEFAULT_VARIANT) -> str:
+    return f"{run_dir.name}/{key}" if variant == DEFAULT_VARIANT else f"{run_dir.name}/{variant}/{key}"
 
 
 def seed_prompt(run_dir: Path) -> str:
@@ -82,17 +100,17 @@ def accepted_prompts(run_dir: Path, seed_runs: int = 0, seed_only: bool = False)
     return selected
 
 
-def latest_results(run_dir: Path) -> dict[str, dict]:
+def latest_results(run_dir: Path, variant: str = DEFAULT_VARIANT) -> dict[str, dict]:
     """The last result line per key; a retry after an error appends a new line."""
-    return {r["key"]: r for r in _read_jsonl(run_dir / RESULTS_FILE)}
+    return {r["key"]: r for r in _read_jsonl(run_dir / results_file(variant))}
 
 
-def load_results(run_dir: Path) -> list[dict]:
+def load_results(run_dir: Path, variant: str = DEFAULT_VARIANT) -> list[dict]:
     """Results of the currently accepted paraphrases and the seed runs, with the current review category.
 
     Results whose prompt is no longer accepted, or whose text no longer matches (`text_sha1`), are left out.
     """
-    results = latest_results(run_dir)
+    results = latest_results(run_dir, variant)
     selected = accepted_prompts(run_dir, seed_runs=sum(k.startswith(f"{SEED_CATEGORY}#") for k in results))
     return [
         {**results[key], "category": s["category"], "prompt": s["prompt"]}
@@ -105,10 +123,11 @@ def _finished_at(result: dict) -> float:
     return time.mktime(time.strptime(result["at"], "%Y-%m-%dT%H:%M:%S")) + result["wall_ms"] / 1000
 
 
-def status(run_dir: Path, seed_runs: int, concurrency: int = 1, seed_only: bool = False) -> str:
+def status(run_dir: Path, seed_runs: int, concurrency: int = 1, seed_only: bool = False,
+           variant: str = DEFAULT_VARIANT) -> str:
     """One line on the state of a run: progress, errors, cost so far, time and cost left."""
     wanted = accepted_prompts(run_dir, seed_runs, seed_only)
-    results = {k: r for k, r in latest_results(run_dir).items() if k in wanted}
+    results = {k: r for k, r in latest_results(run_dir, variant).items() if k in wanted}
     done = [r for r in results.values() if not r.get("error")]
     errors = sorted(k for k, r in results.items() if r.get("error"))
     costs = {m["thread_id"]: m.get("cost_usd") or 0 for m in _read_jsonl(run_dir / RUNS_FILE)}
@@ -131,21 +150,21 @@ def status(run_dir: Path, seed_runs: int, concurrency: int = 1, seed_only: bool 
     return line
 
 
-async def build_one(run_dir: Path, key: str, prompt: str) -> dict:
+async def build_one(run_dir: Path, key: str, prompt: str, variant: str = DEFAULT_VARIANT) -> dict:
     """Run the agent on one prompt in a fresh thread and return the result line."""
     # Imported here so --status does not load the agent and its LLM client.
     from src.app import turn_config, turn_input
     from src.llm.workflow import compiled_graph
     from src.metrics import RunTracker
 
-    thread_id = f"{run_dir.name}/{key}"
+    thread = thread_id(run_dir, key, variant)
     started = time.time()
-    record = {"key": key, "text_sha1": _sha1(prompt), "thread_id": thread_id,
+    record = {"key": key, "text_sha1": _sha1(prompt), "thread_id": thread,
               "at": time.strftime("%Y-%m-%dT%H:%M:%S")}
     try:
         state = await compiled_graph.ainvoke(
             turn_input(prompt),
-            config={**turn_config(thread_id), "callbacks": [RunTracker(thread_id, str(run_dir / RUNS_FILE))]},
+            config={**turn_config(thread), "callbacks": [RunTracker(thread, str(run_dir / RUNS_FILE))]},
         )
     except Exception as exc:
         logger.exception("%s failed", key)
@@ -164,20 +183,21 @@ async def build_one(run_dir: Path, key: str, prompt: str) -> dict:
     }
 
 
-async def build_all(run_dir: Path, seed_runs: int, limit: int | None, concurrency: int, seed_only: bool = False) -> None:
+async def build_all(run_dir: Path, seed_runs: int, limit: int | None, concurrency: int, seed_only: bool = False,
+                    variant: str = DEFAULT_VARIANT) -> None:
     """Build the accepted prompts that have no successful result yet, appending one line each."""
-    done = {k for k, r in latest_results(run_dir).items() if not r.get("error")}
+    done = {k for k, r in latest_results(run_dir, variant).items() if not r.get("error")}
     todo = [(k, s["prompt"]) for k, s in accepted_prompts(run_dir, seed_runs, seed_only).items() if k not in done]
     todo = todo[:limit] if limit is not None else todo
-    logger.info("%d to build, %d already done", len(todo), len(done))
+    logger.info("%s: %d to build, %d already done", variant, len(todo), len(done))
 
     gate = asyncio.Semaphore(concurrency)
     lock = asyncio.Lock()
-    out = run_dir / RESULTS_FILE
+    out = run_dir / results_file(variant)
 
     async def worker(key: str, prompt: str) -> None:
         async with gate:
-            record = await build_one(run_dir, key, prompt)
+            record = await build_one(run_dir, key, prompt, variant)
         async with lock:
             with out.open("a", encoding="utf-8") as f:
                 f.write(json.dumps(record, ensure_ascii=False) + "\n")
@@ -190,6 +210,8 @@ async def build_all(run_dir: Path, seed_runs: int, limit: int | None, concurrenc
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("run_dir", type=Path)
+    parser.add_argument("--variant", choices=VARIANTS, default=os.environ.get("WORKFLOW_VARIANT", DEFAULT_VARIANT),
+                        help="how the agent finds processes (default: WORKFLOW_VARIANT, else pgvector)")
     parser.add_argument("--seed-runs", type=int, default=3, help="times to run the seed prompt as a baseline")
     parser.add_argument("--seed-only", action="store_true", help="run only the seed prompt, no paraphrases")
     parser.add_argument("--limit", type=int, help="build at most this many prompts in this call")
@@ -206,22 +228,24 @@ def main() -> None:
         chain = [p.strip() for p in args.expect.split(",")] if args.expect else None
         if chain is not None and len(chain) < 2:
             parser.error("--expect needs at least two process types")
-        print(summary(args.run_dir, args.seed_only, chain))
+        print(summary(args.run_dir, args.seed_only, chain, args.variant))
         return
     if args.seed_only and args.seed_runs < 1:
         parser.error("--seed-only needs --seed-runs of at least 1")
     if args.status:
-        print(status(args.run_dir, args.seed_runs, args.concurrency, args.seed_only))
+        print(status(args.run_dir, args.seed_runs, args.concurrency, args.seed_only, args.variant))
         return
+    # Read by the agent and RunTracker when they load with the first prompt.
+    os.environ["WORKFLOW_VARIANT"] = args.variant
     # Set here since the agent, which configures logging on import, is only loaded with the first prompt.
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
     # RunTracker only logs a warning when it cannot write, so check up front rather than lose the metrics.
     try:
-        for name in (RESULTS_FILE, RUNS_FILE):
+        for name in (results_file(args.variant), RUNS_FILE):
             open(args.run_dir / name, "a").close()
     except OSError as exc:
         parser.error(f"cannot write to {args.run_dir}: {exc}")
-    asyncio.run(build_all(args.run_dir, args.seed_runs, args.limit, args.concurrency, args.seed_only))
+    asyncio.run(build_all(args.run_dir, args.seed_runs, args.limit, args.concurrency, args.seed_only, args.variant))
 
 
 if __name__ == "__main__":

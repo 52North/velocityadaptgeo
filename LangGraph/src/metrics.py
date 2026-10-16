@@ -139,6 +139,20 @@ class RunTracker(BaseCallbackHandler):
             f.write(json.dumps(record) + "\n")
 
 
+def _closest(searches: list[dict], key: str) -> str | None:
+    """Most alike candidate pair over all searches, as `ratio (name_a / name_b)`; MCP tool names lose their host prefix."""
+    if not searches:
+        return None
+    ratio, a, b = max((s[key] for s in searches), key=lambda pair: pair[0])
+    return f"{ratio} ({str(a).split('__')[-1]} / {str(b).split('__')[-1]})"
+
+
+def _saved_usd(run: dict) -> float:
+    """Input cost of the tool definitions beyond their names, i.e. what deferred loading would save."""
+    return sum(((c.get("tool_def_tokens") or 0) - (c.get("tool_name_tokens") or 0))
+               * PRICES_PER_MTOK.get(c.get("model"), (0, 0))[0] for c in run["calls"]) / 1e6
+
+
 def _row(runs: list[dict]) -> dict:
     """Average one group of turn records into report metrics: context cost first, then tool visibility, then outcome."""
     mean = lambda f, digits=None: round(sum(map(f, runs)) / len(runs), digits)
@@ -153,9 +167,14 @@ def _row(runs: list[dict]) -> dict:
         "tool definition share of input": f"{sum(r['tool_def_tokens'] for r in runs) / max(sum(r['input_tokens'] for r in runs), 1):.0%}",
         "tool name tokens (defer loading)": mean(lambda r: r["tool_name_tokens"]),
         "cost USD": mean(lambda r: r["cost_usd"], 4),
+        "cost USD with names only": mean(lambda r: r["cost_usd"] - _saved_usd(r), 4),
         "max visible tools (one call)": max(r["max_visible_tools"] for r in runs),
         "tools per search": round(sum(s["visible_tools"] for s in searches) / len(searches), 1) if searches else None,
+        "servers per search": round(sum(s["servers"] for s in searches) / len(searches), 1) if searches else None,
+        "closest tool names": _closest(searches, "closest_names"),
+        "closest tool descriptions": _closest(searches, "closest_descriptions"),
         "wall time s": mean(lambda r: r["wall_ms"] / 1000, 1),
+        "graph nodes": mean(lambda r: r["graph_nodes"], 1),
         "unmet capabilities": mean(lambda r: r["unmet_capabilities"], 1),
     }
 
@@ -181,9 +200,14 @@ FIELDS = {  # report metric -> explanation; values are averages per turn unless 
     "tool definition share of input": "tool definition tokens / input tokens, over all runs",
     "tool name tokens (defer loading)": "tokens if the prompts carried only the names of the same tools",
     "cost USD": "input and output tokens times the model's price per MTok",
+    "cost USD with names only": "cost if the prompts carried only the tool names instead of their definitions",
     "max visible tools (one call)": "most candidate tools in a single prompt, over all runs",
     "tools per search": "candidates returned by one retriever step",
+    "servers per search": "distinct OGC servers among the candidates of one retriever step",
+    "closest tool names": "most similar pair of candidate names in any one search (1.0 = identical), over all runs",
+    "closest tool descriptions": "most similar pair of candidate descriptions in any one search, over all runs",
     "wall time s": "duration of the whole turn",
+    "graph nodes": "nodes in the workflow graph at the end of the turn",
     "unmet capabilities": "capabilities no process was found for",
 }
 

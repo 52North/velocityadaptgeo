@@ -1,0 +1,10 @@
+[project]
+name = "mcp-ogc-processes"
+version = "0.1.0"
+description = "MCP server exposing OGC API processes as tools"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastmcp==3.0.0b2",
+    "httpx>=0.28.1",
+]

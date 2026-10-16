@@ -1,6 +1,6 @@
 """Summary of a batch run: graph structures, parameters and, given the expected chain, how often it is built.
 
-    python -m src.batch <run_dir> --summary [--seed-only] [--expect a,b,c,...]
+    python -m src.batch <run_dir> [--variant V] --summary [--seed-only] [--expect a,b,c,...]
 
 Reads the results through `load_results`, so only the currently accepted paraphrases and the seed runs
 count, in their current review category.
@@ -16,7 +16,13 @@ import json
 import math
 from itertools import pairwise
 
-from src.batch import RUNS_FILE, SEED_CATEGORY, _read_jsonl, load_results
+from src.batch import (
+    DEFAULT_VARIANT,
+    RUNS_FILE,
+    SEED_CATEGORY,
+    _read_jsonl,
+    load_results,
+)
 
 CHECKPOINTS = (10, 20, 30, 40, 50, 75, 100, 150, 200)
 RARE = 3  # structures seen this often or less list their keys
@@ -115,8 +121,8 @@ def _convergence(name: str, xs: list[int]) -> list[str]:
     return out
 
 
-def summary(run_dir, seed_only: bool = False, chain: list[str] | None = None) -> str:
-    results = [r for r in load_results(run_dir) if not seed_only or r["category"] == SEED_CATEGORY]
+def summary(run_dir, seed_only: bool = False, chain: list[str] | None = None, variant: str = DEFAULT_VARIANT) -> str:
+    results = [r for r in load_results(run_dir, variant) if not seed_only or r["category"] == SEED_CATEGORY]
     if not results:
         return "No results."
     ok = [r for r in results if not r.get("error")]

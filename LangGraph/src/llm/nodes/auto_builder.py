@@ -25,7 +25,7 @@ class GraphBuildDecision(BaseModel):
     reasoning: str = Field(description="One sentence justification for this choice.")
 
 
-AUTO_BUILD_SYSTEM = """You turn one freshly retrieved OGC process candidate into a
+AUTO_BUILD_TEMPLATE = """You turn one freshly retrieved OGC process candidate into a
 concrete node in the user's workflow graph.
 
 Rules:
@@ -40,16 +40,11 @@ Rules:
   such as the projection used for metric distances or a particular algorithm. Refuse
   only when the operation itself is different or missing, not because a description is
   shorter or worded differently than the query.
-- Decide whether any candidate performs THAT capability. The candidates are the nearest
-  vector matches, NOT a guarantee of fitness: the search always returns something, even
-  when nothing in the catalog performs the requested operation. If none of them performs
+- Decide whether any candidate performs THAT capability. CANDIDATE_SOURCE If none of them performs
   it, set performs_capability=false. Do NOT settle for a process that merely operates on
   similar data, belongs to the same domain, or sounds related - a viewshed process is
   not a shadow simulation, and a buffer is not a travel-time isochrone.
-- A `similarity` at or below ~0.55 is a hint that the capability may be absent
-  altogether; a genuine match usually scores well above that. The description decides,
-  though - the score is only evidence.
-- When performs_capability=false nothing is added to the graph. That is the correct,
+SIMILARITY_HINT- When performs_capability=false nothing is added to the graph. That is the correct,
   useful outcome for a capability the catalog lacks: far better than adding a process
   that does the wrong thing, which would silently produce a workflow that cannot answer
   the goal. It does NOT abandon the goal - the remaining capabilities are still built.
@@ -75,6 +70,28 @@ Rules:
   candidates or graph.
 """
 
+# Where the candidates come from is the only part of this prompt that differs between the
+# workflow variants (WORKFLOW_VARIANT); the pick format and every other rule are shared.
+AUTO_BUILD_SYSTEM = {
+    "pgvector": AUTO_BUILD_TEMPLATE.replace(
+        "CANDIDATE_SOURCE ",
+        """The candidates are the nearest
+  vector matches, NOT a guarantee of fitness: the search always returns something, even
+  when nothing in the catalog performs the requested operation. """,
+    ).replace(
+        "SIMILARITY_HINT",
+        """- A `similarity` at or below ~0.55 is a hint that the capability may be absent
+  altogether; a genuine match usually scores well above that. The description decides,
+  though - the score is only evidence.
+""",
+    ),
+    "mcp": AUTO_BUILD_TEMPLATE.replace(
+        "CANDIDATE_SOURCE ",
+        """The candidates are every process
+  tool the MCP server exposes, most of them unrelated to the capability. """,
+    ).replace("SIMILARITY_HINT", ""),
+}
+
 
 def _graph_processes(graph: dict) -> set[tuple[str | None, str | None]]:
     """Return the (process_id, server_url) pairs already present as nodes.
@@ -88,7 +105,7 @@ def _graph_processes(graph: dict) -> set[tuple[str | None, str | None]]:
     }
 
 
-async def auto_build_node(state: WorkflowState, llm) -> dict:
+async def auto_build_node(state: WorkflowState, llm, variant: str = "pgvector") -> dict:
     """Turn the newest search result into a wired graph node, then validate the graph.
 
     Control returns to the manager afterwards, so this runs once per search and the
@@ -96,7 +113,8 @@ async def auto_build_node(state: WorkflowState, llm) -> dict:
     refused deterministically: the manager would otherwise be able to stack duplicate
     nodes by searching the same capability twice.
     """
-    candidates = (state.get("candidate_processes") or [])[:5]
+    # Not capped: the pgvector search already returns its top 5, the mcp variant shows every tool.
+    candidates = state.get("candidate_processes") or []
     graph = state.get("workflow_graph") or {"nodes": [], "edges": []}
     messages = state.get("messages", [])
 
@@ -116,7 +134,7 @@ async def auto_build_node(state: WorkflowState, llm) -> dict:
             break
 
     prompt = [
-        SystemMessage(content=AUTO_BUILD_SYSTEM),
+        SystemMessage(content=AUTO_BUILD_SYSTEM[variant]),
         HumanMessage(content=f"""CAPABILITY SEARCHED FOR (judge the candidates against THIS):
 {capability or "(unknown)"}
 
