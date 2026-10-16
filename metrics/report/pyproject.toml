@@ -1,0 +1,18 @@
+[project]
+name = "report"
+version = "0.1.0"
+description = "Quarto reports of the MCP vs. RAG evaluation findings"
+requires-python = ">=3.12"
+dependencies = [
+    "ipykernel>=6.29",
+    "jupyter>=1.1",
+    "quarto-cli>=1.6",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.17.0",
+]
+
+[tool.ruff]
+line-length = 120

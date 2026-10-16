@@ -1,0 +1,9 @@
+project:
+  type: default
+  render:
+    - detailed.qmd
+    - summary.qmd
+
+execute:
+  echo: false
+  warning: false

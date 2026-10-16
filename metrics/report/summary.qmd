@@ -1,0 +1,221 @@
+---
+title: "Summary: How robust is the workflow agent to rewording?"
+format:
+  gfm:
+    from: markdown-smart
+    wrap: none
+    output-file: summary.md
+---
+
+```{python}
+import collections
+
+import analysis as a
+
+cur = a.current()
+S = a.seeds(cur)
+P = a.paraphrases(cur)
+B = a.before_size_review()
+dropped = a.size_dropped()
+D = [r for r in B if r["key"] in dropped]
+quality = a.wording(B, a.QUALITY_WORDING.pattern)
+
+seed = a.rate(S, a.is_lenient)
+seed_strict = a.rate(S, a.is_strict)
+par = a.rate(P, a.is_lenient)
+cmp = a.Comparison(par, seed)
+filter_seed = a.rate(S, a.has("min-area-filter"))
+filter_par = a.rate(P, a.has("min-area-filter"))
+first50 = a.rate(S[:50], a.is_lenient)
+halves, slope, trend_p = a.drift(S, a.is_lenient)
+cats = a.by_category(P)
+per_prompt = (a.cost(S) + a.cost(B)) / (len(S) + len(B))
+traced = [r for r in S if r.get("decision_history")]
+lo90, hi90 = cmp.ci(a.Z90)
+
+
+def points(x):
+    return f"{abs(100 * x):.0f}"
+```
+
+We tested whether an LLM agent that builds geospatial workflows from a catalog of OGC processes still builds the right workflow when the same request is worded differently. This summary covers the first test case, a single request about walking distance to green spaces in Münster.
+
+## At a glance
+
+- **The agent usually gets it right.** For the original request it builds the correct workflow in **`{python} seed.pct()`** of runs.
+- **Rewording costs a little, even when the meaning is kept.** Paraphrases that keep the full meaning reach **`{python} par.pct(1)`**, about `{python} points(cmp.diff)` points below the original. The gap is small but statistically significant.
+- **One kind of rewording breaks it outright.** Turning "large enough for recreation" into "suitable / adequate / sufficient for recreation" silently drops the size requirement, and the agent then never filters by size (**`{python} a.rate(quality, a.is_lenient).k` of `{python} len(quality)`** correct).
+- **The agent is not fully deterministic.** Identical requests give different workflows, more in the parameters (ring distances, minimum area) than in the structure.
+- **Two capabilities are consistently missing:** no process can draw a map, and no process can compute *walking* distance around many parks. The agent says so honestly in its replies.
+- **It is cheap:** about **`{python} f"{100 * per_prompt:.0f}"` cent per request**.
+
+## The test
+
+The original request (the *seed*):
+
+> `{python} a.seed_prompt_text()`
+
+**The correct workflow** is a chain of four steps:
+
+```text
+city boundary → green areas (parks, forests) → minimum-area filter → distance rings (up to 300 m)
+```
+
+We score a workflow two ways, looking only at its structure (not at parameter values):
+
+| Score | Counts as correct when… |
+|---|---|
+| **Lenient** | the four steps are present and connected in that order; extra steps are allowed |
+| **Strict** | the workflow is exactly those four steps, nothing more |
+
+Each rate comes with a **95% range**, the span its true value plausibly falls in given the sample size (Wilson interval).
+
+The lenient score is the main measure. The strict score is low throughout (about `{python} seed_strict.pct()`) because the agent often adds a redundant extra step, a plain 300 m buffer, next to the distance rings. This is harmless, and it happens equally with and without rewording.
+
+**The paraphrases.** A local LLM rewrote the seed in six linguistic categories, from small word-form changes to restructured sentences, aiming for wording that differs a lot while the intent stays the same. Every candidate passed automated checks and a manual review. **`{python} len(P)`** paraphrases were kept.
+
+**The baseline.** The agent varies even when given the identical request, so the seed was run **`{python} len(S)` times**. This measures the agent's own run-to-run variation, which every paraphrase result has to be compared against.
+
+## Results
+
+### The original request
+
+```{python}
+a.table(
+    ["", "Correct", "95% range"],
+    [["Lenient", f"{seed.k} / {seed.n} = **{seed.pct(1)}**", seed.range()], ["Strict", f"{seed_strict.k} / {seed_strict.n} = {seed_strict.pct()}", seed_strict.range()]],
+)
+```
+
+```{python}
+fails = collections.Counter(a.failure(r) for r in S if a.failure(r))
+filter_fails = fails["no min-area-filter"] + fails["filter not upstream of the rings"]
+other_fails = seed.n - seed.k - filter_fails
+```
+
+- The rate was stable over the `{python} len(S)` runs, with no drift.
+- The `{python} seed.n - seed.k` failures: in `{python} filter_fails` the size filter was left out or wired in the wrong place`{python} f", and in {other_fails} the distance rings were missing" if other_fails else ""`.
+- **Parameters vary more than structure.** The minimum park size ranged from unset to 10,000 m² (most often 10,000 m²). The rings were usually 75 / 150 / 225 / 300 m, sometimes 50 m steps.
+
+### The paraphrases
+
+```{python}
+d = a.rate(D, a.is_lenient)
+fd = a.rate(D, a.has("min-area-filter"))
+a.table(
+    ["", "Correct (lenient)", "95% range", "Has the size filter", "95% range"],
+    [
+        [f"Seed ({seed.n} runs)", f"**{seed.pct(1)}**", seed.range(), filter_seed.pct(), filter_seed.range()],
+        [f"Paraphrases that keep the meaning ({par.n})", f"**{par.pct(1)}**", par.range(), filter_par.pct(), filter_par.range()],
+        [f"Paraphrases that drop the size requirement ({d.n})", d.pct(), d.range(), fd.pct(), fd.range()],
+    ],
+)
+```
+
+The `{python} len(P)` paraphrases include the size filter exactly as often as the seed, so the requirement itself comes through. They fail more often on how the steps are put together:
+
+```{python}
+fp = collections.Counter(a.failure(r) for r in P if a.failure(r))
+a.table(
+    ["Failure", f"Seed ({len(S)})", f"Paraphrases ({len(P)})"],
+    [[a.FAILURES[f], f"{fails[f] / len(S):.1%}".replace(".0%", "%"), f"{fp[f] / len(P):.1%}".replace(".0%", "%")] for f in a.FAILURES if fails[f] or fp[f]],
+)
+```
+
+By category:
+
+```{python}
+WHAT = {
+    "syntactic": "sentence structure",
+    "other": "e.g. reordering, added purpose clauses",
+    "discourse": "how the request is framed",
+    "lexico_syntactic": "words and structure together",
+    "morphological": "word forms",
+    "lexical": "word choice",
+}
+rates = {c: a.rate(cats[c], a.is_lenient) for c in a.CATEGORIES}
+a.table(
+    ["Category", "What changes", "Correct (lenient)", "95% range"],
+    [[a.CATEGORY_NAMES[c], WHAT[c], f"{rates[c].pct()} ({rates[c].n})", rates[c].range()] for c in a.CATEGORIES],
+)
+```
+
+Each category compared with the seed's `{python} seed.pct(1)`:
+
+```{python}
+rows = []
+for c in a.CATEGORIES:
+    cc = a.Comparison(rates[c], seed)
+    bold = "**" if cc.p < a.bonferroni() else ""
+    rows.append([
+        a.CATEGORY_NAMES[c],
+        rates[c].pct(),
+        f"{a.signed(100 * cc.diff)} points",
+        a.fmt_p(cc.p),
+        f"{bold}{a.yes(cc.p < 0.05)}{bold}",
+        f"{bold}{a.yes(cc.p < a.bonferroni())}{bold}",
+    ])
+rows.append([
+    "*All categories together*",
+    f"*{par.pct(1)}*",
+    f"*{a.signed(100 * cmp.diff)} points*",
+    f"*{a.fmt_p(cmp.p)}*",
+    f"*{a.yes(cmp.p < 0.05)}*",
+    "*n/a (a single test)*",
+])
+a.table(
+    ["Category", "Correct", "Difference from seed", "p-value", "Significant (p < 0.05)", f"Significant after correction (p < {a.bonferroni():.3f})"],
+    rows,
+)
+```
+
+The p-value is the chance of seeing a gap at least this large if the category really performed like the seed (Fisher's exact test). Comparing six categories at once makes a chance hit more likely, so the last column uses a stricter threshold (0.05 / 6 ≈ `{python} f"{a.bonferroni():.3f}"`, Bonferroni correction). The wide ranges show how small some of the categories are (as few as `{python} min(len(cats[c]) for c in a.CATEGORIES)` paraphrases).
+
+**Lexical paraphrases are clearly worse than the seed**, even after the correction. Morphological ones also look lower, but with only `{python} len(cats["morphological"])` paraphrases that could be chance. The other four categories are in line with the seed.
+
+### The wording that breaks it
+
+"Large enough for recreation" asks for a **size** threshold. "Adequate / suitable / sufficient for recreation" reads as a **quality**, so the agent never looks for an area filter:
+
+```{python}
+q = a.rate(quality, a.is_lenient)
+qf = a.rate(quality, a.has("min-area-filter"))
+a.table(
+    ["Wording", "Paraphrases", "Size filter present", "Correct"],
+    [
+        ['keeps "large enough" (or similar)', len(P), f"{filter_par.pct()} [{filter_par.range()}]", f"{par.pct(1)} [{par.range()}]"],
+        ['"adequate / suitable / sufficient for recreation"', len(quality), f"{qf.pct()} [{qf.range()}]", f"{q.pct()} [{q.range()}]"],
+    ],
+)
+```
+
+This is the clearest case in the study of a paraphrase changing the workflow. Strictly speaking, these `{python} len(quality)`, plus `{python} len(dropped) - len(quality)` others that dropped the size wording entirely, are **not true paraphrases** because they lost part of the meaning. The automated checks and the first manual review both let them through. They are now rejected, based on their wording alone, and the checks will be extended to catch them.
+
+### How sure can we be?
+
+- The gap between the paraphrases and the seed is **`{python} a.signed(100 * cmp.diff, 0)` points**. Given the sample sizes, the true gap plausibly lies between **`{python} a.signed(100 * cmp.ci()[0], 0)` and `{python} a.signed(100 * cmp.ci()[1], 0)` points**, so rewording most likely does cost something.
+- We can't claim the paraphrases perform *as well as* the seed. An equivalence test with a ±10-point margin fails, because a gap of more than 10 points is still within the range.
+- With only the first 50 seed runs, the seed looked lower (`{python} first50.pct()`) and the gap looked like noise. The `{python} len(S) - 50` further runs settled the seed at about `{python} seed.pct()`, and the earlier "no detectable difference" no longer holds.
+- One caveat: most seed runs ran a day after the paraphrases. The setup was the same, but a small day-to-day shift can't be fully ruled out. Re-running the paraphrases would settle it.
+
+## Gaps in the process catalog
+
+**Visualization.** No process in the catalog renders a map, so almost every workflow reports exactly this one missing capability. This is expected, and the agent handles it correctly.
+
+**Walking distance.** The request asks for *walking* distance, but every workflow uses straight-line distance rings. The agent's replies state this openly, for example:
+
+> Distances are straight-line buffers in a local UTM projection, not walking distances along the street network. Real walking routes would be longer, so some areas counted as served may be farther than 300 m on foot.
+
+There are two reasons:
+
+1. **The agent doesn't look for it.** It translates "within 300 m in intervals" directly into distance rings, which match that wording exactly, and the word "walking" gets absorbed along the way. In `{python} len(traced)` seed runs where the agent's search steps were recorded, it searched for a buffer-style process `{python} "every time and never for distance along a street network" if not any(a.searched_network(r) for r in traced) else f"and only {sum(a.searched_network(r) for r in traced)} times for distance along a street network"`.
+2. **When it does look, it correctly rejects what it finds.** The catalog has a travel-time isochrone process, but it works from a single starting point, takes times in minutes, and is built around public transit timetables. It cannot produce 300 m walking zones around many parks.
+
+Whether this is a problem depends on the catalog's intent. If the isochrone is meant as a near miss, the agent behaves correctly. If network-based walking distance is meant to be achievable, the catalog needs a process that fits: many starting areas, distances in metres, walking only.
+
+## Next steps
+
+- **Find where the extra wiring errors come from.** The paraphrases keep the size filter as often as the seed but connect the steps wrongly more often. Re-running the paraphrases with the agent's reasoning recorded (about $`{python} f"{per_prompt * len(P):.0f}"`) should show at which step this goes wrong.
+- **Stricter paraphrase checks** that reject wordings which drop the size requirement.
+- **Targeted rewording tests** that change one phrase at a time, e.g. "Pinpoint" as the opening verb, "0.3 km" instead of "300 m", or "pedestrian". These showed weak signals that the current data can't confirm.
+- **Run the workflows.** Remove duplicate workflows and execute each distinct one, so results can also be scored on their actual output, not only on their structure.
