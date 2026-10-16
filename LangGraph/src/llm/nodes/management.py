@@ -215,7 +215,8 @@ async def management_node(state: WorkflowState, llm) -> dict:
         }
 
     graph_blob = json.dumps(workflow_graph, indent=2)
-    candidates_blob = json.dumps(candidate_processes[:5], indent=2)
+    # Not capped: the pgvector search already returns its top 5, the mcp variant shows every tool.
+    candidates_blob = json.dumps(candidate_processes, indent=2)
     validation_blob = json.dumps(last_validation, indent=2) if last_validation else "null"
     last_decisions = json.dumps(decision_history[-3:], indent=2)
 

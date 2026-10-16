@@ -63,6 +63,7 @@ async def responder_node(state: WorkflowState, llm) -> dict:
     """
     messages = state.get("messages", [])
     workflow_graph = state.get("workflow_graph", {"nodes": [], "edges": []})
+    # Not capped: the pgvector search already returns its top 5, the mcp variant shows every tool.
     candidate_processes = state.get("candidate_processes", [])
     last_validation = state.get("last_validation")
     unmet = state.get("unmet_capabilities", [])
@@ -83,7 +84,7 @@ FINAL WORKFLOW GRAPH:
 {json.dumps(workflow_graph, indent=2)}
 
 CANDIDATE PROCESSES CONSIDERED:
-{json.dumps(candidate_processes[:5], indent=2)}
+{json.dumps(candidate_processes, indent=2)}
 
 LAST VALIDATION REPORT:
 {json.dumps(last_validation, indent=2) if last_validation else "null"}
