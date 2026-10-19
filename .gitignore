@@ -18,3 +18,5 @@ wheels/
 .claude
 # workflow metrics, shared across branches
 metrics/runs.jsonl
+# osmnx download cache of the CoolSpots reference
+pygeoapi_instance/CoolSpots/cache/
