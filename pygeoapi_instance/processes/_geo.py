@@ -1,7 +1,7 @@
 """Shared geometry helpers for the cool-spots process chain.
 
 The pygeoapi image ships shapely and pyproj but not geopandas, so the coordinate
-handling the original `CoolSpots/cool_spots.py` script got from GeoDataFrames is done
+handling the original CoolSpots script (now `metrics/grading/cool_spots.py`) got from GeoDataFrames is done
 explicitly here: every process speaks GeoJSON in EPSG:4326 on the wire and projects to
 a local UTM zone internally whenever it needs metres.
 """

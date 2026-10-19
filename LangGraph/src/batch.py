@@ -37,7 +37,7 @@ count how often it is built and whether the seed runs have settled (see `src/bat
 
 `--execute` runs each distinct graph of the results once against the OGC servers, answering inputs the
 agent left unset with a scripted user reply, and stores the outputs for grading against the CoolSpots
-reference (see `src/batch_execute.py` and `pygeoapi_instance/CoolSpots/grade.py`). It does not load the agent.
+reference (see `src/batch_execute.py` and `metrics/grading/grade.py`). It does not load the agent.
 """
 
 import argparse

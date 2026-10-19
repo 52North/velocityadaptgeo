@@ -45,7 +45,7 @@ logger = logging.getLogger("src.batch")
 
 EXECUTIONS_DIR = "executions"
 # The scripted user: what they answer when an input is left unset, by input name.
-ANSWERS = {"minArea": 4000}  # m², as in pygeoapi_instance/CoolSpots/cool_spots.py
+ANSWERS = {"minArea": 4000}  # m², as in metrics/grading/cool_spots.py
 PLACEHOLDER = re.compile(r"^\s*<.*>\s*$")
 
 
