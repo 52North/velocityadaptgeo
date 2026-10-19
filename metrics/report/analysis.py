@@ -4,7 +4,9 @@ The results are read through LangGraph's `src.batch.load_results`, and correctne
 from `src.batch_summary`, so the reports count exactly what `python -m src.batch --summary` counts. Both
 modules only use the standard library, so the agent's dependencies are not needed here.
 
-The run folder defaults to the Münster run; set `REPORT_RUN_DIR` to use another one.
+The run folder defaults to the Münster run; set `REPORT_RUN_DIR` to use another one. Every loader takes the
+workflow `variant` (`VARIANTS`, default pgvector), as `src.batch --variant` does: pgvector catalog search, or
+every tool of the MCP server.
 """
 
 import collections
@@ -21,7 +23,7 @@ from IPython.display import Markdown
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "LangGraph"))
 
-from src.batch import SEED_CATEGORY, _read_jsonl, _sha1, latest_results, load_results, seed_prompt
+from src.batch import DEFAULT_VARIANT, SEED_CATEGORY, _read_jsonl, _sha1, latest_results, load_results, seed_prompt
 from src.batch_summary import _edges, _structure, fisher, lenient, strict, trend, wilson
 
 RUN_DIR = Path(os.environ.get("REPORT_RUN_DIR", ROOT / "metrics/prompt_gen/out/20261012-174604_muenster_green_300m"))
@@ -35,6 +37,7 @@ CATEGORY_NAMES = {
     "morphological": "Morphological",
     "lexical": "Lexical",
 }
+VARIANTS = {"pgvector": "catalog search", "mcp": "all MCP tools"}  # src.batch.VARIANTS, with plain names
 SIZE_NOTE = "Drops the size requirement"
 QUALITY_WORDING = re.compile(r"\b(adequate|suitable|sufficient) for recreation", re.IGNORECASE)
 NETWORK_SEARCH = re.compile(r"network|route|\bstreets?\b|\bpaths?\b|pedestrian|isochron|travel", re.IGNORECASE)
@@ -199,17 +202,17 @@ def seed_prompt_text() -> str:
     return seed_prompt(RUN_DIR)
 
 
-def current() -> list[dict]:
-    """The currently accepted paraphrases and all seed runs, in their current review category."""
-    return ok(load_results(RUN_DIR))
+def current(variant: str = DEFAULT_VARIANT) -> list[dict]:
+    """The currently accepted paraphrases and all seed runs of a variant, in their current review category."""
+    return ok(load_results(RUN_DIR, variant))
 
 
-def seeds(results: list[dict] | None = None) -> list[dict]:
-    return sorted((r for r in results or current() if r["category"] == SEED_CATEGORY), key=attempt)
+def seeds(results: list[dict] | None = None, variant: str = DEFAULT_VARIANT) -> list[dict]:
+    return sorted((r for r in results or current(variant) if r["category"] == SEED_CATEGORY), key=attempt)
 
 
-def paraphrases(results: list[dict] | None = None) -> list[dict]:
-    return [r for r in results or current() if r["category"] != SEED_CATEGORY]
+def paraphrases(results: list[dict] | None = None, variant: str = DEFAULT_VARIANT) -> list[dict]:
+    return [r for r in results or current(variant) if r["category"] != SEED_CATEGORY]
 
 
 def reviewed(name: str = "reviewed.jsonl") -> list[dict]:
@@ -248,6 +251,47 @@ def costs(runs_file: str = "runs.jsonl") -> dict[str, float]:
 def cost(results: list[dict], runs_file: str = "runs.jsonl") -> float:
     c = costs(runs_file)
     return sum(c.get(r["thread_id"], 0.0) for r in results)
+
+
+def metrics(results: list[dict], runs_file: str = "runs.jsonl") -> list[dict]:
+    """The `RunTracker` record of each result; a re-run reuses the thread id, so the newest record counts."""
+    records = {m["thread_id"]: m for m in _read_jsonl(RUN_DIR / runs_file)}
+    return [records[r["thread_id"]] for r in results if r["thread_id"] in records]
+
+
+@dataclass(frozen=True)
+class Usage:
+    """Mean context and cost per prompt of a group of results, from their `RunTracker` records."""
+
+    n: int
+    cost: float
+    input_tokens: float
+    output_tokens: float
+    tool_def_share: float  # of all input tokens, the tool definitions shown to the LLM
+    llm_calls: float
+    seconds: float
+    tools: float  # tools visible in the largest prompt
+
+    @property
+    def total(self) -> float:
+        return self.cost * self.n
+
+
+def usage(results: list[dict], runs_file: str = "runs.jsonl") -> Usage:
+    records = metrics(results, runs_file)
+    n = len(records)
+    mean = lambda key: sum(m[key] or 0 for m in records) / n if n else 0.0
+    tokens = sum(m["input_tokens"] for m in records)
+    return Usage(
+        n=n,
+        cost=mean("cost_usd"),
+        input_tokens=mean("input_tokens"),
+        output_tokens=mean("output_tokens"),
+        tool_def_share=sum(m["tool_def_tokens"] for m in records) / tokens if tokens else 0.0,
+        llm_calls=mean("llm_calls"),
+        seconds=mean("wall_ms") / 1000,
+        tools=mean("max_visible_tools"),
+    )
 
 
 def by_category(results: list[dict]) -> dict[str, list[dict]]:
