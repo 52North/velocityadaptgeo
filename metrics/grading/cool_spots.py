@@ -1,6 +1,6 @@
 """Reference solution for the Münster cool-spots / green-space prompts.
 
-    uv run --with geopandas --with osmnx python cool_spots.py [--min-area M2] [--intervals 0,75,150,225,300]
+    uv run python cool_spots.py [--min-area M2] [--intervals 0,75,150,225,300]
                                                               [--tags JSON] [--out outputs/reference.gpkg]
 
 Writes one GeoPackage holding both answers, so either prompt can be graded against it:

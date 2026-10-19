@@ -1,7 +1,7 @@
 """Grade executed workflow graphs against the CoolSpots reference.
 
-    uv run --no-project --with geopandas --with osmnx python grade.py <run_dir> [--variant V] [--target within|beyond]
-    uv run --no-project --with geopandas --with osmnx python grade.py --sensitivity
+    uv run python grade.py <run_dir> [--variant V] [--target within|beyond]
+    uv run python grade.py --sensitivity
 
 Reads what `python -m src.batch <run_dir> --execute` (LangGraph) wrote: `executed[.<variant>].jsonl`
 and `executions/`. Every distinct graph is compared with `outputs/reference.gpkg`, inside the
@@ -193,7 +193,9 @@ class Grid:
         if geom is None or geom.is_empty:
             return np.zeros(self.x.shape, bool)
         shapely.prepare(geom)
-        return shapely.contains_xy(geom, self.x, self.y)
+        # Edges count: a point exactly at a ring's inner distance belongs to that ring ([inner, outer),
+        # rings applied inner to outer), not to the green space it would fall into otherwise.
+        return shapely.intersects_xy(geom, self.x, self.y)
 
     def agreement(self, graph: dict, ref_bands: tuple) -> float | None:
         if not graph["rings"] or graph["coverage"] is None:
