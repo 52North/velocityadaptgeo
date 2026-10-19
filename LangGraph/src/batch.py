@@ -3,6 +3,7 @@
     python -m src.batch <run_dir> [--variant V] [--limit N] [--seed-runs N] [--seed-only] [--concurrency N]
     python -m src.batch <run_dir> [--variant V] --status [--seed-runs N] [--seed-only] [--concurrency N]
     python -m src.batch <run_dir> [--variant V] --summary [--seed-only] [--expect a,b,c,...]
+    python -m src.batch <run_dir> [--variant V] --execute
 
 Which prompts run, and in which category they count, is read from the reviewer's
 `<run_dir>/reviewed.jsonl` (see metrics/prompt_review/FORMAT.md) and nowhere else. The
@@ -33,6 +34,10 @@ results. Pass the same `--seed-runs`, `--seed-only` and `--concurrency` as the r
 `--summary` prints the graph structures, parameters and unmet capabilities of the results and
 exits, also without loading the agent; `--expect` names the correct chain of process types, to
 count how often it is built and whether the seed runs have settled (see `src/batch_summary.py`).
+
+`--execute` runs each distinct graph of the results once against the OGC servers, answering inputs the
+agent left unset with a scripted user reply, and stores the outputs for grading against the CoolSpots
+reference (see `src/batch_execute.py` and `pygeoapi_instance/CoolSpots/grade.py`). It does not load the agent.
 """
 
 import argparse
@@ -219,6 +224,7 @@ def main() -> None:
     parser.add_argument("--status", action="store_true", help="print the state of the run and exit")
     parser.add_argument("--summary", action="store_true", help="summarise the results and exit")
     parser.add_argument("--expect", help="with --summary: the correct chain of process types, comma-separated")
+    parser.add_argument("--execute", action="store_true", help="execute each distinct graph once for grading")
     args = parser.parse_args()
     if args.expect and not args.summary:
         parser.error("--expect only applies to --summary")
@@ -229,6 +235,12 @@ def main() -> None:
         if chain is not None and len(chain) < 2:
             parser.error("--expect needs at least two process types")
         print(summary(args.run_dir, args.seed_only, chain, args.variant))
+        return
+    if args.execute:
+        from src.batch_execute import execute_all
+
+        logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
+        asyncio.run(execute_all(args.run_dir, args.variant))
         return
     if args.seed_only and args.seed_runs < 1:
         parser.error("--seed-only needs --seed-runs of at least 1")

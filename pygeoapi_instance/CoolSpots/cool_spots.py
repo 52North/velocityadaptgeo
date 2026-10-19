@@ -67,6 +67,9 @@ def fetch(
     city_name: str = CITY_NAME, tags: dict = TAGS
 ) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
     """The city boundary and all its OSM green-space polygons, both in the city's UTM zone."""
+    # Next to this file, not the working directory, so every caller shares one download.
+    ox.settings.use_cache = True
+    ox.settings.cache_folder = Path(__file__).parent / "cache"
     try:
         city_gdf_geogr = ox.geocode_to_gdf({"city": city_name})
     except Exception:  # noqa: BLE001 - geocoder down or name unknown: fall back to the bbox
@@ -74,7 +77,6 @@ def fetch(
     target_crs = city_gdf_geogr.estimate_utm_crs()
     city = city_gdf_geogr[["geometry"]].to_crs(target_crs)
 
-    ox.settings.use_cache = True
     osm_df = ox.features_from_polygon(city_gdf_geogr["geometry"].iloc[0], tags=tags)
     # Filter to polygons/multipolygons and project to UTM
     osm_df = osm_df[osm_df.geometry.type.isin(["Polygon", "MultiPolygon"])]

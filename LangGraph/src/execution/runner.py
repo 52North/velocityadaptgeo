@@ -175,13 +175,18 @@ def mappable_outputs(payload: dict) -> dict:
 
 
 def _resolve_server_url(url: str) -> str:
-    """Prefer the compose service name when running inside Docker.
+    """Prefer the compose service name inside Docker, and the published port outside it.
 
     The catalog is crawled from the host, so local processes are recorded against
     `localhost:5000`; inside a container that port belongs to the container itself.
+    Graphs built in the container may carry the service name instead, which the host
+    (e.g. a batch run with `uv run`) cannot resolve.
     """
-    if LOCAL_PYGEOAPI_HOST in url and os.path.exists("/.dockerenv"):
+    in_docker = os.path.exists("/.dockerenv")
+    if in_docker and LOCAL_PYGEOAPI_HOST in url:
         return url.replace(LOCAL_PYGEOAPI_HOST, LOCAL_PYGEOAPI_INTERNAL)
+    if not in_docker and LOCAL_PYGEOAPI_INTERNAL in url:
+        return url.replace(LOCAL_PYGEOAPI_INTERNAL, LOCAL_PYGEOAPI_HOST)
     return url
 
 
