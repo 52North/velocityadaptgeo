@@ -12,6 +12,13 @@ server:
 
   language: en-US
 
+  # Default/max is 10, and this pygeoapi version emits no `next` link for
+  # /processes, so anything beyond the limit is invisible to paging crawlers.
+  # Raised so the RAG indexer picks up every registered process.
+  limits:
+    default_items: 50
+    max_items: 50
+
 
 logging:
   level: DEBUG
@@ -65,3 +72,480 @@ resources:
       result:
         schema:
           type: object
+
+  least-cost-path-routing:
+    type: process
+    processor:
+      name: processes.least_cost_path.LeastCostPathProcessor
+
+    inputs:
+      origin:
+        schema:
+          type: object
+      destination:
+        schema:
+          type: object
+      frictionSurface:
+        schema:
+          type: object
+      anisotropyFactor:
+        schema:
+          type: number
+      barrierMask:
+        schema:
+          type: object
+
+    outputs:
+      path:
+        schema:
+          type: object
+      cumulativeCost:
+        schema:
+          type: number
+
+  bayesian-spatiotemporal-kriging:
+    type: process
+    processor:
+      name: processes.kriging_interpolation.KrigingInterpolationProcessor
+
+    inputs:
+      observations:
+        schema:
+          type: object
+      queryGeometry:
+        schema:
+          type: object
+      targetTimestamps:
+        schema:
+          type: array
+      variogramModel:
+        schema:
+          type: string
+      credibleInterval:
+        schema:
+          type: number
+
+    outputs:
+      posteriorMean:
+        schema:
+          type: object
+      posteriorUncertainty:
+        schema:
+          type: object
+
+  multicriteria-suitability-overlay:
+    type: process
+    processor:
+      name: processes.suitability_overlay.SuitabilityOverlayProcessor
+
+    inputs:
+      criteriaLayers:
+        schema:
+          type: array
+      pairwiseComparisonMatrix:
+        schema:
+          type: object
+      overlayOperator:
+        schema:
+          type: string
+      consistencyRatioThreshold:
+        schema:
+          type: number
+
+    outputs:
+      suitabilitySurface:
+        schema:
+          type: object
+      derivedWeights:
+        schema:
+          type: object
+
+  watershed-delineation:
+    type: process
+    processor:
+      name: processes.watershed_delineation.WatershedDelineationProcessor
+
+    inputs:
+      dem:
+        schema:
+          type: object
+      pourPoints:
+        schema:
+          type: object
+      flowRoutingAlgorithm:
+        schema:
+          type: string
+      streamThreshold:
+        schema:
+          type: number
+
+    outputs:
+      watershedBoundary:
+        schema:
+          type: object
+      streamNetwork:
+        schema:
+          type: object
+
+  viewshed-line-of-sight:
+    type: process
+    processor:
+      name: processes.viewshed_analysis.ViewshedAnalysisProcessor
+
+    inputs:
+      observerPoints:
+        schema:
+          type: object
+      dem:
+        schema:
+          type: object
+      obstacleLayer:
+        schema:
+          type: object
+      observerHeightOffset:
+        schema:
+          type: number
+      targetHeightOffset:
+        schema:
+          type: number
+      refractionCoefficient:
+        schema:
+          type: number
+
+    outputs:
+      viewshedRaster:
+        schema:
+          type: object
+      visibleArea:
+        schema:
+          type: number
+
+  trajectory-anomaly-detection:
+    type: process
+    processor:
+      name: processes.trajectory_anomaly.TrajectoryAnomalyProcessor
+
+    inputs:
+      trajectoryStream:
+        schema:
+          type: object
+      baselineProfile:
+        schema:
+          type: object
+      clusteringEpsilon:
+        schema:
+          type: number
+      minEpisodeDuration:
+        schema:
+          type: number
+
+    outputs:
+      anomalies:
+        schema:
+          type: object
+      episodes:
+        schema:
+          type: object
+
+  parcel-topology-validation:
+    type: process
+    processor:
+      name: processes.parcel_topology.ParcelTopologyProcessor
+
+    inputs:
+      parcels:
+        schema:
+          type: object
+      toleranceRules:
+        schema:
+          type: object
+      autoCorrect:
+        schema:
+          type: boolean
+      areaChangeTolerance:
+        schema:
+          type: number
+
+    outputs:
+      violations:
+        schema:
+          type: object
+      correctedParcels:
+        schema:
+          type: object
+
+  raster-pansharpening:
+    type: process
+    processor:
+      name: processes.raster_pansharpening.RasterPansharpeningProcessor
+
+    inputs:
+      panchromaticBand:
+        schema:
+          type: object
+      multispectralBands:
+        schema:
+          type: object
+      pansharpeningMethod:
+        schema:
+          type: string
+      referenceReflectanceProfile:
+        schema:
+          type: object
+
+    outputs:
+      fusedImage:
+        schema:
+          type: object
+      qualityMetrics:
+        schema:
+          type: object
+
+  multimodal-isochrone:
+    type: process
+    processor:
+      name: processes.multimodal_isochrone.MultimodalIsochroneProcessor
+
+    inputs:
+      origin:
+        schema:
+          type: object
+      departureTime:
+        schema:
+          type: string
+      travelTimeThresholds:
+        schema:
+          type: array
+      transitTimetable:
+        schema:
+          type: object
+      modalWeights:
+        schema:
+          type: object
+
+    outputs:
+      isochrones:
+        schema:
+          type: object
+      reachedStops:
+        schema:
+          type: object
+
+  pointcloud-ground-segmentation:
+    type: process
+    processor:
+      name: processes.pointcloud_segmentation.PointCloudSegmentationProcessor
+
+    inputs:
+      pointCloud:
+        schema:
+          type: object
+      structuringElementSchedule:
+        schema:
+          type: array
+      slopeToleranceCurve:
+        schema:
+          type: object
+      semanticClasses:
+        schema:
+          type: array
+
+    outputs:
+      classifiedPointCloud:
+        schema:
+          type: object
+      terrainModel:
+        schema:
+          type: object
+
+  city-boundary:
+    type: process
+    processor:
+      name: processes.city_boundary.CityBoundaryProcessor
+
+    inputs:
+      place:
+        schema:
+          type: string
+      bbox:
+        schema:
+          type: array
+
+    outputs:
+      boundary:
+        schema:
+          type: object
+      bbox:
+        schema:
+          type: array
+      utmCrs:
+        schema:
+          type: string
+      areaSqm:
+        schema:
+          type: number
+
+  osm-green-areas:
+    type: process
+    processor:
+      name: processes.osm_green_areas.OsmGreenAreasProcessor
+
+    inputs:
+      area:
+        schema:
+          type: object
+      tags:
+        schema:
+          type: object
+
+    outputs:
+      features:
+        schema:
+          type: object
+      count:
+        schema:
+          type: integer
+
+  min-area-filter:
+    type: process
+    processor:
+      name: processes.min_area_filter.MinAreaFilterProcessor
+
+    inputs:
+      features:
+        schema:
+          type: object
+      minArea:
+        schema:
+          type: number
+
+    outputs:
+      features:
+        schema:
+          type: object
+      count:
+        schema:
+          type: integer
+      removed:
+        schema:
+          type: integer
+
+  multi-ring-buffer:
+    type: process
+    processor:
+      name: processes.multi_ring_buffer.MultiRingBufferProcessor
+
+    inputs:
+      features:
+        schema:
+          type: object
+      distances:
+        schema:
+          type: array
+
+    outputs:
+      rings:
+        schema:
+          type: object
+      coverage:
+        schema:
+          type: object
+      maxDistance:
+        schema:
+          type: number
+
+  geometry-difference:
+    type: process
+    processor:
+      name: processes.geometry_difference.GeometryDifferenceProcessor
+
+    inputs:
+      subject:
+        schema:
+          type: object
+      subtrahend:
+        schema:
+          type: object
+
+    outputs:
+      result:
+        schema:
+          type: object
+      areaSqm:
+        schema:
+          type: number
+      shareOfSubject:
+        schema:
+          type: number
+
+  osm-water-bodies:
+    type: process
+    processor:
+      name: processes.osm_water_bodies.OsmWaterBodiesProcessor
+
+    inputs:
+      area:
+        schema:
+          type: object
+      tags:
+        schema:
+          type: object
+
+    outputs:
+      features:
+        schema:
+          type: object
+      count:
+        schema:
+          type: integer
+
+  feature-merge:
+    type: process
+    processor:
+      name: processes.feature_merge.FeatureMergeProcessor
+
+    inputs:
+      features:
+        schema:
+          type: object
+      otherFeatures:
+        schema:
+          type: object
+      dissolve:
+        schema:
+          type: boolean
+
+    outputs:
+      features:
+        schema:
+          type: object
+      count:
+        schema:
+          type: integer
+
+  core-area-metrics:
+    type: process
+    processor:
+      name: processes.core_area_metrics.CoreAreaMetricsProcessor
+
+    inputs:
+      features:
+        schema:
+          type: object
+      edgeWidth:
+        schema:
+          type: number
+
+    outputs:
+      cores:
+        schema:
+          type: object
+      features:
+        schema:
+          type: object
+      coreAreaSqm:
+        schema:
+          type: number
+      withCore:
+        schema:
+          type: integer

@@ -1,7 +1,55 @@
-Welcome to this repository showcasing the MCP-Server for GeoAI-Use-Cases. 
+We are transitioning away from MCP to RAG, as the LLM is supposed to enrich the User-Interface by creating a Graph.
+
+Part 1: RAG
+- pgVector + JsonB
+  - Vector to make Searching optimized, most likely overkill.
+  - JsonB to store Json-Structure natively
+    - Schema: Description, Node-Structure (Json), Name, Input, Output
+
+Part 2: Combining Building-Blocks together
+- LLM should get the current UI-State from the building blocks.
+- LLM uses RAG to extract Building Blocks
+
+
+Part 3: Validation
+- Validate the whole graph to ask questions --> Should these be valid?
+    - Ask questions, in case the inputs and outputs are misaligned
 
 
 
+-----
 
-Known Issues:
-- When running LangGraph on a Windows-Machine for debugging purposes, it seems that the event-Streaming is not properly being shut down. That is not an issue as it does not happen, once you run it within a container, so keep that in mind. 
+Questions:
+- Should MCP be used for geospatial tasks for an LLM?
+  - Only valid
+
+Open: 
+- Datenquellen als Node-Type
+    - Open-Source-Endpunkte wie z.B. Satellite Data oder Ähnliches.
+    - Hypertegrity-Endpunkte
+    - S3-Kompatible-Endpunkte
+    - Problem: Was macht der Graph, wenn wir große Daten anstelle von 
+
+---
+
+                       ┌─────────────────┐
+                       │ tool_registry   │  loads OGC search tools (pgvector)
+                       │                 │  + graph-builder tools (Agents)
+                       └────────┬────────┘
+                                │
+                       ┌────────▼────────┐
+                       │     manager     │  plans next step against current graph
+                       └────────┬────────┘
+                                │
+                  ┌─────────────┼─────────────┐
+                  │             │             │
+            ┌─────▼────┐  ┌─────▼─────┐  ┌────▼─────┐
+            │ retriever│  │  builder  │  │ validator│
+            │ (search) │  │           │  │ (graph)  │
+            └─────┬────┘  └─────┬─────┘  └────┬─────┘
+                  │             │             │
+                  └─────────────┼─────────────┘
+                                │
+                         (back to manager, until done) --> Recursive calls
+                                │
+                              END

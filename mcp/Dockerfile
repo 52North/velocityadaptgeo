@@ -2,13 +2,12 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# Install uv (https://github.com/astral-sh/uv)
 RUN pip install --upgrade pip && pip install uv
 
-COPY ./ /app
-COPY ./pyproject.toml /app/pyproject.toml
+COPY pyproject.toml uv.lock /app/
+RUN uv sync --locked --no-cache
 
-RUN uv sync
+COPY *.py /app/
 
 EXPOSE 8001
 

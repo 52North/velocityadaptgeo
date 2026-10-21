@@ -15,3 +15,8 @@ wheels/
 # secrets
 .env
 !.env.sample
+.claude
+# workflow metrics, shared across branches
+metrics/runs.jsonl
+# osmnx download cache of the grading reference
+metrics/grading/cache/

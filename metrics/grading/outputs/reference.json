@@ -1,0 +1,32 @@
+{
+  "city": "muenster",
+  "min_area": 4000,
+  "intervals": [
+    0.0,
+    75.0,
+    150.0,
+    225.0,
+    300.0
+  ],
+  "tags": {
+    "landuse": "forest",
+    "natural": "wood",
+    "leisure": "park"
+  },
+  "crs": "EPSG:32632",
+  "counts": {
+    "cool_spots": 2017,
+    "cool_spots_filtered": 1048
+  },
+  "area_m2": {
+    "city": 303116877,
+    "within": 269533144,
+    "beyond": 33583733
+  },
+  "ring_area_m2": {
+    "0m-75m": 80509732,
+    "75m-150m": 60550244,
+    "150m-225m": 42603203,
+    "225m-300m": 27803561
+  }
+}

@@ -1,66 +1,79 @@
+"""Buffer a geometry or feature collection by a distance in metres."""
+
 from pygeoapi.process.base import BaseProcessor, ProcessorExecuteError
-from shapely.geometry import shape, mapping
-from shapely.ops import transform
 from shapely.errors import ShapelyError
-from pyproj import Transformer
+from shapely.geometry import mapping
+
+from processes._geo import load_geometry, to_utm, to_wgs84
 
 
 class BufferProcessor(BaseProcessor):
-    """OGC API - Processes buffer example"""
+    """OGC API - Processes: a single buffer measured in metres."""
 
     def __init__(self, processor_def):
         process_metadata = {
             "id": "buffer",
-            "title": "Geometry Buffer",
-            "description": "Buffers an input geometry by a given distance (meters)",
+            "title": "Fixed-Distance Buffer Around Geometries",
+            "description": (
+                "Expands a geometry, or every feature of a collection, outward by a fixed "
+                "distance and dissolves the result into one polygon covering everything "
+                "within that distance. A negative distance shrinks polygons inward instead. "
+                "Distances are measured in metres in a local UTM projection. Marks the zone "
+                "of influence or reach around features - for example the area within 300 m "
+                "of a park, or a protective setback around a road or river."
+            ),
+            "keywords": [
+                "buffer",
+                "proximity",
+                "distance",
+                "zone-of-influence",
+                "catchment",
+                "service-area",
+                "setback",
+            ],
             "inputs": {
                 "geometry": {
-                    "title": "Input Geometry (GeoJSON)",
+                    "title": "Geometry, Feature or FeatureCollection to buffer (GeoJSON, EPSG:4326)",
                     "schema": {"type": "object"},
-                    "required": True
+                    "required": True,
                 },
                 "distance": {
-                    "title": "Buffer Distance (meters)",
+                    "title": "Buffer distance in metres; negative values shrink polygons",
                     "schema": {"type": "number"},
-                    "required": True
-                }
+                    "required": True,
+                },
             },
             "outputs": {
                 "result": {
-                    "title": "Buffered Geometry",
-                    "schema": {"type": "object"}
+                    "title": "Dissolved buffer polygon (GeoJSON geometry, EPSG:4326)",
+                    "schema": {"type": "object"},
+                },
+            },
+            "example": {
+                "inputs": {
+                    "geometry": {"type": "Point", "coordinates": [7.6261, 51.9607]},
+                    "distance": 300,
                 }
-            }
+            },
         }
 
         super().__init__(processor_def, process_metadata)
 
-        # Transformers
-        self.to_meters = Transformer.from_crs(
-            "EPSG:4326", "EPSG:3857", always_xy=True
-        ).transform
-
-        self.to_degrees = Transformer.from_crs(
-            "EPSG:3857", "EPSG:4326", always_xy=True
-        ).transform
-
     def execute(self, data, outputs=None):
         try:
-            geom = shape(data["geometry"])
-            distance = float(data["distance"])
-
-            # 1. project to meters
-            geom_m = transform(self.to_meters, geom)
-
-            # 2. buffer in meters
-            buffered_m = geom_m.buffer(distance)
-
-            # 3. project back to lon/lat
-            buffered_ll = transform(self.to_degrees, buffered_m)
-
-            return "application/json", {
-                "result": mapping(buffered_ll)
-            }
-
+            geom = load_geometry(data["geometry"])
         except (KeyError, ValueError, ShapelyError) as err:
-            raise ProcessorExecuteError(f"Buffer failed: {err}")
+            raise ProcessorExecuteError(f"buffer needs a valid 'geometry': {err}")
+
+        try:
+            distance = float(data["distance"])
+        except (KeyError, TypeError, ValueError) as err:
+            raise ProcessorExecuteError(f"'distance' must be a number of metres: {err}")
+
+        try:
+            projected, utm_epsg = to_utm(geom)
+            buffered = to_wgs84(projected.buffer(distance), utm_epsg)
+        except (ShapelyError, ValueError) as err:
+            raise ProcessorExecuteError(f"buffer failed: {err}")
+
+        return "application/json", {"result": mapping(buffered)}

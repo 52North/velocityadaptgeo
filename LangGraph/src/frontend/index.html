@@ -7,7 +7,6 @@
 
     <meta charset="UTF-8" />
     <title>Geometry Assistant</title>
-    <link rel="stylesheet" href="styles.css" />
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 
@@ -20,6 +19,8 @@
 
             <main id="chat" class="chat"></main>
 
+            <div id="test-prompts" class="test-prompts" hidden></div>
+
             <form id="chat-form" class="input-area">
                 <input id="prompt" type="text" placeholder="Ask something about geometry…" autocomplete="off"
                     required />
@@ -27,17 +28,68 @@
             </form>
         </div>
 
-        <!-- RIGHT SIDE MAP -->
+        <!-- RIGHT SIDE EXECUTION GRAPH -->
         <div class="right-panel">
-            <div id="map"></div>
+            <header class="header graph-header">
+                <span>Execution Graph</span>
+                <span class="graph-header-right">
+                    <span id="graph-status" class="graph-status">empty</span>
+                    <button id="delete-mode" class="run-button ghost" type="button" disabled>Delete</button>
+                    <button id="show-results" class="run-button ghost" type="button" disabled>Results</button>
+                    <button id="run-graph" class="run-button" type="button" disabled>Run</button>
+                </span>
+            </header>
+            <div id="graph" class="graph-canvas"></div>
+            <div id="graph-legend" class="graph-legend" hidden>
+                <span class="legend-item">
+                    <i class="legend-port"></i>
+                    connected
+                </span>
+                <span class="legend-item">
+                    <i class="legend-port legend-port-open"></i>
+                    open
+                </span>
+                <span class="legend-item">
+                    <svg width="26" height="9" aria-hidden="true"><path d="M1 4.5 H25" class="gedge"/></svg>
+                    link
+                </span>
+                <span class="legend-item">
+                    <svg width="26" height="14" aria-hidden="true"><path d="M1 11 H7" class="gedge"/><path d="M7 11 A5 5 0 0 1 17 11" class="gedge gedge-hop"/><path d="M17 11 H25" class="gedge"/></svg>
+                    crossing
+                </span>
+                <span class="legend-sep"></span>
+                <span class="legend-item">
+                    drag to connect · click to set a value · click a line then an input to
+                    re-point it · click two wired nodes to swap them · right-click a line
+                    to cut it · Delete to remove
+                </span>
+                <span class="legend-sep"></span>
+                <span class="legend-item"><i class="legend-dot dot-running"></i>running</span>
+                <span class="legend-item"><i class="legend-dot dot-done"></i>done</span>
+                <span class="legend-item"><i class="legend-dot dot-failed"></i>failed</span>
+                <span class="legend-item"><i class="legend-dot dot-skipped"></i>skipped</span>
+            </div>
+            <div id="graph-notes" class="graph-notes" hidden></div>
+            <div id="run-log" class="run-log" hidden></div>
         </div>
     </div>
 
-    <!-- Leaflet CSS + JS -->
+    <!-- RESULTS WINDOW -->
+    <div id="results-window" class="results-window" hidden>
+        <div class="results-dialog">
+            <header class="header results-header">
+                <span>Results</span>
+                <button id="close-results" class="run-button ghost" type="button">Close</button>
+            </header>
+            <div class="results-body">
+                <aside id="results-layers" class="results-layers"></aside>
+                <div id="results-map" class="results-map"></div>
+            </div>
+        </div>
+    </div>
+
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
-    <script src="/static/app.js"></script>
 </body>
 
 

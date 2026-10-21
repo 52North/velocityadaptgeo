@@ -1,58 +1,84 @@
-from langgraph.graph import StateGraph, END
+import os
+from functools import partial
+
+from dotenv import load_dotenv
 from langchain_anthropic import ChatAnthropic
 from langgraph.checkpoint.memory import MemorySaver
-import os
-from dotenv import load_dotenv
-from src.llm.state.state import WorkflowState
-from src.llm.nodes import tool_registry_node, management_node, agent_node, router
+from langgraph.graph import END, StateGraph
 
-# override=True forces reloading of variables from the .env file
+from src.llm.nodes import (
+    action_router,
+    auto_build_node,
+    builder_node,
+    chat_node,
+    management_node,
+    mcp_retriever_node,
+    responder_node,
+    retriever_node,
+    validator_node,
+)
+from src.llm.nodes.management import MAX_WORKFLOW_ITERATIONS
+from src.llm.state.state import WorkflowState
+
 load_dotenv(override=True)
 
+_SUPERSTEPS_PER_ITERATION = 3
+_TRAILING_SUPERSTEPS = 5
+
+WORKFLOW_RECURSION_LIMIT = int(os.environ.get(
+    "WORKFLOW_RECURSION_LIMIT",
+    str(MAX_WORKFLOW_ITERATIONS * _SUPERSTEPS_PER_ITERATION + _TRAILING_SUPERSTEPS),
+))
+DEFAULT_WORKFLOW_CONFIG = {"recursion_limit": WORKFLOW_RECURSION_LIMIT}
+
+# How the retriever finds candidate processes: a pgvector catalog search (top 5), or every
+# tool of the MCP server in `mcp/`. Everything else in the graph is the same for both.
+RETRIEVERS = {"pgvector": retriever_node, "mcp": mcp_retriever_node}
+VARIANT = os.environ.get("WORKFLOW_VARIANT", "pgvector")
+if VARIANT not in RETRIEVERS:
+    raise ValueError(f"WORKFLOW_VARIANT must be one of {', '.join(RETRIEVERS)}, not {VARIANT!r}")
+
 llm = ChatAnthropic(
-    model="claude-haiku-4-5-20251001",
-    temperature=0,
+    model=os.environ.get("ANTHROPIC_MODEL", "claude-haiku-5-5"),
     api_key=os.environ.get("ANTHROPIC_API_KEY"),
     streaming=True,
-    max_retries=3
+    max_retries=int(os.environ.get("ANTHROPIC_MAX_RETRIES", "3")),
+    # Thinking is on by default and counts toward max_tokens; temperature is not settable on Haiku 5.5.
+    max_tokens=int(os.environ.get("ANTHROPIC_MAX_TOKENS", "16000")),
+    effort=os.environ.get("ANTHROPIC_EFFORT", "medium"),
 )
 
-
-# Wrapper functions to pass llm to nodes
-async def manager_node_wrapper(state):
-    return await management_node(state, llm)
-
-async def agent_node_wrapper(state):
-    return await agent_node(state, llm)
-
-
 graph = StateGraph(WorkflowState)
-graph.add_node("tool_registry", tool_registry_node)
-graph.add_node("manager", manager_node_wrapper)
-graph.add_node("agent", agent_node_wrapper)
 
-graph.set_entry_point("tool_registry")
-graph.add_edge("tool_registry", "manager")
+graph.add_node("manager",       partial(management_node, llm=llm))
+graph.add_node("retriever",     partial(RETRIEVERS[VARIANT], llm=llm))
+graph.add_node("auto_build",    partial(auto_build_node, llm=llm, variant=VARIANT))
+graph.add_node("builder",       builder_node)
+graph.add_node("validator",     validator_node)
+graph.add_node("responder",     partial(responder_node,  llm=llm))
+graph.add_node("chat",          partial(chat_node,       llm=llm))
+
+graph.set_entry_point("manager")
 
 graph.add_conditional_edges(
     "manager",
-    router,
+    action_router,
     {
-        "run_step": "agent",
-        "end": END
+        "search":   "retriever",
+        "build":    "builder",
+        "validate": "validator",
+        "chat":     "chat",
+        "done":     "responder",
     },
 )
 
-graph.add_conditional_edges(
-    "agent",
-    router,
-    {
-        "run_step": "agent",  
-        "done": END,          
-        "end": END,
-    },
-)
+graph.add_edge("retriever",  "auto_build")
+graph.add_edge("auto_build", "manager")
 
-memory = MemorySaver()
+graph.add_edge("builder",   "manager")
+graph.add_edge("validator", "manager")
 
-compiled_graph = graph.compile(checkpointer=memory)
+graph.add_edge("responder", END)
+graph.add_edge("chat",      END)
+
+compiled_graph = graph.compile(checkpointer=MemorySaver())

@@ -10,7 +10,7 @@ RUN pip install --upgrade pip && pip install uv
 COPY . /app
 
 # Install dependencies
-RUN uv sync --frozen --no-cache --python /usr/local/bin/python
+RUN uv sync --locked --no-cache --python /usr/local/bin/python
 
 # Die virtuelle Umgebung zum Pfad hinzufügen
 ENV PATH="/app/.venv/bin:$PATH"

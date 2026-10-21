@@ -1,0 +1,583 @@
+---
+title: "Workflow graphs for the `muenster_green_300m` prompts"
+subtitle: "Detailed report: seed control, paraphrase batch, size wording, isochrone"
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    embed-resources: true
+    number-sections: true
+---
+
+```{python}
+import collections
+
+import analysis as a
+
+cur = a.current()
+S = a.seeds(cur)
+P = a.paraphrases(cur)
+B = a.before_size_review()  # the 171 accepted before the size rule
+dropped = a.size_dropped()
+D = [r for r in B if r["key"] in dropped]
+
+seed = a.rate(S, a.is_lenient)
+seed_strict = a.rate(S, a.is_strict)
+par = a.rate(P, a.is_lenient)
+par_strict = a.rate(P, a.is_strict)
+cmp = a.Comparison(par, seed)
+cmp_all = a.Comparison(a.rate(B, a.is_lenient), seed)
+filter_seed = a.rate(S, a.has("min-area-filter"))
+filter_par = a.rate(P, a.has("min-area-filter"))
+first50 = a.rate(S[:50], a.is_lenient)
+later = a.rate(S[50:], a.is_lenient)
+cats = a.by_category(P)
+lexical = a.rate(cats["lexical"], a.is_lenient)
+lexical_p = a.Comparison(lexical, seed).p
+run_folder = a.code(f"metrics/prompt_gen/out/{a.RUN_DIR.name}")
+
+M = a.current("mcp")
+MS = a.seeds(M, "mcp")
+MP = a.paraphrases(M, "mcp")
+mseed = a.rate(MS, a.is_lenient)
+mseed_strict = a.rate(MS, a.is_strict)
+mpar = a.rate(MP, a.is_lenient)
+mpar_strict = a.rate(MP, a.is_strict)
+use = a.usage(S + P)
+muse = a.usage(MS + MP)
+```
+
+Results of building a LangGraph workflow graph for the seed prompt and every paraphrase accepted in review, why the `multimodal-isochrone` process is never used, and how the agent does when it sees every MCP tool instead of the top 5 of a catalog search. Sections @sec-seed to @sec-isochrone are the catalog-search (pgvector) variant; @sec-variants compares the two. Every number below is computed from the run folder when the report is rendered (`analysis.py`, reading through `src.batch.load_results` and the `src.batch_summary` statistics), so it always reflects the current review decisions.
+
+Run folder: `{python} run_folder`.
+
+Seed prompt:
+
+> `{python} a.seed_prompt_text()`
+
+**Correct graph** (structure only, parameters ignored): the chain `{python} a.code(" → ".join(a.CHAIN))`.
+
+- *Lenient*: the chain is present and wired in that order; extra nodes allowed.
+- *Strict*: exactly that chain.
+
+Intervals are 95% Wilson intervals for rates, and normal-approximation intervals for differences; p-values are two-sided Fisher exact tests.
+
+# Summary
+
+- **The seed is reliable but not fully stable.** It reaches the correct graph in **`{python} str(seed)`** of `{python} seed.n` runs (lenient, [`{python} seed.range()`]; strict `{python} seed_strict.pct()`). The agent varies between identical runs at temperature 0, more in parameters (ring distances, minimum area) than in structure.
+- **Paraphrases that keep the meaning are slightly but significantly worse:** `{python} str(par)` for the `{python} par.n` that keep the size requirement, `{python} cmp.points()` points (95% CI `{python} cmp.ci_points()`, `{python} a.p_is(cmp.p)`). Equivalence within ±10 points fails. Strict is the same for both.
+- **Not the size filter:** it is in `{python} filter_par.pct()` of the paraphrase graphs and `{python} filter_seed.pct()` of the seed's. The extra failures are wiring: the filter not upstream of the rings, missing rings or boundary.
+- **Lexical is clearly worse:** `{python} lexical.pct()`, `{python} a.p_is(lexical_p)`, significant after a Bonferroni correction for 6 categories.
+- **"Adequate / suitable / sufficient for recreation" drops the size filter in every case** (0 of `{python} len(a.wording(D, a.QUALITY_WORDING.pattern))`). Those paraphrases, and 2 others without size wording, are now rejected in review (@sec-size).
+- **Visualisation is always unmet.** No process in the catalog renders a map.
+- **Walking distance is never network-based.** No graph uses `multimodal-isochrone`; in the `{python} sum(1 for r in S if r.get("decision_history"))` seed runs with a recorded trace, the manager never searched for network distance (@sec-isochrone).
+- **Cheap:** $`{python} f"{a.cost(S) + a.cost(B):.2f}"` for all `{python} len(S) + len(B)` Haiku 5.5 results, ≈$`{python} f"{(a.cost(S) + a.cost(B)) / (len(S) + len(B)):.3f}"` per prompt.
+- **Showing every MCP tool instead of searching is more accurate and more consistent, at about `{python} f"{muse.cost / use.cost:.1f}"`× the cost.** Paraphrases `{python} str(mpar)` lenient (pgvector `{python} par.pct(1)`), strict `{python} mpar_strict.pct(1)` (pgvector `{python} par_strict.pct(1)`), both `{python} a.p_is(a.Comparison(mpar, par).p)`; the seed `{python} str(mseed)` lenient (pgvector `{python} seed.pct(1)`, `{python} a.p_is(a.Comparison(mseed, seed).p)`, not significant). Rewording no longer costs anything measurable, and the redundant `buffer` disappears. `{python} f"{muse.tool_def_share:.0%}"` of the input is tool definitions (@sec-variants).
+
+```{python}
+def batch_row(name, results, model, runs_file="runs.jsonl"):
+    return [
+        name,
+        a.day(results),
+        model,
+        len(results),
+        f"${a.cost(results, runs_file):.2f}",
+        str(a.rate(results, a.is_lenient)),
+    ]
+
+
+A = a.archived()
+a.table(
+    ["Batch", "Date", "Model", "Results", "Cost", "Lenient correct"],
+    [
+        batch_row("First full run (spend limit)", A, "Haiku 4.5", "runs.20261014-haiku45.jsonl"),
+        batch_row("Seed control 1–50", S[:50], "Haiku 5.5"),
+        batch_row("Paraphrase batch", B, "Haiku 5.5"),
+        batch_row("Seed control 51–200", S[50:], "Haiku 5.5"),
+        batch_row("MCP paraphrases", MP, "Haiku 5.5"),
+        batch_row("MCP seed control", MS, "Haiku 5.5"),
+    ],
+)
+```
+
+The Haiku 4.5 results don't compare with the later ones: process metadata, the UTM `buffer`, the manager/auto-build prompts and the model changed in between (`utm_buffer_metadata_plan.md`, `haiku_5_5_plan.md`). See @sec-earlier.
+
+# Seed control {#sec-seed}
+
+The seed prompt alone, run `{python} len(S)` times with `--seed-only`, to measure the agent's own run-to-run variation: runs 1–50 on `{python} a.day(S[:50])` (before the paraphrase batch), runs 51–`{python} len(S)` on `{python} a.day(S[50:])`. Same code and model; services restarted in between.
+
+```{python}
+CHECKPOINTS = [10, 20, 30, 40, 50, 75, 100, 150, 200]
+rows = []
+for n in [c for c in CHECKPOINTS if c <= len(S)]:
+    le, st = a.rate(S[:n], a.is_lenient), a.rate(S[:n], a.is_strict)
+    rows.append([n, le.pct(1), le.range(), st.pct(1), st.range()])
+a.table(["After runs", "Lenient", "95% CI", "Strict", "95% CI"], rows, "rrlrl")
+```
+
+```{python}
+halves, slope, trend_p = a.drift(S, a.is_lenient)
+```
+
+- **No drift.** First half vs second half `{python} halves.b.pct()` vs `{python} halves.a.pct()` (`{python} a.p_is(halves.p)`); trend `{python} a.signed(100 * slope)`% per 10 runs (`{python} a.p_is(trend_p)`).
+- **The first 50 were low by chance:** `{python} str(first50)` against `{python} str(later)` for runs 51–`{python} len(S)`.
+- Precision now: ±`{python} f"{100 * (seed.ci[1] - seed.ci[0]) / 2:.0f}"` points lenient. About 300 runs would give ±5 points strict.
+
+**Structures** (edges between process types):
+
+```{python}
+structs = collections.Counter(a.structure(r) for r in S)
+rows = []
+for i, (s, n) in enumerate(structs.most_common()):
+    if n < 4:
+        rest = sum(c for _, c in structs.most_common()[i:])
+        rows.append(["…", f"{len(structs) - i} others, ≤ 3 each", rest, f"{rest / len(S):.0%}"])
+        break
+    rows.append([chr(ord("A") + i), "<br>".join(e.replace("->", " → ") for e in s), n, f"{n / len(S):.0%}"])
+a.table(["", "Edges", "Runs", "Share"], rows, "llrr")
+```
+
+A is the correct chain plus a redundant 300 m `buffer`, B the chain alone. Strict fails on A, which is why strict stays near `{python} seed_strict.pct()`.
+
+**Lenient failures:**
+
+```{python}
+fails = collections.Counter(a.failure(r) for r in S if a.failure(r))
+a.table(["Failure", "Runs"], [[f, n] for f, n in fails.most_common()], "lr")
+```
+
+**Parameters** vary more than structure:
+
+```{python}
+def top(counter, k=6):
+    return ", ".join(f"{v} ({n})" for v, n in counter.most_common(k))
+
+
+a.table(
+    ["Parameter", "Values (runs)"],
+    [
+        ["`min-area-filter.minArea`", top(a.params(S, "min-area-filter", "minArea"), 9)],
+        ["`multi-ring-buffer.distances`", top(a.params(S, "multi-ring-buffer", "distances"))],
+        ["`osm-green-areas.tags`", top(a.params(S, "osm-green-areas", "tags"))],
+        ["`buffer.distance`", top(a.params(S, "buffer", "distance"))],
+    ],
+)
+```
+
+**Unmet capabilities per graph:** `{python} ", ".join(f"{k} unmet: {n}" for k, n in sorted(a.unmet_counts(S).items()))`. The map visualisation is among them in `{python} sum(a.unmet_matching(r, a.VISUALISATION) for r in S)` of the `{python} sum(1 for r in S if r.get("unmet_capabilities"))` graphs with any; a clip/intersect with the city boundary (not in the catalog, correctly unmet) in `{python} sum(a.unmet_matching(r, a.CLIP) for r in S)`.
+
+# Paraphrases {#sec-paraphrases}
+
+`{python} len(B)` accepted paraphrases ran on `{python} a.day(B)` at concurrency 3. `{python} len(D)` of them were rejected in review afterwards for dropping the size requirement (@sec-size); the comparisons use the `{python} len(P)` that keep it.
+
+```{python}
+d = a.rate(D, a.is_lenient)
+a.table(
+    ["", "Lenient", "95% CI", "Strict", "Has `min-area-filter`"],
+    [
+        [f"Seed ({seed.n} runs)", f"**{seed.pct(1)}**", seed.range(), seed_strict.pct(), filter_seed.pct()],
+        [f"Size kept ({par.n})", f"**{par.pct(1)}**", par.range(), par_strict.pct(), filter_par.pct()],
+        [f"Size dropped ({d.n})", d.pct(), d.range(), a.rate(D, a.is_strict).pct(), a.rate(D, a.has("min-area-filter")).pct()],
+    ],
+    "lrlrr",
+)
+```
+
+```{python}
+a.table(
+    ["Comparison with the seed", "Paraphrases", "Difference [95% CI]", "p"],
+    [
+        ["Size kept, lenient", str(par), f"{cmp.points()} [{cmp.ci_points()}]", a.fmt_p(cmp.p)],
+        ["All accepted before the size rule, lenient", str(cmp_all.a), f"{cmp_all.points()} [{cmp_all.ci_points()}]", a.fmt_p(cmp_all.p)],
+        ["Size kept, strict", str(par_strict), a.Comparison(par_strict, seed_strict).points(), a.fmt_p(a.Comparison(par_strict, seed_strict).p)],
+        ["Size kept, has `min-area-filter`", str(filter_par), a.Comparison(filter_par, filter_seed).points(), a.fmt_p(a.Comparison(filter_par, filter_seed).p)],
+    ],
+    "llll",
+)
+```
+
+**Failures**, seed against the paraphrases that keep the size requirement:
+
+```{python}
+fs = collections.Counter(a.failure(r) for r in S if a.failure(r))
+fp = collections.Counter(a.failure(r) for r in P if a.failure(r))
+a.table(
+    ["Failure", f"Seed ({len(S)})", f"Size kept ({len(P)})"],
+    [[f, f"{fs[f]} ({fs[f] / len(S):.1%})", f"{fp[f]} ({fp[f] / len(P):.1%})"] for f in a.FAILURES if fs[f] or fp[f]],
+    "lrr",
+)
+```
+
+The size filter is missing equally often. The paraphrases fail more on wiring: the filter fed from `osm-green-areas` next to the rings instead of upstream of them, and graphs without rings or without `city-boundary`. The paraphrases predate the saved `decision_history`, so where this goes wrong isn't known yet.
+
+```{python}
+no_city = [r for r in P if a.failure(r) == "no city-boundary"]
+```
+
+**Per category** (lenient, each against the seed; Bonferroni threshold p < `{python} f"{a.bonferroni():.4f}"` for `{python} len(a.CATEGORIES)` categories):
+
+```{python}
+rows = []
+for c in a.CATEGORIES:
+    rc = a.rate(cats[c], a.is_lenient)
+    cc = a.Comparison(rc, seed)
+    rows.append([
+        a.CATEGORY_NAMES[c],
+        str(rc),
+        rc.range(),
+        cc.points(),
+        a.fmt_p(cc.p),
+        a.yes(cc.p < 0.05),
+        a.yes(cc.p < a.bonferroni()),
+        f"±{100 * a.detectable(seed.p, seed.n, rc.n):.0f}",
+    ])
+a.table(
+    ["Category", "Correct", "95% CI", "Difference", "p", "p < 0.05", "After correction", "Detectable gap"],
+    rows,
+    "llrrrccr",
+)
+```
+
+*Detectable gap*: the smallest difference from the seed the test finds with 80% power at this category's size. Effects smaller than that go undetected.
+
+`city-boundary` is missing in `{python} len(no_city)` paraphrases, all filed as `{python} a.code(", ".join(sorted({r["category"] for r in no_city})))` (`{python} ", ".join(r["key"] for r in no_city)`). `geometry-difference` appears in `{python} sum(1 for r in P if "geometry-difference" in a.types(r))` paraphrase graphs.
+
+# The size requirement {#sec-size}
+
+## The wording that drops the size filter
+
+"Large enough for recreation" asks for a size threshold. Reworded as "adequate / suitable / sufficient for recreation" it reads as a quality, and the manager never searches for an area filter. Over the `{python} len(B)` paraphrases accepted before the size rule:
+
+```{python}
+quality = a.wording(B, a.QUALITY_WORDING.pattern)
+rest = [r for r in B if r not in quality]
+a.table(
+    ["Wording", "Paraphrases", "`min-area-filter` present", "Correct"],
+    [
+        ['"adequate / suitable / sufficient for recreation"', len(quality), a.rate(quality, a.has("min-area-filter")).pct(), str(a.rate(quality, a.is_lenient))],
+        ["everything else", len(rest), a.rate(rest, a.has("min-area-filter")).pct(), str(a.rate(rest, a.is_lenient))],
+    ],
+    "lrrr",
+)
+```
+
+Fisher `{python} a.p_is(a.Comparison(a.rate(quality, a.has("min-area-filter")), a.rate(rest, a.has("min-area-filter"))).p)` for the filter. "Sufficiently sized" keeps the size sense and doesn't match. The paraphrases: `{python} ", ".join(sorted(r["key"] for r in quality))`.
+
+## Paraphrases that drop the size requirement are rejected
+
+A paraphrase that no longer asks for green spaces "large enough for recreation" has lost part of the seed's meaning, so it is not a true paraphrase. Unlike leaving out the failures afterwards, this rule depends only on the prompt's wording: the paraphrases were classified from their text first, and the graphs checked afterwards. They are rejected in `reviewed.jsonl` with a note (the earlier file is kept as `reviewed.20261015-before-size.jsonl`):
+
+```{python}
+notes = collections.defaultdict(list)
+for key, c in dropped.items():
+    notes[c["review"]["note"].removeprefix(a.SIZE_NOTE + ": ")].append(key)
+a.table(["Reason", "Paraphrases"], [[n, ", ".join(sorted(ks))] for n, ks in notes.items()])
+```
+
+"Recreational green spaces" with the size stated elsewhere in the prompt keeps it. "Sufficient for recreation" was the one unclear case and counts as dropped, like "adequate".
+
+**The judge missed them too.** `constraints.yaml` lists "size only implied by an adjective such as 'recreational'" as `relative`, but has no entry for "adequate / suitable / sufficient for recreation" or for a missing size. To catch them in future runs, add both under `size` as `reject`.
+
+```{python}
+lex_all = a.rate([r for r in B if r["category"] == "lexical"], a.is_lenient)
+```
+
+**Effect on the lexical category:** `{python} str(lex_all)` before the rule (`{python} a.p_is(a.Comparison(lex_all, seed).p)`), `{python} str(lexical)` after (`{python} a.p_is(lexical_p)`). Still significant after the correction, so the size wording doesn't explain all of the lexical drop.
+
+## Other wording effects
+
+Not conclusive: these prompts change other things too (the "Pinpoint" ones are all lexical, with several different failures), so each would need paraphrases that change only that phrase:
+
+```{python}
+rows = []
+for label, pattern in [('opens with "Pinpoint"', r"^\s*Pinpoint"), ('"0.3 km"', r"0\.3\s*km"), ('"pedestrian"', r"pedestrian")]:
+    rs = a.wording(P, pattern)
+    rc = a.rate(rs, a.is_lenient)
+    rows.append([label, rc.n, rc.pct(), a.fmt_p(a.Comparison(rc, seed).p)])
+a.table(["Wording", "Paraphrases", "Correct", "p vs seed"], rows, "lrrr")
+```
+
+# How sure can we be? {#sec-uncertainty}
+
+```{python}
+lo90, hi90 = cmp.ci(a.Z90)
+same_day = a.Comparison(par, first50)
+```
+
+| | Rate | Standard error |
+|---|---|---|
+| Paraphrases, size kept | `{python} str(par)` | ±`{python} f"{100 * (par.p * (1 - par.p) / par.n) ** 0.5:.1f}"` points |
+| Seed | `{python} str(seed)` | ±`{python} f"{100 * (seed.p * (1 - seed.p) / seed.n) ** 0.5:.1f}"` points |
+| Difference | `{python} cmp.points()` points | ±`{python} f"{100 * cmp.se:.1f}"` points |
+
+- **The difference is significant:** 95% CI `{python} cmp.ci_points()` points, `{python} a.p_is(cmp.p)`.
+- **Equivalence fails.** Two one-sided tests with the ±10-point margin set before the extra seed runs: the 90% CI (`{python} cmp.ci_points(a.Z90)`) crosses −10; the lower test gives `{python} a.p_is(cmp.tost_lower(0.10))`.
+- **With 50 seed runs it looked like noise:** against runs 1–50 the same paraphrases give `{python} a.p_is(same_day.p)`. The extra 150 runs tightened the seed, and the earlier "no detectable difference" no longer holds.
+- **Caveat, day-to-day:** runs 1–50 ran the same day as the paraphrases, runs 51–`{python} len(S)` the day after. Same code and model, but a shift (the API model behind the alias, the re-crawled catalog) can't be ruled out. A re-run of the paraphrases settles it.
+- **The groups vary in different ways.** The seed runs only show the agent's run-to-run variation; the paraphrases add the wording to it. Treating both the same way is fine for this comparison.
+
+Detectable difference for the `{python} par.n` paraphrases (80% power, α = 0.05):
+
+```{python}
+a.table(
+    ["Seed runs", "Smallest detectable difference"],
+    [[n, f"~{100 * a.detectable(seed.p, n, par.n):.0f} points"] for n in (50, 200, 1000)],
+    "rr",
+)
+```
+
+# Why the multimodal isochrone is never used {#sec-isochrone}
+
+The seed asks for **walking** distance, and the catalog has `multimodal-isochrone` (`pygeoapi_instance/processes/multimodal_isochrone.py`), yet no current graph uses it (`{python} sum(1 for r in cur + D if "multimodal-isochrone" in a.types(r))` of `{python} len(cur) + len(D)`). There are two reasons, one on each side.
+
+## The manager folds "walking" into a buffer
+
+```{python}
+traced = [r for r in S if r.get("decision_history")]
+network = [r for r in traced if a.searched_network(r)]
+```
+
+In `{python} len(network)` of the `{python} len(traced)` seed runs with a saved `decision_history`, the manager searched for distance along a network or travel time. It maps "within 300 m, in incremental intervals" onto `buffer` / `multi-ring-buffer`, which do exactly that in metres around polygons; "walking" survives only in step names ("find walking-distance buffer"), not in what is searched for. The search never reaches the isochrone, and the only unmet capability is the map. The replies then admit the difference, e.g. `seed#1`:
+
+> Distances are straight-line buffers in a local UTM projection, not walking distances along the street network. Real walking routes would be longer, so some areas counted as served may be farther than 300 m on foot.
+
+The prompts only guard against this in one direction. The `auto_builder` prompt (`LangGraph/src/llm/nodes/auto_builder.py`) says "a buffer is not a travel-time isochrone". Nothing tells the manager (`LangGraph/src/llm/nodes/management.py`) that a travel mode in the goal is a capability of its own to search for.
+
+## The isochrone is retrieved, then rejected
+
+Only a few paraphrases searched for walking along the network. In each, `multimodal-isochrone` was the closest match and the builder left the capability unmet:
+
+```{python}
+seen = {}
+for r, u in a.unmet_closest(cur + D, "multimodal-isochrone"):
+    seen[(r["key"], u["capability"])] = [f"`{r['key']}`", u["capability"], f"{u['similarity']:.3f}"]
+a.table(["Result", "Capability searched", "Similarity"], list(seen.values()), "llr")
+```
+
+Given the process definition, the rejection is correct:
+
+| The prompt needs | `multimodal-isochrone` offers |
+|---|---|
+| Distance from many park/forest polygons | One departure point (`origin`: GeoJSON Point, required) |
+| Limits in metres (300 m, in steps) | `travelTimeThresholds` in minutes |
+| Walking only, no time of day | A required `departureTime`; described as walk + cycle + scheduled transit over a GTFS timetable |
+
+`{python} len(a.mentions(cur, "isochron"))` replies mention the isochrone in their caveats and give the same reasons on their own.
+
+## What to change
+
+It depends on what the isochrone is for in the test catalog:
+
+- **If it's meant to be a near miss** (it reads like one, next to "a buffer is not a travel-time isochrone"): the agent behaves correctly. Buffer graphs are the expected outcome, and the replies honestly say they're straight-line.
+- **If it's meant to be the right answer**, the process definition needs to fit the task: polygon or multi-feature origins, distance thresholds in metres (or a walking speed), and no required departure time or transit. Alternatively, add a separate walking service-area process. A rule in the manager prompt would also help: "a travel mode in the goal ('walking distance', 'by car') is a capability of its own; search for it, don't fold it into a buffer."
+
+# Catalog search vs. all MCP tools {#sec-variants}
+
+The same batch with `--variant mcp`: the retriever lists every process tool of the MCP server (`{python} f"{muse.tools:.0f}"`, unranked, with the input schema as MCP sends it) instead of the top 5 of the pgvector search. Manager, builder, validator, responder, model and execution are shared; the pick format is `process_id` + `server_url` in both (`workflow_batch_plan.md` §5). The MCP server crawls the same servers as the catalog, so both see the same `{python} f"{muse.tools:.0f}"` processes, `multimodal-isochrone` included.
+
+Runs: the `{python} len(MP)` paraphrases that keep the size requirement on `{python} a.day(MP)`, the seed `{python} len(MS)` times on `{python} a.day(MS)`, concurrency 3, no errors, all graphs valid. A first trial of 10 seed runs, with the manager and responder still showing only the first 5 candidates (for MCP: the first 5 tools in server order, none of them relevant), got 0/10 and is left out; the cap was removed for both variants, which leaves pgvector unchanged since its search returns 5.
+
+## Correctness
+
+```{python}
+a.table(
+    ["", "Lenient", "95% CI", "Strict", "95% CI"],
+    [
+        [f"pgvector seed ({seed.n})", f"**{seed.pct(1)}**", seed.range(), seed_strict.pct(1), seed_strict.range()],
+        [f"MCP seed ({mseed.n})", f"**{mseed.pct(1)}**", mseed.range(), mseed_strict.pct(1), mseed_strict.range()],
+        [f"pgvector paraphrases ({par.n})", f"**{par.pct(1)}**", par.range(), par_strict.pct(1), par_strict.range()],
+        [f"MCP paraphrases ({mpar.n})", f"**{mpar.pct(1)}**", mpar.range(), mpar_strict.pct(1), mpar_strict.range()],
+    ],
+    "lrlrl",
+)
+```
+
+```{python}
+def cmp_row(label, x, y):
+    c = a.Comparison(x, y)
+    return [label, str(x), str(y), f"{c.points()} [{c.ci_points()}]", a.fmt_p(c.p)]
+
+
+a.table(
+    ["Comparison", "", "Reference", "Difference [95% CI]", "p"],
+    [
+        cmp_row("Seed, lenient: MCP vs pgvector", mseed, seed),
+        cmp_row("Seed, strict: MCP vs pgvector", mseed_strict, seed_strict),
+        cmp_row("Paraphrases, lenient: MCP vs pgvector", mpar, par),
+        cmp_row("Paraphrases, strict: MCP vs pgvector", mpar_strict, par_strict),
+        cmp_row("MCP, lenient: paraphrases vs seed", mpar, mseed),
+        cmp_row("MCP, strict: paraphrases vs seed", mpar_strict, mseed_strict),
+    ],
+    "lllll",
+)
+```
+
+```{python}
+mhalves, mslope, mtrend_p = a.drift(MS, a.is_lenient)
+```
+
+- **Strict is where the variants differ most:** no MCP graph contains a `buffer` (pgvector: `{python} sum(a.has("buffer")(r) for r in S + P)` of `{python} len(S + P)`), which accounts for most of the strict gap. Seeing every tool, the manager has no reason to add a single 300 m buffer next to the rings.
+- **Lenient on paraphrases is clearly better** with MCP; on the seed it is small (`{python} a.Comparison(mseed, seed).points()` points, `{python} a.p_is(a.Comparison(mseed, seed).p)`) and not significant at `{python} mseed.n` runs each.
+- **Rewording costs nothing measurable with MCP:** paraphrases `{python} mpar.pct(1)` vs seed `{python} mseed.pct(1)` (`{python} a.p_is(a.Comparison(mpar, mseed).p)`), against `{python} cmp.points()` points with pgvector (@sec-uncertainty).
+- MCP seed stable: first half `{python} mhalves.b.pct()` vs second half `{python} mhalves.a.pct()` (`{python} a.p_is(mhalves.p)`), trend `{python} a.signed(100 * mslope)`% per 10 runs (`{python} a.p_is(mtrend_p)`).
+
+**Per category**, paraphrases (MCP vs pgvector, lenient; Bonferroni threshold p < `{python} f"{a.bonferroni():.4f}"`):
+
+```{python}
+mcats = a.by_category(MP)
+rows = []
+for c in a.CATEGORIES:
+    rm, rp = a.rate(mcats[c], a.is_lenient), a.rate(cats[c], a.is_lenient)
+    cc = a.Comparison(rm, rp)
+    rows.append([
+        a.CATEGORY_NAMES[c],
+        str(rm),
+        rm.range(),
+        a.rate(mcats[c], a.is_strict).pct(),
+        str(rp),
+        a.rate(cats[c], a.is_strict).pct(),
+        cc.points(),
+        a.fmt_p(cc.p),
+        a.yes(cc.p < a.bonferroni()),
+    ])
+a.table(
+    ["Category", "MCP lenient", "95% CI", "MCP strict", "pgvector lenient", "pgvector strict", "Difference", "p", "After correction"],
+    rows,
+    "llrrlrrrc",
+)
+```
+
+```{python}
+mlex = a.rate(mcats["lexical"], a.is_lenient)
+```
+
+The lexical drop is gone with MCP: `{python} mlex.pct()` against the MCP seed's `{python} mseed.pct()` (`{python} a.p_is(a.Comparison(mlex, mseed).p)`).
+
+## Structures and failures
+
+```{python}
+mstructs = collections.Counter(a.structure(r) for r in MS + MP)
+a.table(
+    ["", "Edges", "Seed", "Paraphrases", "Share"],
+    [
+        [
+            chr(ord("A") + i),
+            "<br>".join(e.replace("->", " → ") for e in s),
+            sum(a.structure(r) == s for r in MS),
+            sum(a.structure(r) == s for r in MP),
+            f"{n / len(MS + MP):.0%}",
+        ]
+        for i, (s, n) in enumerate(mstructs.most_common())
+    ],
+    "llrrr",
+)
+```
+
+`{python} len(mstructs)` structures over `{python} len(MS + MP)` MCP graphs, against `{python} len(collections.Counter(a.structure(r) for r in S + P))` over `{python} len(S + P)` pgvector ones.
+
+```{python}
+mfails = collections.Counter(a.failure(r) for r in MS + MP if a.failure(r))
+ms_missing = [r["key"] for r in MS if a.failure(r)]
+mgd = [r for r in MS + MP if "geometry-difference" in a.types(r)]
+```
+
+- **Every MCP failure is a missing size filter** (`{python} ", ".join(f"{f}: {n}" for f, n in mfails.most_common())`): the seed runs `{python} ", ".join(ms_missing)`, and `{python} sum(1 for r in MP if a.failure(r))` paraphrases. No wiring errors, against `{python} sum(1 for r in S + P if a.failure(r) not in (None, "no min-area-filter"))` pgvector graphs with the filter in the wrong place or rings/boundary missing.
+- `geometry-difference` (rings minus the city boundary) in `{python} len(mgd)` MCP graphs, all otherwise the exact chain, so lenient but not strict.
+
+**Parameters** vary as in pgvector:
+
+```{python}
+a.table(
+    ["Parameter", "MCP (runs)", "pgvector (runs)"],
+    [
+        ["`min-area-filter.minArea`", top(a.params(MS + MP, "min-area-filter", "minArea")), top(a.params(S + P, "min-area-filter", "minArea"))],
+        ["`multi-ring-buffer.distances`", top(a.params(MS + MP, "multi-ring-buffer", "distances"), 3), top(a.params(S + P, "multi-ring-buffer", "distances"), 3)],
+    ],
+)
+```
+
+## Unmet capabilities and the isochrone
+
+```{python}
+def unmet_mean(results):
+    return sum(len(r.get("unmet_capabilities") or []) for r in results) / len(results)
+
+
+def unmet_dist(results):
+    return ", ".join(f"{k} unmet: {n}" for k, n in sorted(a.unmet_counts(results).items()))
+
+
+mtraced = [r for r in MS + MP if r.get("decision_history")]
+mnetwork = [r for r in mtraced if a.searched_network(r)]
+```
+
+- **Unmet per graph:** MCP `{python} unmet_dist(MS + MP)` (mean `{python} f"{unmet_mean(MS + MP):.2f}"`); pgvector `{python} unmet_dist(S + P)` (mean `{python} f"{unmet_mean(S + P):.2f}"`). The map visualisation is among them in `{python} sum(a.unmet_matching(r, a.VISUALISATION) for r in MS + MP)` MCP graphs. More MCP graphs report nothing unmet, although no process renders a map in either variant.
+- **The isochrone stays unused:** `{python} sum("multimodal-isochrone" in a.types(r) for r in MS + MP)` MCP graphs. All `{python} len(mtraced)` MCP results have a `decision_history`; the manager searched for network or travel-time distance in `{python} len(mnetwork)` (`{python} ", ".join(r["key"] for r in mnetwork) or "none"`). Seeing the isochrone in every prompt doesn't change the outcome: the manager still folds "walking" into rings (@sec-isochrone).
+
+## Cost and context
+
+Means per prompt, seed and paraphrases together, from the `RunTracker` records:
+
+```{python}
+def usage_row(label, u):
+    return [
+        label,
+        f"${u.cost:.4f}",
+        f"{u.input_tokens / 1000:.0f}k",
+        f"{u.output_tokens / 1000:.1f}k",
+        f"{u.tool_def_share:.0%}",
+        f"{u.llm_calls:.1f}",
+        f"{u.seconds:.0f}",
+        f"{u.tools:.0f}",
+        f"${u.total:.2f}",
+    ]
+
+
+a.table(
+    ["Variant", "Cost", "Input tokens", "Output tokens", "Tool definitions", "LLM calls", "Seconds", "Tools visible", "Total"],
+    [usage_row(f"pgvector ({use.n})", use), usage_row(f"MCP ({muse.n})", muse)],
+    "lrrrrrrrr",
+)
+```
+
+- MCP costs **`{python} f"{muse.cost / use.cost:.1f}"`×** as much per prompt, all of it from input: `{python} f"{muse.input_tokens / use.input_tokens:.1f}"`× the input tokens, `{python} f"{muse.tool_def_share:.0%}"` of them tool definitions (pgvector `{python} f"{use.tool_def_share:.0%}"`).
+- It is still faster and needs fewer LLM calls.
+
+## Limitations
+
+- **No prompt caching** in either variant. MCP's tool list is the same in every call, so caching would cut most of its extra input cost; pgvector's 5 candidates change with each search. A cached MCP variant would be a third variant to compare.
+- **Cost grows with the catalog.** `{python} f"{muse.tools:.0f}"` processes fit in every prompt; MCP's input grows linearly with the number of tools, pgvector's stays at 5 candidates. Whether MCP keeps its accuracy with a few hundred tools is untested.
+- **One prompt, one catalog.** All runs are variations of one request; the accuracy gap may be specific to a chain whose steps (area filter, rings) are easy to spot in a full list.
+- **Different days.** The MCP runs ran up to 4 days after the pgvector ones, with the same code apart from the variant switch and the candidate cap. A shift in the model behind the alias can't be ruled out, as in @sec-uncertainty.
+- The paraphrases that drop the size requirement (@sec-size) ran with pgvector only.
+
+# Earlier runs (2026-10-14, Haiku 4.5) {#sec-earlier}
+
+**Trials** (`--limit 3 --seed-runs 0`, from the host with `uv run`): all three `morphological#1`–`#3` built the same 4-node chain with rings 75/150/225/300 m, except one with 100/200/300 m; 5–6 iterations, 10–12 LLM calls, $0.055–0.069 per prompt. They showed the run-to-run variation in parameters (hence the seed control), identical graphs from different paraphrases (hence deduplication before execution), and the always-unmet visualisation. Two fixes came out of them: metrics go to the run folder's own `runs.jsonl` (the shared one was root-owned and lost the trial 1 metrics), and the batch logger is named explicitly.
+
+```{python}
+iso = [r for r in A if "multimodal-isochrone" in a.types(r)]
+sets = collections.Counter(tuple(sorted(a.types(r))) for r in A)
+```
+
+**First full run** (171 paraphrases + 3 seed runs, concurrency 1): stopped by the API spend limit after `{python} len(A)` results, $`{python} f"{a.cost(A, 'runs.20261014-haiku45.jsonl'):.2f}"`; the rest failed within seconds, including all seed runs, so it has no baseline. All `{python} len(A)` graphs valid. Node-type sets:
+
+```{python}
+a.table(
+    ["Node types", "Graphs"],
+    [[", ".join(f"`{t}`" for t in s), n] for s, n in sets.most_common()],
+    "lr",
+)
+```
+
+`{python} len(iso)` graphs added the isochrone (`{python} ", ".join(r["key"] for r in iso)`), used wrongly: for `morphological#8` "walking-time isochrones from each green space, showing areas reachable on foot within 5, 10, 15, and 20 minutes", next to the 300 m rings. The later auto-build prompt and metadata changes rule out exactly that, so going to 0 is an improvement, not a regression.
+
+# Open points
+
+- **Paraphrase wiring errors** (@sec-paraphrases): re-run the paraphrases now that `decision_history` is saved (~$2, ~40 min at concurrency 3), to see where the misplaced filters and missing rings/boundaries come from. The same re-run settles the day-to-day caveat.
+- **Judge constraints:** add "adequate / suitable / sufficient for recreation" and "no size wording" to `constraints.yaml` under `size` as `reject` (@sec-size).
+- **Lexical wording:** paraphrases that change only one phrase ("Pinpoint", "0.3 km", "pedestrian") to test those effects in isolation.
+- **Strict precision:** about 300 seed runs for ±5 points.
+- **MCP with prompt caching** as a third variant, and a larger catalog for both variants (@sec-variants).
+- **MCP size-filter misses:** the `{python} sum(1 for r in MS + MP if a.failure(r))` MCP graphs without `min-area-filter` have a `decision_history`; check at which step the size requirement got lost.
+- **Execution:** deduplicate graphs by signature, then execute each distinct graph once (`workflow_batch_plan.md` §3).

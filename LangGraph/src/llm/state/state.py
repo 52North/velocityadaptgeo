@@ -1,18 +1,23 @@
-from typing import TypedDict, Sequence, Annotated
+from typing import TypedDict, Annotated
+from langchain_core.messages import BaseMessage
 from langgraph.graph.message import add_messages
 
 
 class WorkflowState(TypedDict, total=False):
-    messages: Annotated[Sequence, add_messages]
-
-    # planning/execution bookkeeping
-    plan: list[dict]                 # ordered steps from manager
-    current_step: int                # index into plan
-    next_action: str                 # router decision
-
+    messages: Annotated[list[BaseMessage], add_messages]
     tools_meta: list[dict]
+    decision_history: list[dict]
 
-    # optional tracking/debug
-    decision_history: list
-    tool_chain: list                 # tool calls made in latest agent run
-    current_context: dict            # free-form context between steps
+    # New for iterative graph building
+    workflow_graph: dict  # NodeGraph shape - see src.llm.state.graph.WorkflowGraph
+    candidate_processes: list[dict]
+    last_validation: dict | None   # {"valid": bool, "errors": [...]}
+    unmet_capabilities: list[dict]  # capabilities asked for that the catalog cannot supply
+    current_action: str            # "search" | "build" | "validate" | "chat" | "done"
+    step: dict | None              # the single planned step
+    step_tools_meta: list[dict]    # narrowed tools for current action
+    iteration: int
+    max_iterations: int
+
+    # Router signal (unchanged)
+    next_action: str               # "run_step" | "end"

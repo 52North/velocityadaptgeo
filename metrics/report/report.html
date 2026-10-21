@@ -1,0 +1,380 @@
+<title>CoolSpots Context Budget</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600;700&display=swap">
+<style>
+:root{
+  --paper:#ECEFF0; --raise:#F7F9F9; --sunk:#E2E7E8;
+  --ink:#111A1F; --ink2:#48565F; --ink3:#77858D;
+  --rule:#C9D2D4; --rule2:#DDE4E5;
+  --mcp:#A65A2B; --pgv:#0089A0;
+  --neutral-bar:#AEBBBF; --veg:#2E6B4F;
+  --f-disp:"IBM Plex Sans Condensed",system-ui,sans-serif;
+  --f-body:"IBM Plex Sans",system-ui,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --paper:#12181C; --raise:#1A2329; --sunk:#0D1316;
+  --ink:#E9EFF0; --ink2:#9DAEB6; --ink3:#6C7E87;
+  --rule:#2B383F; --rule2:#212C32;
+  --mcp:#C57A3E; --pgv:#1CA3BA;
+  --neutral-bar:#43535A; --veg:#4E9B78;
+}}
+:root[data-theme="dark"]{
+  --paper:#12181C; --raise:#1A2329; --sunk:#0D1316;
+  --ink:#E9EFF0; --ink2:#9DAEB6; --ink3:#6C7E87;
+  --rule:#2B383F; --rule2:#212C32;
+  --mcp:#C57A3E; --pgv:#1CA3BA;
+  --neutral-bar:#43535A; --veg:#4E9B78;
+}
+*{box-sizing:border-box}
+body{background:var(--paper);color:var(--ink);font-family:var(--f-body);line-height:1.6;
+  -webkit-font-smoothing:antialiased;font-size:15px}
+.sheet{max-width:960px;margin:0 auto;padding:0 28px 80px}
+.col{max-width:660px}
+h1,h2,h3{font-family:var(--f-disp);text-wrap:balance;margin:0}
+.mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.eyebrow{font-family:var(--f-mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink3)}
+
+header{border-bottom:2px solid var(--ink);padding:44px 0 18px}
+h1{font-size:clamp(38px,6.4vw,66px);font-weight:700;line-height:.98;letter-spacing:-.02em;margin:14px 0 12px}
+.dek{font-size:18px;color:var(--ink2);max-width:600px;margin:0}
+.legend{display:flex;flex-wrap:wrap;border-top:1px solid var(--rule);margin-top:26px;
+  font-family:var(--f-mono);font-size:11.5px}
+.legend div{padding:9px 18px 9px 0;margin-right:18px;border-right:1px solid var(--rule2);color:var(--ink3)}
+.legend div:last-child{border-right:0;margin-right:0}
+.legend b{color:var(--ink);font-weight:500;display:block;letter-spacing:.01em}
+
+section{padding-top:56px}
+h2{font-size:13px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--ink2);
+  padding-bottom:9px;border-bottom:1px solid var(--rule);margin-bottom:26px}
+h3{font-size:21px;font-weight:600;letter-spacing:-.005em;margin-bottom:8px}
+p{margin:0 0 14px}
+
+.verdict{display:grid;grid-template-columns:repeat(auto-fit,minmax(172px,1fr));gap:1px;
+  background:var(--rule);border:1px solid var(--rule)}
+.v{background:var(--paper);padding:20px 18px 18px}
+.v .n{font-family:var(--f-mono);font-size:clamp(30px,4.6vw,42px);font-weight:500;letter-spacing:-.03em;
+  line-height:1;color:var(--pgv);font-variant-numeric:tabular-nums}
+.v .n.flat{color:var(--ink)}
+.v .k{font-family:var(--f-mono);font-size:11px;letter-spacing:.09em;text-transform:uppercase;
+  color:var(--ink3);margin-top:11px}
+.v .s{font-size:13.5px;color:var(--ink2);margin-top:5px;line-height:1.45}
+
+figure{margin:0}
+figcaption{font-size:13px;color:var(--ink3);margin-top:14px;max-width:640px;line-height:1.5}
+.key{display:flex;gap:20px;flex-wrap:wrap;font-family:var(--f-mono);font-size:12px;margin-bottom:18px}
+.key span{display:flex;align-items:center;gap:7px;color:var(--ink2)}
+.sw{width:11px;height:11px;border-radius:2px;flex:none}
+.scroll{overflow-x:auto}
+svg{display:block;max-width:100%;height:auto}
+.gl{stroke:var(--rule2);stroke-width:1}
+.axis{stroke:var(--rule);stroke-width:1}
+.tick{font-family:var(--f-mono);font-size:11px;fill:var(--ink3)}
+.dlab{font-family:var(--f-mono);font-size:12px;font-weight:500}
+.dsub{font-family:var(--f-mono);font-size:10.5px;fill:var(--ink3)}
+.note{font-family:var(--f-mono);font-size:10.5px;fill:var(--ink3);letter-spacing:.05em;text-transform:uppercase}
+
+.comp{display:flex;flex-direction:column;gap:22px}
+.crow{display:flex;flex-direction:column;gap:7px}
+.chead{display:flex;justify-content:space-between;align-items:baseline;font-family:var(--f-mono);font-size:12.5px;gap:14px}
+.chead .tot{color:var(--ink3);white-space:nowrap}
+.cbar{display:flex;height:44px;gap:2px}
+.cseg{height:100%;display:flex;align-items:center;padding-left:10px;font-family:var(--f-mono);
+  font-size:11px;color:#fff;overflow:hidden;white-space:nowrap;border-radius:0 3px 3px 0}
+.cseg.rest{background:var(--neutral-bar);border-radius:3px 0 0 3px}
+
+.units{display:flex;gap:44px;flex-wrap:wrap}
+.ublock{flex:1;min-width:236px}
+.ugrid{display:grid;grid-template-columns:repeat(13,1fr);gap:4px;max-width:250px;margin:0 0 12px}
+.u{aspect-ratio:1;border-radius:2px}
+.ulab{font-family:var(--f-mono);font-size:12px;color:var(--ink2);line-height:1.5}
+.ulab b{color:var(--ink);font-weight:500}
+
+.pipe{display:grid;grid-template-columns:repeat(auto-fit,minmax(152px,1fr));gap:1px;background:var(--rule);
+  border:1px solid var(--rule)}
+.step{background:var(--paper);padding:15px 15px 17px}
+.step .i{font-family:var(--f-mono);font-size:10.5px;color:var(--pgv);letter-spacing:.1em}
+.step .pn{font-family:var(--f-mono);font-size:12.5px;font-weight:500;margin:7px 0 6px;word-break:break-word}
+.step .o{font-size:12.5px;color:var(--ink2);line-height:1.4}
+
+.mun{display:grid;grid-template-columns:300px 1fr;gap:44px;align-items:start}
+@media(max-width:720px){.mun{grid-template-columns:1fr}}
+.funnel{display:flex;flex-direction:column;border-top:1px solid var(--rule)}
+.fr{display:flex;justify-content:space-between;align-items:baseline;padding:13px 0;border-bottom:1px solid var(--rule2)}
+.fr .fl{font-size:14px;color:var(--ink2);padding-right:16px}
+.fr .fv{font-family:var(--f-mono);font-size:17px;font-weight:500;white-space:nowrap;font-variant-numeric:tabular-nums}
+.fr.hero .fv{font-size:25px;color:var(--pgv)}
+
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th,td{text-align:right;padding:9px 12px;border-bottom:1px solid var(--rule2);white-space:nowrap}
+th:first-child,td:first-child{text-align:left;padding-left:0;white-space:normal}
+td:last-child,th:last-child{padding-right:0}
+thead th{font-family:var(--f-mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--ink3);border-bottom:1px solid var(--rule);font-weight:500}
+tbody td{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+tbody td:first-child{font-family:var(--f-body)}
+tbody tr:hover{background:var(--raise)}
+.d{color:var(--pgv);font-weight:500}
+.d.z{color:var(--ink3);font-weight:400}
+
+.notes{border-left:2px solid var(--mcp);padding:2px 0 2px 20px;display:flex;flex-direction:column;gap:15px}
+.notes p{margin:0;font-size:14px;color:var(--ink2);max-width:640px}
+.notes b{color:var(--ink);font-weight:600}
+footer{margin-top:64px;padding-top:18px;border-top:1px solid var(--rule);
+  font-family:var(--f-mono);font-size:11.5px;color:var(--ink3);display:flex;justify-content:space-between;
+  flex-wrap:wrap;gap:10px}
+
+.wrap{position:relative}
+#tip{position:absolute;pointer-events:none;opacity:0;transition:opacity .1s;background:var(--raise);
+  border:1px solid var(--rule);padding:9px 11px;font-family:var(--f-mono);font-size:11.5px;
+  box-shadow:0 4px 16px #0000001f;z-index:5;min-width:140px}
+#tip .tt{color:var(--ink3);margin-bottom:6px;letter-spacing:.05em;text-transform:uppercase;font-size:10px}
+#tip .tr{display:flex;justify-content:space-between;gap:16px;color:var(--ink)}
+#tip .tr i{width:8px;height:8px;border-radius:1px;display:inline-block;margin-right:6px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+:focus-visible{outline:2px solid var(--pgv);outline-offset:2px}
+</style>
+
+<div class="sheet">
+
+<header>
+  <div class="eyebrow">NORTH52 &middot; Workflow variant comparison</div>
+  <h1>Same graph,<br>61% less context.</h1>
+  <p class="dek">Two ways to tell a geospatial agent which OGC processes exist: ship all 26 definitions on every call, or retrieve the 5 that matter. Both built the identical 5-node workflow for M&uuml;nster.</p>
+  <div class="legend">
+    <div>Benchmark<b>CoolSpots prompt</b></div>
+    <div>Model<b>claude-haiku-4-5</b></div>
+    <div>Registry<b>25 processes &middot; 2 servers</b></div>
+    <div>Matched pair<b>13 LLM calls each</b></div>
+    <div>Source<b>metrics/runs.jsonl</b></div>
+  </div>
+</header>
+
+<section>
+  <h2>The verdict</h2>
+  <div class="verdict">
+    <div class="v"><div class="n">&minus;61%</div><div class="k">Input context</div><div class="s">154,665 &rarr; 59,556 tokens per turn</div></div>
+    <div class="v"><div class="n">&minus;81%</div><div class="k">Tool definitions</div><div class="s">119,420 &rarr; 23,255 tokens</div></div>
+    <div class="v"><div class="n">&minus;56%</div><div class="k">Cost per turn</div><div class="s">$0.1692 &rarr; $0.0736</div></div>
+    <div class="v"><div class="n flat">0 / 0</div><div class="k">Unmet capabilities</div><div class="s">Both variants: 5 nodes, no gaps</div></div>
+  </div>
+</section>
+
+<section>
+  <div class="col">
+    <h3>The reasoning context never changed. Only the catalogue did.</h3>
+    <p>Subtract the tool definitions from both runs and what is left &mdash; system prompt, conversation, graph state, model reasoning &mdash; is <b>35,245 tokens under MCP and 36,301 under pgvector</b>. A 3% difference. All 95,109 tokens saved came from not shipping 21 process definitions the model was never going to use.</p>
+  </div>
+  <figure style="margin-top:26px">
+    <div class="key">
+      <span><i class="sw" style="background:var(--neutral-bar)"></i>Reasoning context</span>
+      <span><i class="sw" style="background:var(--mcp)"></i>Tool definitions &middot; MCP listing</span>
+      <span><i class="sw" style="background:var(--pgv)"></i>Tool definitions &middot; pgvector</span>
+    </div>
+    <div class="comp">
+      <div class="crow">
+        <div class="chead"><b>MCP &mdash; all 26 tools, every call</b><span class="tot">154,665 tok</span></div>
+        <div class="cbar">
+          <div class="cseg rest" style="width:22.79%">35,245</div>
+          <div class="cseg" style="width:77.21%;background:var(--mcp)">119,420 &nbsp;&middot;&nbsp; 77% of input</div>
+        </div>
+      </div>
+      <div class="crow">
+        <div class="chead"><b>pgvector &mdash; 5 retrieved tools</b><span class="tot">59,556 tok</span></div>
+        <div class="cbar">
+          <div class="cseg rest" style="width:23.47%">36,301</div>
+          <div class="cseg" style="width:15.04%;background:var(--pgv)">23,255</div>
+        </div>
+      </div>
+    </div>
+    <figcaption>Both bars on one scale. The grey blocks start at the same edge and end within 3% of each other &mdash; that is the work the model actually did. Everything to the right of them is catalogue.</figcaption>
+  </figure>
+</section>
+
+<section>
+  <h2>Context per call</h2>
+  <div class="col"><p>Both runs made 13 calls through the same node sequence. They are indistinguishable until call 2 &mdash; the first moment tool definitions enter the prompt.</p></div>
+  <figure class="wrap scroll" style="margin-top:22px">
+    <div id="tip"><div class="tt"></div><div class="tr" id="t1"></div><div class="tr" id="t2"></div></div>
+    <svg viewBox="0 0 880 380" id="chart" role="img" aria-label="Input tokens per LLM call. MCP stays between 10,889 and 14,323 tokens from call 2 onward; pgvector stays between 3,772 and 5,874.">
+      <line class="gl" x1="66" y1="42" x2="748" y2="42"></line>
+      <line class="gl" x1="66" y1="137.33" x2="748" y2="137.33"></line>
+      <line class="gl" x1="66" y1="232.67" x2="748" y2="232.67"></line>
+      <text class="tick" x="58" y="46" text-anchor="end">15k</text>
+      <text class="tick" x="58" y="141" text-anchor="end">10k</text>
+      <text class="tick" x="58" y="236" text-anchor="end">5k</text>
+      <text class="tick" x="58" y="332" text-anchor="end">0</text>
+      <line class="axis" x1="66" y1="328" x2="748" y2="328"></line>
+      <line x1="122.83" y1="42" x2="122.83" y2="328" stroke="#77858D" stroke-width="1" stroke-dasharray="3 3"></line>
+      <text class="note" x="129" y="33">tool definitions enter the prompt</text>
+      <polyline fill="none" stroke="var(--mcp)" stroke-width="2" stroke-linejoin="round" points="66,287.2 122.83,120.38 179.67,74.89 236.5,117.71 293.33,70.22 350.17,115.06 407,66.4 463.83,111.36 520.67,59.6 577.5,108.22 634.33,56.89 691.17,54.9 748,72.19"></polyline>
+      <polyline fill="none" stroke="var(--pgv)" stroke-width="2" stroke-linejoin="round" points="66,285.92 122.83,256.09 179.67,231.86 236.5,254.29 293.33,228.19 350.17,251.81 407,224.14 463.83,253.01 520.67,224.12 577.5,248.41 634.33,218.87 691.17,216.01 748,235.75"></polyline>
+      <g id="dots"></g>
+      <text class="dlab" x="758" y="60" fill="var(--mcp)">MCP</text>
+      <text class="dsub" x="758" y="74">154,665 total</text>
+      <text class="dlab" x="758" y="232" fill="var(--pgv)">pgvector</text>
+      <text class="dsub" x="758" y="246">59,556 total</text>
+      <text class="tick" x="66" y="348" text-anchor="middle">1</text>
+      <text class="tick" x="293.33" y="348" text-anchor="middle">5</text>
+      <text class="tick" x="520.67" y="348" text-anchor="middle">9</text>
+      <text class="tick" x="748" y="348" text-anchor="middle">13</text>
+      <text class="note" x="407" y="371" text-anchor="middle">LLM call within one turn</text>
+      <rect id="hit" x="66" y="42" width="682" height="286" fill="transparent" style="cursor:crosshair"></rect>
+    </svg>
+    <figcaption>Call 1 is the manager planning with no candidates yet: 2,140 vs 2,207 tokens. From call 2 the MCP run carries the full catalogue in every prompt and never drops below 10,889 tokens; the retrieval run peaks at 5,874.</figcaption>
+  </figure>
+</section>
+
+<section>
+  <h2>What the model had to read</h2>
+  <div class="units">
+    <div class="ublock">
+      <div class="ugrid" id="u-mcp"></div>
+      <div class="ulab"><b>26 definitions</b> in every prompt<br>&asymp; 9,200 tokens per call</div>
+    </div>
+    <div class="ublock">
+      <div class="ugrid" id="u-pgv"></div>
+      <div class="ulab"><b>5 definitions</b> in every prompt<br>&asymp; 1,800 tokens per call</div>
+    </div>
+  </div>
+  <div class="col" style="margin-top:28px">
+    <p>Retrieval also sharpened what was on offer. The closest-matching pair in the MCP listing scored <b class="mono">0.889</b> name similarity &mdash; <span class="mono">pygeometa-metadata-validate</span> against <span class="mono">pygeometa-metadata-generate</span>, near-duplicates the model had to disambiguate on every call. In the retrieved set the closest pair scored <b class="mono">0.452</b>: <span class="mono">osm-green-areas</span> against <span class="mono">osm-water-bodies</span>. Genuinely different tools.</p>
+  </div>
+</section>
+
+<section>
+  <h2>Both variants built this</h2>
+  <div class="pipe">
+    <div class="step"><div class="i">01</div><div class="pn">city-boundary</div><div class="o">M&uuml;nster, 303.1 km&sup2;, EPSG:32632</div></div>
+    <div class="step"><div class="i">02</div><div class="pn">osm-green-areas</div><div class="o">2,049 parks, woods, forests</div></div>
+    <div class="step"><div class="i">03</div><div class="pn">min-area-filter</div><div class="o">&ge; 5,000 m&sup2; &mdash; 939 kept</div></div>
+    <div class="step"><div class="i">04</div><div class="pn">multi-ring-buffer</div><div class="o">75 / 150 / 225 / 300 m</div></div>
+    <div class="step"><div class="i">05</div><div class="pn">geometry-difference</div><div class="o">City minus covered area</div></div>
+  </div>
+  <figcaption>No <span class="mono">cool_spots</span> process exists in the registry. Both agents composed this from primitives; neither had a shortcut available.</figcaption>
+</section>
+
+<section>
+  <h2>And it runs</h2>
+  <div class="mun">
+    <figure>
+      <svg viewBox="0 0 300 300" role="img" aria-label="Concentric buffer rings at 75, 150, 225 and 300 metres around a green patch; everything beyond 300 metres counts as too far.">
+        <rect x="0" y="0" width="300" height="300" fill="var(--sunk)"></rect>
+        <circle cx="150" cy="150" r="112" fill="var(--pgv)" opacity=".16"></circle>
+        <circle cx="150" cy="150" r="84" fill="var(--pgv)" opacity=".24"></circle>
+        <circle cx="150" cy="150" r="56" fill="var(--pgv)" opacity=".32"></circle>
+        <circle cx="150" cy="150" r="28" fill="var(--pgv)" opacity=".42"></circle>
+        <circle cx="150" cy="150" r="112" fill="none" stroke="var(--pgv)" stroke-width="1.5"></circle>
+        <circle cx="150" cy="150" r="13" fill="var(--veg)"></circle>
+        <g font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--ink2)" text-anchor="middle"
+           paint-order="stroke" stroke="var(--sunk)" stroke-width="3.5" stroke-linejoin="round">
+          <text x="131" y="132">75</text>
+          <text x="111" y="112">150</text>
+          <text x="92" y="92">225</text>
+          <text x="73" y="72">300 m</text>
+        </g>
+        <text x="150" y="286" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10"
+              fill="var(--ink3)" letter-spacing="1">BEYOND 300 M &mdash; TOO FAR</text>
+      </svg>
+      <figcaption>The prompt asked for &ldquo;how the distance builds up in steps&rdquo;. The agent chose four rings; nobody specified the interval.</figcaption>
+    </figure>
+    <div>
+      <div class="funnel">
+        <div class="fr"><span class="fl">M&uuml;nster, total area</span><span class="fv">303.1 km&sup2;</span></div>
+        <div class="fr"><span class="fl">Green areas found in OSM</span><span class="fv">2,049</span></div>
+        <div class="fr"><span class="fl">Big enough to sit in (&ge; 5,000 m&sup2;)</span><span class="fv">939</span></div>
+        <div class="fr"><span class="fl">Discarded as too small</span><span class="fv">1,110</span></div>
+        <div class="fr"><span class="fl">Within a 300 m walk</span><span class="fv">87.3 %</span></div>
+        <div class="fr hero"><span class="fl">Left over &mdash; no cool spot in reach</span><span class="fv">38.5 km&sup2;</span></div>
+      </div>
+      <p style="font-size:13.5px;color:var(--ink2);margin-top:16px">All five nodes executed against live OSM and pygeoapi in 181 seconds. <b>12.7% of M&uuml;nster</b> lies further than a 300-metre walk from a green area big enough to escape the heat in.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Full comparison</h2>
+  <div class="scroll">
+  <table>
+    <thead><tr><th>Metric</th><th>MCP listing</th><th>pgvector</th><th>&Delta;</th></tr></thead>
+    <tbody>
+      <tr><td>Input tokens</td><td>154,665</td><td>59,556</td><td class="d">&minus;61.5%</td></tr>
+      <tr><td>Peak input, one call</td><td>14,323</td><td>5,874</td><td class="d">&minus;59.0%</td></tr>
+      <tr><td>Tool definition tokens</td><td>119,420</td><td>23,255</td><td class="d">&minus;80.5%</td></tr>
+      <tr><td>Tool definition share of input</td><td>77%</td><td>39%</td><td class="d">&minus;38 pp</td></tr>
+      <tr><td>Reasoning context (input &minus; defs)</td><td>35,245</td><td>36,301</td><td class="d z">+3.0%</td></tr>
+      <tr><td>Tool name tokens (defer loading)</td><td>4,116</td><td>468</td><td class="d">&minus;88.6%</td></tr>
+      <tr><td>Output tokens</td><td>2,907</td><td>2,813</td><td class="d z">&minus;3.2%</td></tr>
+      <tr><td>Cost USD</td><td>0.1692</td><td>0.0736</td><td class="d">&minus;56.5%</td></tr>
+      <tr><td>Wall time s</td><td>41.6</td><td>35.2</td><td class="d">&minus;15.4%</td></tr>
+      <tr><td>Max visible tools, one call</td><td>26</td><td>5</td><td class="d">&minus;81%</td></tr>
+      <tr><td>LLM calls</td><td>13</td><td>13</td><td class="d z">same</td></tr>
+      <tr><td>Graph nodes built</td><td>5</td><td>5</td><td class="d z">same</td></tr>
+      <tr><td>Unmet capabilities</td><td>0</td><td>0</td><td class="d z">same</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section>
+  <h2>Read this with three caveats</h2>
+  <div class="notes">
+    <p><b>One run per variant.</b> The headline pair is a single 13-call pgvector turn against a single 13-call MCP turn. No variance, no error bars. The 61% context gap is far larger than plausible run-to-run noise; the 15% wall-time gap is not.</p>
+    <p><b>The MCP baseline is older.</b> Those runs saw 26 tools where the registry now holds 25 &mdash; consistent with <span class="mono">cool_spots</span> still being indexed at the time. It appears in neither MCP graph, and both variants built the same 5 nodes, so the comparison holds. But roughly one process worth of definition tokens is counted against MCP that pgvector never had to carry.</p>
+    <p><b><span class="mono">runs.jsonl</span> was trimmed mid-session.</b> It held four records at the start of this session and three at the end; two earlier pgvector runs are gone. Re-running MCP against the current 25-process registry would close the first two gaps at once.</p>
+  </div>
+</section>
+
+<footer>
+  <span>metrics/report.html &middot; generated from runs.jsonl</span>
+  <span>WORKFLOW_VARIANT = mcp | pgvector</span>
+</footer>
+</div>
+
+<script>
+var CALLS=[["manager",2140,2207],["auto_build",10889,3772],["manager",13275,5042],["auto_build",11029,3866],
+["manager",13520,5235],["auto_build",11168,3996],["manager",13720,5447],["auto_build",11362,3933],
+["manager",14077,5448],["auto_build",11527,4174],["manager",14219,5724],["manager",14323,5874],["responder",13416,4838]];
+var NS="http://www.w3.org/2000/svg";
+function X(i){return 66+i*(682/12)}
+function Y(v){return 328-v*(286/15000)}
+
+var dots=document.getElementById("dots");
+CALLS.forEach(function(c,i){
+  [[1,"var(--mcp)"],[2,"var(--pgv)"]].forEach(function(p){
+    var e=document.createElementNS(NS,"circle");
+    e.setAttribute("cx",X(i).toFixed(2)); e.setAttribute("cy",Y(c[p[0]]).toFixed(2));
+    e.setAttribute("r","3"); e.setAttribute("fill",p[1]);
+    e.setAttribute("stroke","var(--paper)"); e.setAttribute("stroke-width","2");
+    dots.appendChild(e);
+  });
+});
+
+function units(el,n,col){for(var i=0;i<n;i++){var d=document.createElement("div");d.className="u";
+  d.style.background=col;el.appendChild(d);}}
+units(document.getElementById("u-mcp"),26,"var(--mcp)");
+units(document.getElementById("u-pgv"),5,"var(--pgv)");
+
+var svg=document.getElementById("chart"),hit=document.getElementById("hit"),tip=document.getElementById("tip"),cursor=null;
+function show(ev){
+  var pt=svg.createSVGPoint(); pt.x=ev.clientX; pt.y=ev.clientY;
+  var loc=pt.matrixTransform(svg.getScreenCTM().inverse());
+  var i=Math.round((loc.x-66)/(682/12)); i=Math.max(0,Math.min(12,i));
+  var c=CALLS[i];
+  if(!cursor){cursor=document.createElementNS(NS,"line");
+    cursor.setAttribute("stroke","#77858D");cursor.setAttribute("stroke-width","1");
+    svg.insertBefore(cursor,hit);}
+  cursor.setAttribute("x1",X(i));cursor.setAttribute("x2",X(i));
+  cursor.setAttribute("y1",42);cursor.setAttribute("y2",328);
+  tip.querySelector(".tt").textContent="Call "+(i+1)+" · "+c[0];
+  document.getElementById("t1").innerHTML='<span><i style="background:var(--mcp)"></i>MCP</span><span>'+c[1].toLocaleString()+'</span>';
+  document.getElementById("t2").innerHTML='<span><i style="background:var(--pgv)"></i>pgvector</span><span>'+c[2].toLocaleString()+'</span>';
+  var r=svg.getBoundingClientRect(), px=r.width*(X(i)/880);
+  tip.style.left=Math.min(Math.max(px-70,0),Math.max(r.width-150,0))+"px";
+  tip.style.top=Math.max(r.height*(Y(c[1])/380)-88,0)+"px";
+  tip.style.opacity=1;
+}
+hit.addEventListener("mousemove",show);
+hit.addEventListener("mouseleave",function(){tip.style.opacity=0;if(cursor){cursor.remove();cursor=null;}});
+</script>

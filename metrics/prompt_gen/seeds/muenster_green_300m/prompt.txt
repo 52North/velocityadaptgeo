@@ -1,0 +1,1 @@
+Identify all areas in Münster that are within a 300-meter walking distance of a public park or forest large enough for recreation. Output a visualization that highlights these well-served areas and displays the walking distances from the green spaces in incremental intervals up to the 300-meter limit.

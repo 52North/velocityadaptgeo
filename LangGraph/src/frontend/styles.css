@@ -18,6 +18,40 @@ body {
     color: #e5e7eb;
 }
 
+/* ------------------ SCROLLBARS ------------------ */
+
+/*
+ * shadcn/ui-style scrollbars: no track, no arrows, just a rounded thumb that sits in a
+ * wider transparent gutter. The transparent border plus `background-clip: content-box`
+ * is what insets the pill, so the thumb reads as ~4px while keeping a 10px grab target.
+ * Applied to every element, so any scroll area added later inherits it.
+ */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: #334155 transparent;
+}
+
+*::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+*::-webkit-scrollbar-track,
+*::-webkit-scrollbar-corner {
+    background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+    background-color: #334155;
+    border-radius: 999px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+    background-color: #475569;
+}
+
 /* ------------------ LAYOUT ------------------ */
 
 .app {
@@ -64,8 +98,96 @@ body {
     white-space: pre-wrap;
 }
 
+/* Assistant prose rendered from markdown. `pre-wrap` has to go: the generated block
+   elements carry their own spacing, and the source newlines would double it. */
+.message.markdown {
+    white-space: normal;
+}
+
+.markdown> :first-child {
+    margin-top: 0;
+}
+
+.markdown> :last-child {
+    margin-bottom: 0;
+}
+
+.markdown p,
+.markdown ul,
+.markdown ol,
+.markdown pre,
+.markdown blockquote {
+    margin: 0.6em 0;
+}
+
+.markdown ul,
+.markdown ol {
+    padding-left: 1.25em;
+}
+
+.markdown li {
+    margin: 0.15em 0;
+}
+
+.markdown h1,
+.markdown h2,
+.markdown h3,
+.markdown h4 {
+    margin: 0.8em 0 0.35em;
+    font-size: 1em;
+    font-weight: 600;
+}
+
+.markdown code {
+    padding: 1px 5px;
+    border-radius: 4px;
+    background: #0f172a;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.9em;
+}
+
+.markdown pre {
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: #0f172a;
+    overflow-x: auto;
+}
+
+.markdown pre code {
+    padding: 0;
+    background: none;
+}
+
+.markdown a {
+    color: #93c5fd;
+}
+
+.markdown blockquote {
+    padding-left: 0.8em;
+    border-left: 2px solid #334155;
+    color: #cbd5e1;
+}
+
+.markdown table {
+    border-collapse: collapse;
+    font-size: 0.95em;
+}
+
+.markdown th,
+.markdown td {
+    padding: 4px 8px;
+    border: 1px solid #334155;
+    text-align: left;
+}
+
+.markdown hr {
+    border: none;
+    border-top: 1px solid #334155;
+}
+
 .user {
-    background: #2563eb;
+    background: #1e3a8a;
+    color: #dbeafe;
     align-self: flex-end;
 }
 
@@ -82,6 +204,29 @@ body {
 }
 
 /* INPUT AREA */
+
+.test-prompts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 8px 12px 0;
+    background: #020617;
+}
+
+.test-prompt {
+    padding: 4px 10px;
+    border-radius: 999px;
+    border: 1px solid #1e293b;
+    background: #0f172a;
+    color: #94a3b8;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.test-prompt:hover {
+    border-color: #334155;
+    color: #e5e7eb;
+}
 
 .input-area {
     display: flex;
@@ -117,15 +262,458 @@ button:hover {
     background: #16a34a;
 }
 
-/* RIGHT SIDE (MAP) */
+/* RIGHT SIDE (EXECUTION GRAPH) */
 
 .right-panel {
     width: 50%;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
 }
 
-#map {
-    height: 100%;
-    width: 100%;
+.graph-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.graph-status {
+    font-size: 12px;
+    font-weight: 500;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: #1e293b;
+    color: #94a3b8;
+}
+
+.graph-status.ok {
+    background: rgba(34, 197, 94, 0.15);
+    color: #4ade80;
+}
+
+.graph-status.bad {
+    background: rgba(248, 113, 113, 0.15);
+    color: #f87171;
+}
+
+.graph-header-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.run-button {
+    margin-left: 0;
+    padding: 6px 14px;
+    font-size: 13px;
+}
+
+.run-button:disabled {
+    background: #1e293b;
+    color: #64748b;
+    cursor: not-allowed;
+}
+
+.graph-canvas {
+    flex: 1;
+    overflow-x: hidden;
+    overflow-y: auto;
+    padding: 8px 4px;
+    min-height: 0;
+}
+
+.graph-legend {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 14px;
+    padding: 8px 16px;
+    border-top: 1px solid #1f2937;
+    font-size: 11px;
+    color: #94a3b8;
+}
+
+.legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.legend-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 2px;
+}
+
+.legend-port {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #64748b;
+    box-shadow: 0 0 0 1.5px #94a3b8;
+}
+
+.legend-port-open {
+    background: #0f172a;
+    box-shadow: 0 0 0 1.5px #475569;
+}
+
+.dot-running { background: #38bdf8; }
+.dot-done { background: #4ade80; }
+.dot-failed { background: #f87171; }
+.dot-skipped { background: #fbbf24; }
+
+.legend-sep {
+    width: 1px;
+    height: 12px;
+    background: #1f2937;
+}
+
+.run-log {
+    flex: 0 0 auto;
+    max-height: 38%;
+    overflow-y: auto;
+    border-top: 1px solid #1e293b;
+    background: #020617;
+    padding: 10px 14px;
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.run-row {
+    padding: 3px 0;
+    color: #94a3b8;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.run-row pre {
+    margin: 2px 0 6px 14px;
+    color: #64748b;
+    white-space: pre-wrap;
+    font-size: 11px;
+}
+
+.run-done { color: #4ade80; }
+.run-error { color: #f87171; }
+.run-skip { color: #fbbf24; }
+.run-start { color: #e5e7eb; }
+
+.gnode-running .gnode-box { stroke: #38bdf8; }
+.gnode-running .gnode-accent { fill: #38bdf8; }
+.gnode-done .gnode-accent { fill: #4ade80; }
+.gnode-failed .gnode-box { stroke: #f87171; }
+.gnode-failed .gnode-accent { fill: #f87171; }
+.gnode-skipped .gnode-accent { fill: #fbbf24; }
+
+.gnode-run {
+    fill: #94a3b8;
+    font-size: 10px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+/* ------------------ RESULTS WINDOW ------------------ */
+
+.run-button.ghost {
+    background: #1e293b;
+    color: #e5e7eb;
+}
+
+.run-button.ghost:hover:enabled {
+    background: #334155;
+}
+
+.results-window {
+    position: fixed;
+    inset: 0;
+    background: rgba(2, 6, 23, 0.75);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.results-window[hidden] {
+    display: none;
+}
+
+.results-dialog {
+    width: min(1180px, 94vw);
+    height: min(780px, 90vh);
+    display: flex;
+    flex-direction: column;
+    background: #0f172a;
+    border: 1px solid #1e293b;
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.results-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.results-body {
+    flex: 1;
+    display: flex;
+    min-height: 0;
+}
+
+.results-layers {
+    width: 290px;
+    flex: 0 0 auto;
+    overflow-y: auto;
+    padding: 12px;
+    border-right: 1px solid #1e293b;
+    background: #020617;
+}
+
+.results-empty {
+    color: #64748b;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.layer-row {
+    display: grid;
+    grid-template-columns: auto auto 1fr;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 4px;
+    font-size: 12px;
+    cursor: pointer;
+    border-bottom: 1px solid #0f172a;
+}
+
+.layer-row:hover {
+    background: #0f172a;
+}
+
+.layer-swatch {
+    width: 11px;
+    height: 11px;
+    border-radius: 3px;
+}
+
+.layer-title {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: #e5e7eb;
+    overflow-wrap: anywhere;
+}
+
+.layer-note {
+    grid-column: 3;
+    color: #64748b;
+    font-size: 11px;
+}
+
+.results-map {
+    flex: 1;
+    min-width: 0;
+    background: #0b1220;
+}
+
+.leaflet-popup-content {
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.graph-empty {
+    max-width: 320px;
+    margin: 64px auto 0;
+    text-align: center;
+    font-size: 14px;
+    line-height: 1.5;
+    color: #64748b;
+}
+
+.graph-svg {
+    display: block;
+}
+
+.gnode-box {
+    fill: #1e293b;
+    stroke: #334155;
+    stroke-width: 1;
+}
+
+.gnode:hover .gnode-box {
+    stroke: #22c55e;
+}
+
+.gnode-accent {
+    fill: #22c55e;
+}
+
+.gnode-title {
+    fill: #e5e7eb;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.gnode-id {
+    fill: #94a3b8;
+    font-size: 11px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.gedge {
+    fill: none;
+    stroke: #475569;
+    stroke-width: 1.5;
+}
+
+/* The bump bridging a crossing: dashed so it reads as a jump over the other line
+   rather than as a corner of this one. */
+.gedge-hop {
+    stroke-dasharray: 2 2;
+    stroke: #64748b;
+}
+
+.garrow {
+    fill: #475569;
+}
+
+.gport {
+    stroke-width: 1.5;
+}
+
+/* A port carrying an edge is filled; one still free is hollow and dimmed, so a node
+   advertises its unused parameters without them competing with the actual pipeline. */
+.gport-wired {
+    fill: #64748b;
+    stroke: #94a3b8;
+}
+
+.gport-open {
+    fill: #0f172a;
+    stroke: #475569;
+}
+
+.gport-label {
+    fill: #94a3b8;
+    font-size: 10px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    /* Halo in the canvas colour so a wrap-edge lane passing behind a gutter
+       label does not cut through the text. */
+    paint-order: stroke;
+    stroke: #0f172a;
+    stroke-width: 3px;
+    stroke-linejoin: round;
+}
+
+.gport-label-open { fill: #64748b; }
+
+/* Invisible but generous: a 3.5px dot is not a target anyone should have to hit, and
+   `transparent` still receives the pointer where `none` would let it pass through. */
+.gport-hit {
+    fill: transparent;
+}
+
+.gport-group {
+    cursor: crosshair;
+}
+
+/* Mid-drag every free socket lights up, so the places a wire can actually land are
+   visible while the wire is being dragged rather than only after it is dropped. */
+.wiring .gport-open {
+    fill: #38bdf8;
+    stroke: #38bdf8;
+}
+
+.gedge-draft {
+    fill: none;
+    stroke: #38bdf8;
+    stroke-width: 1.5;
+    stroke-dasharray: 4 3;
+}
+
+/* A fat transparent overlay on each edge, so right-clicking a connection does not
+   require hitting a hairline. */
+.gedge-hit {
+    fill: none;
+    stroke: transparent;
+    stroke-width: 12;
+    cursor: pointer;
+}
+
+.gnode {
+    cursor: pointer;
+}
+
+/* Something is held between two clicks: the node or connection that moves is outlined,
+   and the cursor says the next click places it. */
+.picking {
+    cursor: crosshair;
+}
+
+.gnode.picked .gnode-box {
+    stroke: #38bdf8;
+    stroke-width: 2;
+}
+
+/* Armed for removal: the canvas says so, and whatever the cursor is over turns red
+   before it is clicked, so what a click would cost is visible first. */
+.deleting {
+    cursor: crosshair;
+}
+
+.deleting .gport-group {
+    cursor: crosshair;
+}
+
+.deleting .gnode:hover .gnode-box {
+    stroke: #f87171;
+    stroke-width: 2;
+}
+
+.deleting .gedge-hit:hover {
+    stroke: rgba(248, 113, 113, 0.35);
+}
+
+.run-button.armed {
+    background: #7f1d1d;
+    color: #fee2e2;
+}
+
+.run-button.armed:hover:enabled {
+    background: #991b1b;
+}
+
+.graph-errors {
+    margin: 12px 16px;
+    padding-left: 20px;
+    color: #f87171;
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.graph-notes {
+    flex: 0 0 auto;
+    max-height: 30%;
+    overflow-y: auto;
+    border-top: 1px solid #1e293b;
+    background: #020617;
+    padding: 10px 14px;
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.graph-notes-title {
+    color: #fbbf24;
+    font-weight: 600;
+    padding-bottom: 4px;
+}
+
+.graph-note {
+    padding: 3px 0;
+    color: #94a3b8;
+}
+
+.graph-note b {
+    color: #e2e8f0;
+    font-weight: 600;
 }
 
 .plan-visualization {
@@ -212,23 +800,203 @@ button:hover {
     font-weight: bold;
 }
 
-.manager-details summary {
-    cursor: pointer;
-    font-weight: 600;
-    color: #666;
-    font-size: 0.85em;
-    user-select: none;
+/* MANAGER PLAN CARD
+   The manager streams a JSON decision; `renderManagerPlan` turns it into these rows. */
+
+.message.manager-plan,
+.message.candidate-list {
+    white-space: normal;
+    max-width: 85%;
+    padding: 10px 12px;
+    background: #0f172a;
+    border: 1px solid #1e293b;
+    border-left: 3px solid #334155;
+    font-size: 13px;
 }
 
-.manager-details .content {
+.plan-head {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.plan-action {
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: #94a3b8;
+    color: #0f172a;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.action-search { background: #38bdf8; }
+.action-build { background: #a78bfa; }
+.action-validate { background: #fbbf24; }
+.action-done { background: #4ade80; }
+
+.plan-name {
+    color: #e2e8f0;
+    font-weight: 600;
+}
+
+.plan-instruction {
+    margin-top: 8px;
     white-space: pre-wrap;
-    font-family: monospace;
-    background-color: #2b2b2b; 
-    color: #e4e4e4;            
-    padding: 12px;
+    color: #cbd5e1;
+    line-height: 1.45;
+}
+
+.plan-op {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    margin-top: 8px;
+}
+
+.plan-op-name {
+    color: #a78bfa;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12px;
+}
+
+.plan-arg {
+    display: flex;
+    gap: 8px;
+    font-size: 12px;
+}
+
+.plan-arg-key {
+    min-width: 96px;
+    color: #64748b;
+}
+
+.plan-arg-val {
+    color: #cbd5e1;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    word-break: break-all;
+}
+
+.plan-reason {
+    margin-top: 8px;
+    padding-top: 6px;
+    white-space: pre-wrap;
+    border-top: 1px solid #1e293b;
+    color: #94a3b8;
+    font-size: 12px;
+    line-height: 1.45;
+}
+
+.plan-wait {
+    color: #64748b;
+    font-size: 12px;
+}
+
+/* RETRIEVER CANDIDATES
+   Same card shell as the manager plan; one row per catalog hit with its score. */
+
+.candidate {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 0;
+    border-top: 1px solid #1e293b;
+}
+
+.candidate:first-of-type {
+    margin-top: 6px;
+}
+
+.candidate-rank {
+    width: 16px;
+    flex: 0 0 auto;
+    color: #475569;
+    font-size: 11px;
+    text-align: right;
+}
+
+.candidate-body {
+    flex: 1;
+    min-width: 0;
+}
+
+.candidate-id {
+    color: #e2e8f0;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12px;
+    overflow-wrap: anywhere;
+}
+
+.candidate-title {
+    color: #94a3b8;
+    font-size: 12px;
+    line-height: 1.35;
+}
+
+.candidate-score {
+    flex: 0 0 auto;
+    width: 58px;
+    color: #94a3b8;
+}
+
+.candidate-score-value {
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+}
+
+.candidate-bar {
+    height: 3px;
+    margin-top: 3px;
+    border-radius: 999px;
+    background: #1e293b;
+}
+
+.candidate-bar-fill {
+    height: 100%;
+    border-radius: 999px;
+    background: currentColor;
+}
+
+.score-strong { color: #4ade80; }
+.score-weak { color: #fbbf24; }
+
+/* Editing one port's value: a field pinned under the socket it belongs to, rather than a
+   browser dialog that blocks the page and looks nothing like the rest of it. */
+.port-editor {
+    position: fixed;
+    z-index: 40;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 8px;
+    border: 1px solid #334155;
+    border-radius: 8px;
+    background: #0f172a;
+    box-shadow: 0 8px 20px rgba(2, 6, 23, 0.6);
+}
+
+.port-editor label {
+    color: #94a3b8;
+    font-size: 10px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.port-editor input {
+    width: 180px;
+    padding: 6px 8px;
     border-radius: 6px;
-    font-size: 0.8em;
-    margin: 8px 0 0 0;
-    line-height: 1.4;
-    overflow-x: auto;         
+    font-size: 12px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.port-editor input:focus {
+    outline: 2px solid #38bdf8;
+}
+
+.port-editor span {
+    color: #64748b;
+    font-size: 10px;
 }
