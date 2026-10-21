@@ -35,9 +35,19 @@ cats = a.by_category(P)
 lexical = a.rate(cats["lexical"], a.is_lenient)
 lexical_p = a.Comparison(lexical, seed).p
 run_folder = a.code(f"metrics/prompt_gen/out/{a.RUN_DIR.name}")
+
+M = a.current("mcp")
+MS = a.seeds(M, "mcp")
+MP = a.paraphrases(M, "mcp")
+mseed = a.rate(MS, a.is_lenient)
+mseed_strict = a.rate(MS, a.is_strict)
+mpar = a.rate(MP, a.is_lenient)
+mpar_strict = a.rate(MP, a.is_strict)
+use = a.usage(S + P)
+muse = a.usage(MS + MP)
 ```
 
-Results of building a LangGraph workflow graph for the seed prompt and every paraphrase accepted in review, and why the `multimodal-isochrone` process is never used. Every number below is computed from the run folder when the report is rendered (`analysis.py`, reading through `src.batch.load_results` and the `src.batch_summary` statistics), so it always reflects the current review decisions.
+Results of building a LangGraph workflow graph for the seed prompt and every paraphrase accepted in review, why the `multimodal-isochrone` process is never used, and how the agent does when it sees every MCP tool instead of the top 5 of a catalog search. Sections @sec-seed to @sec-isochrone are the catalog-search (pgvector) variant; @sec-variants compares the two. Every number below is computed from the run folder when the report is rendered (`analysis.py`, reading through `src.batch.load_results` and the `src.batch_summary` statistics), so it always reflects the current review decisions.
 
 Run folder: `{python} run_folder`.
 
@@ -62,6 +72,7 @@ Intervals are 95% Wilson intervals for rates, and normal-approximation intervals
 - **Visualisation is always unmet.** No process in the catalog renders a map.
 - **Walking distance is never network-based.** No graph uses `multimodal-isochrone`; in the `{python} sum(1 for r in S if r.get("decision_history"))` seed runs with a recorded trace, the manager never searched for network distance (@sec-isochrone).
 - **Cheap:** $`{python} f"{a.cost(S) + a.cost(B):.2f}"` for all `{python} len(S) + len(B)` Haiku 5.5 results, ≈$`{python} f"{(a.cost(S) + a.cost(B)) / (len(S) + len(B)):.3f}"` per prompt.
+- **Showing every MCP tool instead of searching is more accurate and more consistent, at about `{python} f"{muse.cost / use.cost:.1f}"`× the cost.** Paraphrases `{python} str(mpar)` lenient (pgvector `{python} par.pct(1)`), strict `{python} mpar_strict.pct(1)` (pgvector `{python} par_strict.pct(1)`), both `{python} a.p_is(a.Comparison(mpar, par).p)`; the seed `{python} str(mseed)` lenient (pgvector `{python} seed.pct(1)`, `{python} a.p_is(a.Comparison(mseed, seed).p)`, not significant). Rewording no longer costs anything measurable, and the redundant `buffer` disappears. `{python} f"{muse.tool_def_share:.0%}"` of the input is tool definitions (@sec-variants).
 
 ```{python}
 def batch_row(name, results, model, runs_file="runs.jsonl"):
@@ -83,6 +94,8 @@ a.table(
         batch_row("Seed control 1–50", S[:50], "Haiku 5.5"),
         batch_row("Paraphrase batch", B, "Haiku 5.5"),
         batch_row("Seed control 51–200", S[50:], "Haiku 5.5"),
+        batch_row("MCP paraphrases", MP, "Haiku 5.5"),
+        batch_row("MCP seed control", MS, "Haiku 5.5"),
     ],
 )
 ```
@@ -358,6 +371,186 @@ It depends on what the isochrone is for in the test catalog:
 - **If it's meant to be a near miss** (it reads like one, next to "a buffer is not a travel-time isochrone"): the agent behaves correctly. Buffer graphs are the expected outcome, and the replies honestly say they're straight-line.
 - **If it's meant to be the right answer**, the process definition needs to fit the task: polygon or multi-feature origins, distance thresholds in metres (or a walking speed), and no required departure time or transit. Alternatively, add a separate walking service-area process. A rule in the manager prompt would also help: "a travel mode in the goal ('walking distance', 'by car') is a capability of its own; search for it, don't fold it into a buffer."
 
+# Catalog search vs. all MCP tools {#sec-variants}
+
+The same batch with `--variant mcp`: the retriever lists every process tool of the MCP server (`{python} f"{muse.tools:.0f}"`, unranked, with the input schema as MCP sends it) instead of the top 5 of the pgvector search. Manager, builder, validator, responder, model and execution are shared; the pick format is `process_id` + `server_url` in both (`workflow_batch_plan.md` §5). The MCP server crawls the same servers as the catalog, so both see the same `{python} f"{muse.tools:.0f}"` processes, `multimodal-isochrone` included.
+
+Runs: the `{python} len(MP)` paraphrases that keep the size requirement on `{python} a.day(MP)`, the seed `{python} len(MS)` times on `{python} a.day(MS)`, concurrency 3, no errors, all graphs valid. A first trial of 10 seed runs, with the manager and responder still showing only the first 5 candidates (for MCP: the first 5 tools in server order, none of them relevant), got 0/10 and is left out; the cap was removed for both variants, which leaves pgvector unchanged since its search returns 5.
+
+## Correctness
+
+```{python}
+a.table(
+    ["", "Lenient", "95% CI", "Strict", "95% CI"],
+    [
+        [f"pgvector seed ({seed.n})", f"**{seed.pct(1)}**", seed.range(), seed_strict.pct(1), seed_strict.range()],
+        [f"MCP seed ({mseed.n})", f"**{mseed.pct(1)}**", mseed.range(), mseed_strict.pct(1), mseed_strict.range()],
+        [f"pgvector paraphrases ({par.n})", f"**{par.pct(1)}**", par.range(), par_strict.pct(1), par_strict.range()],
+        [f"MCP paraphrases ({mpar.n})", f"**{mpar.pct(1)}**", mpar.range(), mpar_strict.pct(1), mpar_strict.range()],
+    ],
+    "lrlrl",
+)
+```
+
+```{python}
+def cmp_row(label, x, y):
+    c = a.Comparison(x, y)
+    return [label, str(x), str(y), f"{c.points()} [{c.ci_points()}]", a.fmt_p(c.p)]
+
+
+a.table(
+    ["Comparison", "", "Reference", "Difference [95% CI]", "p"],
+    [
+        cmp_row("Seed, lenient: MCP vs pgvector", mseed, seed),
+        cmp_row("Seed, strict: MCP vs pgvector", mseed_strict, seed_strict),
+        cmp_row("Paraphrases, lenient: MCP vs pgvector", mpar, par),
+        cmp_row("Paraphrases, strict: MCP vs pgvector", mpar_strict, par_strict),
+        cmp_row("MCP, lenient: paraphrases vs seed", mpar, mseed),
+        cmp_row("MCP, strict: paraphrases vs seed", mpar_strict, mseed_strict),
+    ],
+    "lllll",
+)
+```
+
+```{python}
+mhalves, mslope, mtrend_p = a.drift(MS, a.is_lenient)
+```
+
+- **Strict is where the variants differ most:** no MCP graph contains a `buffer` (pgvector: `{python} sum(a.has("buffer")(r) for r in S + P)` of `{python} len(S + P)`), which accounts for most of the strict gap. Seeing every tool, the manager has no reason to add a single 300 m buffer next to the rings.
+- **Lenient on paraphrases is clearly better** with MCP; on the seed it is small (`{python} a.Comparison(mseed, seed).points()` points, `{python} a.p_is(a.Comparison(mseed, seed).p)`) and not significant at `{python} mseed.n` runs each.
+- **Rewording costs nothing measurable with MCP:** paraphrases `{python} mpar.pct(1)` vs seed `{python} mseed.pct(1)` (`{python} a.p_is(a.Comparison(mpar, mseed).p)`), against `{python} cmp.points()` points with pgvector (@sec-uncertainty).
+- MCP seed stable: first half `{python} mhalves.b.pct()` vs second half `{python} mhalves.a.pct()` (`{python} a.p_is(mhalves.p)`), trend `{python} a.signed(100 * mslope)`% per 10 runs (`{python} a.p_is(mtrend_p)`).
+
+**Per category**, paraphrases (MCP vs pgvector, lenient; Bonferroni threshold p < `{python} f"{a.bonferroni():.4f}"`):
+
+```{python}
+mcats = a.by_category(MP)
+rows = []
+for c in a.CATEGORIES:
+    rm, rp = a.rate(mcats[c], a.is_lenient), a.rate(cats[c], a.is_lenient)
+    cc = a.Comparison(rm, rp)
+    rows.append([
+        a.CATEGORY_NAMES[c],
+        str(rm),
+        rm.range(),
+        a.rate(mcats[c], a.is_strict).pct(),
+        str(rp),
+        a.rate(cats[c], a.is_strict).pct(),
+        cc.points(),
+        a.fmt_p(cc.p),
+        a.yes(cc.p < a.bonferroni()),
+    ])
+a.table(
+    ["Category", "MCP lenient", "95% CI", "MCP strict", "pgvector lenient", "pgvector strict", "Difference", "p", "After correction"],
+    rows,
+    "llrrlrrrc",
+)
+```
+
+```{python}
+mlex = a.rate(mcats["lexical"], a.is_lenient)
+```
+
+The lexical drop is gone with MCP: `{python} mlex.pct()` against the MCP seed's `{python} mseed.pct()` (`{python} a.p_is(a.Comparison(mlex, mseed).p)`).
+
+## Structures and failures
+
+```{python}
+mstructs = collections.Counter(a.structure(r) for r in MS + MP)
+a.table(
+    ["", "Edges", "Seed", "Paraphrases", "Share"],
+    [
+        [
+            chr(ord("A") + i),
+            "<br>".join(e.replace("->", " → ") for e in s),
+            sum(a.structure(r) == s for r in MS),
+            sum(a.structure(r) == s for r in MP),
+            f"{n / len(MS + MP):.0%}",
+        ]
+        for i, (s, n) in enumerate(mstructs.most_common())
+    ],
+    "llrrr",
+)
+```
+
+`{python} len(mstructs)` structures over `{python} len(MS + MP)` MCP graphs, against `{python} len(collections.Counter(a.structure(r) for r in S + P))` over `{python} len(S + P)` pgvector ones.
+
+```{python}
+mfails = collections.Counter(a.failure(r) for r in MS + MP if a.failure(r))
+ms_missing = [r["key"] for r in MS if a.failure(r)]
+mgd = [r for r in MS + MP if "geometry-difference" in a.types(r)]
+```
+
+- **Every MCP failure is a missing size filter** (`{python} ", ".join(f"{f}: {n}" for f, n in mfails.most_common())`): the seed runs `{python} ", ".join(ms_missing)`, and `{python} sum(1 for r in MP if a.failure(r))` paraphrases. No wiring errors, against `{python} sum(1 for r in S + P if a.failure(r) not in (None, "no min-area-filter"))` pgvector graphs with the filter in the wrong place or rings/boundary missing.
+- `geometry-difference` (rings minus the city boundary) in `{python} len(mgd)` MCP graphs, all otherwise the exact chain, so lenient but not strict.
+
+**Parameters** vary as in pgvector:
+
+```{python}
+a.table(
+    ["Parameter", "MCP (runs)", "pgvector (runs)"],
+    [
+        ["`min-area-filter.minArea`", top(a.params(MS + MP, "min-area-filter", "minArea")), top(a.params(S + P, "min-area-filter", "minArea"))],
+        ["`multi-ring-buffer.distances`", top(a.params(MS + MP, "multi-ring-buffer", "distances"), 3), top(a.params(S + P, "multi-ring-buffer", "distances"), 3)],
+    ],
+)
+```
+
+## Unmet capabilities and the isochrone
+
+```{python}
+def unmet_mean(results):
+    return sum(len(r.get("unmet_capabilities") or []) for r in results) / len(results)
+
+
+def unmet_dist(results):
+    return ", ".join(f"{k} unmet: {n}" for k, n in sorted(a.unmet_counts(results).items()))
+
+
+mtraced = [r for r in MS + MP if r.get("decision_history")]
+mnetwork = [r for r in mtraced if a.searched_network(r)]
+```
+
+- **Unmet per graph:** MCP `{python} unmet_dist(MS + MP)` (mean `{python} f"{unmet_mean(MS + MP):.2f}"`); pgvector `{python} unmet_dist(S + P)` (mean `{python} f"{unmet_mean(S + P):.2f}"`). The map visualisation is among them in `{python} sum(a.unmet_matching(r, a.VISUALISATION) for r in MS + MP)` MCP graphs. More MCP graphs report nothing unmet, although no process renders a map in either variant.
+- **The isochrone stays unused:** `{python} sum("multimodal-isochrone" in a.types(r) for r in MS + MP)` MCP graphs. All `{python} len(mtraced)` MCP results have a `decision_history`; the manager searched for network or travel-time distance in `{python} len(mnetwork)` (`{python} ", ".join(r["key"] for r in mnetwork) or "none"`). Seeing the isochrone in every prompt doesn't change the outcome: the manager still folds "walking" into rings (@sec-isochrone).
+
+## Cost and context
+
+Means per prompt, seed and paraphrases together, from the `RunTracker` records:
+
+```{python}
+def usage_row(label, u):
+    return [
+        label,
+        f"${u.cost:.4f}",
+        f"{u.input_tokens / 1000:.0f}k",
+        f"{u.output_tokens / 1000:.1f}k",
+        f"{u.tool_def_share:.0%}",
+        f"{u.llm_calls:.1f}",
+        f"{u.seconds:.0f}",
+        f"{u.tools:.0f}",
+        f"${u.total:.2f}",
+    ]
+
+
+a.table(
+    ["Variant", "Cost", "Input tokens", "Output tokens", "Tool definitions", "LLM calls", "Seconds", "Tools visible", "Total"],
+    [usage_row(f"pgvector ({use.n})", use), usage_row(f"MCP ({muse.n})", muse)],
+    "lrrrrrrrr",
+)
+```
+
+- MCP costs **`{python} f"{muse.cost / use.cost:.1f}"`×** as much per prompt, all of it from input: `{python} f"{muse.input_tokens / use.input_tokens:.1f}"`× the input tokens, `{python} f"{muse.tool_def_share:.0%}"` of them tool definitions (pgvector `{python} f"{use.tool_def_share:.0%}"`).
+- It is still faster and needs fewer LLM calls.
+
+## Limitations
+
+- **No prompt caching** in either variant. MCP's tool list is the same in every call, so caching would cut most of its extra input cost; pgvector's 5 candidates change with each search. A cached MCP variant would be a third variant to compare.
+- **Cost grows with the catalog.** `{python} f"{muse.tools:.0f}"` processes fit in every prompt; MCP's input grows linearly with the number of tools, pgvector's stays at 5 candidates. Whether MCP keeps its accuracy with a few hundred tools is untested.
+- **One prompt, one catalog.** All runs are variations of one request; the accuracy gap may be specific to a chain whose steps (area filter, rings) are easy to spot in a full list.
+- **Different days.** The MCP runs ran up to 4 days after the pgvector ones, with the same code apart from the variant switch and the candidate cap. A shift in the model behind the alias can't be ruled out, as in @sec-uncertainty.
+- The paraphrases that drop the size requirement (@sec-size) ran with pgvector only.
+
 # Earlier runs (2026-10-14, Haiku 4.5) {#sec-earlier}
 
 **Trials** (`--limit 3 --seed-runs 0`, from the host with `uv run`): all three `morphological#1`–`#3` built the same 4-node chain with rings 75/150/225/300 m, except one with 100/200/300 m; 5–6 iterations, 10–12 LLM calls, $0.055–0.069 per prompt. They showed the run-to-run variation in parameters (hence the seed control), identical graphs from different paraphrases (hence deduplication before execution), and the always-unmet visualisation. Two fixes came out of them: metrics go to the run folder's own `runs.jsonl` (the shared one was root-owned and lost the trial 1 metrics), and the batch logger is named explicitly.
@@ -385,4 +578,6 @@ a.table(
 - **Judge constraints:** add "adequate / suitable / sufficient for recreation" and "no size wording" to `constraints.yaml` under `size` as `reject` (@sec-size).
 - **Lexical wording:** paraphrases that change only one phrase ("Pinpoint", "0.3 km", "pedestrian") to test those effects in isolation.
 - **Strict precision:** about 300 seed runs for ±5 points.
+- **MCP with prompt caching** as a third variant, and a larger catalog for both variants (@sec-variants).
+- **MCP size-filter misses:** the `{python} sum(1 for r in MS + MP if a.failure(r))` MCP graphs without `min-area-filter` have a `decision_history`; check at which step the size requirement got lost.
 - **Execution:** deduplicate graphs by signature, then execute each distinct graph once (`workflow_batch_plan.md` §3).

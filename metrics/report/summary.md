@@ -1,7 +1,7 @@
 # Summary: How robust is the workflow agent to rewording?
 
 
-We tested whether an LLM agent that builds geospatial workflows from a catalog of OGC processes still builds the right workflow when the same request is worded differently. This summary covers the first test case, a single request about walking distance to green spaces in Münster.
+We tested whether an LLM agent that builds geospatial workflows from a catalog of OGC processes still builds the right workflow when the same request is worded differently. This summary covers the first test case, a single request about walking distance to green spaces in Münster. Most of it is about the agent as built, which searches the catalog and sees the five closest matches. The last part of the results compares it with a version that sees every process at once, the way an MCP server lists its tools.
 
 ## At a glance
 
@@ -10,6 +10,7 @@ We tested whether an LLM agent that builds geospatial workflows from a catalog o
 - **One kind of rewording breaks it outright.** Turning "large enough for recreation" into "suitable / adequate / sufficient for recreation" silently drops the size requirement, and the agent then never filters by size (**0 of 7** correct).
 - **The agent is not fully deterministic.** Identical requests give different workflows, more in the parameters (ring distances, minimum area) than in the structure.
 - **Two capabilities are consistently missing:** no process can draw a map, and no process can compute *walking* distance around many parks. The agent says so honestly in its replies.
+- **Showing the agent every process instead of searching makes it more robust.** It is right in **96%** of paraphrases (instead of 81%), rewording no longer costs anything measurable, and it stops adding the redundant extra step. It costs about 1.8 times as much, because the whole process list is sent with every request.
 - **It is cheap:** about **1 cent per request**.
 
 ## The test
@@ -114,6 +115,27 @@ This is the clearest case in the study of a paraphrase changing the workflow. St
 - With only the first 50 seed runs, the seed looked lower (84%) and the gap looked like noise. The 150 further runs settled the seed at about 90%, and the earlier "no detectable difference" no longer holds.
 - One caveat: most seed runs ran a day after the paraphrases. The setup was the same, but a small day-to-day shift can't be fully ruled out. Re-running the paraphrases would settle it.
 
+## Showing every process instead of searching
+
+The agent as tested finds processes by searching the catalog: each search returns the five closest matches, and the agent only sees those. The alternative is to show it every process the server offers, the way an MCP server lists its tools. Here that is 25 processes, sent with every request. Everything else stayed the same: the same agent, model, paraphrases and scoring. We ran the seed 200 times and all 162 paraphrases with this version.
+
+|  | Every process | Catalog search |
+|----|----|----|
+| Original request, lenient | **95%** \[91–97%\] | 90% \[84–93%\] |
+| Original request, strict | **94%** \[89–96%\] | 27% \[21–34%\] |
+| Paraphrases, lenient | **96%** \[91–98%\] | 81% \[75–87%\] |
+| Paraphrases, strict | **91%** \[85–94%\] | 27% \[21–34%\] |
+| Cost per request | 2.2 cent | 1.2 cent |
+| Share of the input that is process descriptions | 78% | 41% |
+
+- **Paraphrases are handled clearly better** (+14 points lenient, p \< 0.0001). On the original request the difference is small (+6 points, p = 0.060) and could still be chance.
+- **Rewording no longer costs anything measurable:** paraphrases 96% against 95% for the original request. The lexical paraphrases, the weak spot of the catalog search, reach 94%.
+- **The workflows are much more consistent.** The redundant 300 m buffer never appears, which is why the strict score jumps. The only real failure left is the missing size filter (17 of 362 workflows). The steps are never connected wrongly.
+- **Walking distance is still straight-line.** Even with the travel-time isochrone in view on every request, the agent never uses it.
+- **The price is context.** Each request sends about 2.2 times as much text to the model, mostly process descriptions. It is still a little faster, since the agent needs fewer rounds of searching.
+
+Two things limit this result. The catalog has only 25 processes. With hundreds, the list would grow with every addition, and whether the agent stays this accurate is untested. Neither version used prompt caching, which would make a fixed list of processes much cheaper.
+
 ## Gaps in the process catalog
 
 **Visualization.** No process in the catalog renders a map, so almost every workflow reports exactly this one missing capability. This is expected, and the agent handles it correctly.
@@ -134,4 +156,5 @@ Whether this is a problem depends on the catalog's intent. If the isochrone is m
 - **Find where the extra wiring errors come from.** The paraphrases keep the size filter as often as the seed but connect the steps wrongly more often. Re-running the paraphrases with the agent's reasoning recorded (about \$2) should show at which step this goes wrong.
 - **Stricter paraphrase checks** that reject wordings which drop the size requirement.
 - **Targeted rewording tests** that change one phrase at a time, e.g. "Pinpoint" as the opening verb, "0.3 km" instead of "300 m", or "pedestrian". These showed weak signals that the current data can't confirm.
+- **Showing every process at a larger scale:** a bigger catalog, and the same version with prompt caching, to see whether the accuracy holds and what it costs then.
 - **Run the workflows.** Remove duplicate workflows and execute each distinct one, so results can also be scored on their actual output, not only on their structure.
