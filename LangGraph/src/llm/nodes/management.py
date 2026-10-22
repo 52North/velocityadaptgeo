@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import os
@@ -6,7 +7,10 @@ import re
 from dotenv import load_dotenv
 from langchain_core.messages import HumanMessage, SystemMessage
 
+from src.llm.nodes._helpers import _for_prompt
+from src.llm.state.graph import CONFIG_KEYS
 from src.llm.state.state import WorkflowState
+from src.llm.tools.laya_client import shadow_next_action
 
 logger = logging.getLogger(__name__)
 
@@ -15,6 +19,13 @@ load_dotenv(override=True)
 ALLOWED_ACTIONS = ("search", "build", "validate", "chat", "done")
 
 MAX_WORKFLOW_ITERATIONS = int(os.environ.get("MAX_WORKFLOW_ITERATIONS", "16"))
+
+# Unset: Haiku decides alone. "laya-shadow": Laya also picks next_action, logged as `laya` next
+# to Haiku's decision; Haiku still routes (metrics/.docs/laya_finetune_plan.md).
+DECISION_MODELS = ("", "laya-shadow")
+DECISION_MODEL = os.environ.get("DECISION_MODEL", "")
+if DECISION_MODEL not in DECISION_MODELS:
+    raise ValueError(f"DECISION_MODEL must be unset or one of {', '.join(DECISION_MODELS[1:])}, not {DECISION_MODEL!r}")
 
 
 MANAGER_SYSTEM = """You are a workflow manager for a geospatial assistant.
@@ -174,6 +185,62 @@ def parse_llm_json(text: str):
         return None
 
 
+def decision_state(state: WorkflowState, goal: str) -> dict:
+    """What the manager sees when it picks `next_action`, compacted for a small decision model.
+
+    Logged as `state` with each manager decision: the input side of a training row for Laya,
+    with the action picked as its label (metrics/.docs/laya_finetune_plan.md). Process ids,
+    config values and port names only, no descriptions, to fit Laya's ~1k-token context.
+    """
+    graph = state.get("workflow_graph") or {"nodes": [], "edges": []}
+    validation = state.get("last_validation")
+    iteration = state.get("iteration", 0)
+    return {
+        "goal": goal,
+        "graph": {
+            "nodes": [
+                {
+                    "id": n.get("id"),
+                    "type": n.get("type"),
+                    "config": {k: v for k, v in (n.get("config") or {}).items() if k not in CONFIG_KEYS},
+                    "inputs": n.get("inputs", []),
+                    "outputs": n.get("outputs", []),
+                }
+                for n in graph.get("nodes", [])
+            ],
+            "edges": [
+                f"{e.get('source')}.{e.get('source_output')} -> {e.get('target')}.{e.get('target_input')}"
+                for e in graph.get("edges", [])
+            ],
+        },
+        "candidates": [
+            {"process": c.get("tool") or c.get("process_id"), "similarity": c.get("similarity")}
+            for c in state.get("candidate_processes") or []
+        ],
+        "validation": validation and {"valid": validation.get("valid"), "errors": validation.get("errors", [])},
+        "unmet": [u.get("capability") for u in state.get("unmet_capabilities") or []],
+        "recent": [_recent(e) for e in state.get("decision_history", [])[-3:]],
+        "iteration": f"{iteration + 1}/{state.get('max_iterations', MAX_WORKFLOW_ITERATIONS)}",
+    }
+
+
+def _recent(entry: dict) -> dict:
+    """One `decision_history` entry as the gist a decision model needs: who acted, and how it went."""
+    node, instruction = entry.get("node"), entry.get("instruction")
+    if node == "management_node":
+        step = entry.get("step")
+        return {"node": node, "action": entry.get("current_action"),
+                "step": step.get("name") if isinstance(step, dict) else None}
+    if node == "auto_build" and isinstance(instruction, dict):
+        return {"node": node, "process": instruction.get("process_id"),
+                "performs_capability": instruction.get("performs_capability"), "error": entry.get("error")}
+    if isinstance(instruction, dict):
+        instruction = instruction.get("op")
+    elif isinstance(instruction, str):
+        instruction = instruction[:200]  # a search query; the responder's is the whole goal again
+    return {"node": node, "instruction": instruction, "error": entry.get("error")}
+
+
 async def management_node(state: WorkflowState, llm) -> dict:
     """Plan the next action for the current user goal.
 
@@ -218,7 +285,7 @@ async def management_node(state: WorkflowState, llm) -> dict:
     # Not capped: the pgvector search already returns its top 5, the mcp variant shows every tool.
     candidates_blob = json.dumps(candidate_processes, indent=2)
     validation_blob = json.dumps(last_validation, indent=2) if last_validation else "null"
-    last_decisions = json.dumps(decision_history[-3:], indent=2)
+    last_decisions = json.dumps(_for_prompt(decision_history[-3:]), indent=2)
 
     prompt = [
         SystemMessage(content=MANAGER_SYSTEM),
@@ -245,7 +312,13 @@ async def management_node(state: WorkflowState, llm) -> dict:
             Pick the single best next action and emit the JSON now.""")
     ]
 
-    resp = await llm.ainvoke(prompt)
+    seen = decision_state(state, latest_user)
+    laya = None
+    if DECISION_MODEL == "laya-shadow":
+        # Side by side, so the shadow call adds no wall time.
+        resp, laya = await asyncio.gather(llm.ainvoke(prompt), shadow_next_action(seen))
+    else:
+        resp = await llm.ainvoke(prompt)
     data = parse_llm_json(resp.text) or {}
 
     next_action = data.get("next_action", "done")
@@ -261,7 +334,10 @@ async def management_node(state: WorkflowState, llm) -> dict:
         "current_action": next_action,
         "step": step,
         "reasoning": reasoning or "No reasoning provided by LLM.",
+        "state": seen,
     })
+    if laya is not None:
+        decision_history[-1]["laya"] = laya
 
     update = {
         "current_action": next_action,        # "search" | "build" | "validate" | "done"

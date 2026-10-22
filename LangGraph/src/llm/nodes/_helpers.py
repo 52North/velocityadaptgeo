@@ -28,6 +28,20 @@ def _log(
     return history
 
 
+# Logged with manager decisions for the decision model, never shown to an LLM.
+_LOGGED_ONLY = ("state", "laya")
+
+
+def _for_prompt(entries: list[dict]) -> list[dict]:
+    """`decision_history` entries without the decision-model fields, for an LLM prompt.
+
+    The manager logs what it saw with each decision (`state`, see `management.decision_state`)
+    and, in shadow mode, Laya's pick (`laya`). Repeating them in a prompt would add tokens, and
+    Laya's pick would let it influence the decisions it is only meant to be compared with.
+    """
+    return [{k: v for k, v in entry.items() if k not in _LOGGED_ONLY} for entry in entries]
+
+
 def _unmet(state: dict, capability: Any, closest: str | None, similarity: Any) -> list[dict]:
     """Append a capability the catalog cannot supply, and return the new list.
 
