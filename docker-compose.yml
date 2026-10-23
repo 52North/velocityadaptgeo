@@ -64,6 +64,10 @@ services:
       WORKFLOW_VARIANT: pgvector
       MCP_URL: http://mcp:8001/mcp
       METRICS_FILE: metrics/runs.jsonl
+      # Unset: Haiku decides alone. laya-shadow: the laya service also picks the manager's next
+      # action, logged next to Haiku's in decision_history; Haiku still routes. Needs --profile laya.
+      DECISION_MODEL: ""
+      LAYA_URL: http://laya:8000
     volumes:
       - ./metrics:/app/metrics
       - ./prompts.jsonl:/app/prompts.jsonl:ro
@@ -89,6 +93,31 @@ services:
       pygeoapi:
         condition: service_started
     restart: unless-stopped
+
+  # Laya decision model for DECISION_MODEL=laya-shadow; only started with `--profile laya`, since
+  # it downloads ~800 MB of weights and wants several GB of RAM. Published on the host's loopback
+  # only (no auth unless LAYA_API_KEY is set), for batch runs from the host.
+  laya:
+    build: ./laya
+    profiles: [ laya ]
+    environment:
+      LAYA_MODELS: english
+      LAYA_MAX_LOADED: "1"
+      LAYA_PRELOAD: "1"
+      # Weights from the revisions the laya release reviewed, not whatever the Hub serves today.
+      LAYA_REVISION: reviewed
+      LAYA_THREADS: "4"
+    ports:
+      - "127.0.0.1:8002:8000"
+    volumes:
+      - laya:/home/laya/.cache/huggingface
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" ]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10m
 
   ollama:
     image: ollama/ollama:latest
@@ -155,5 +184,6 @@ services:
     restart: "no"
 
 volumes:
+  laya: {}
   ollama: {}
   postgres_data: {}

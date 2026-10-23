@@ -3,8 +3,8 @@ import logging
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
+from src.llm.nodes._helpers import _for_prompt, _log
 from src.llm.state.state import WorkflowState
-from src.llm.nodes._helpers import _log
 
 logger = logging.getLogger(__name__)
 
@@ -93,7 +93,7 @@ UNMET CAPABILITIES (asked for, but NOT in the catalog and NOT in the graph):
 {json.dumps(unmet, indent=2)}
 
 RECENT DECISIONS (for context on how we got here):
-{json.dumps(decision_history[-5:], indent=2)}
+{json.dumps(_for_prompt(decision_history[-5:]), indent=2)}
 
 Write the final answer to the user now."""),
     ]
