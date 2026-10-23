@@ -48,15 +48,29 @@ function renderMarkdown(el, text) {
     }
     el.classList.add("markdown");
     el.innerHTML = window.marked.parse(text, { breaks: true, gfm: true });
-    el.querySelectorAll("script, style, iframe, object, embed, form").forEach((n) => n.remove());
+    el.querySelectorAll("script, style, iframe, object, embed, form, meta, link, base, svg, math").forEach((n) =>
+        n.remove()
+    );
     el.querySelectorAll("*").forEach((n) => {
         [...n.attributes].forEach(({ name, value }) => {
-            const isUrl = /^(href|src|xlink:href)$/i.test(name);
-            if (/^on/i.test(name) || (isUrl && /^(javascript|data):/i.test(value.trim()))) {
+            const isUrl = /^(href|src|xlink:href|action|formaction)$/i.test(name);
+            if (/^on/i.test(name) || /^(style|srcdoc)$/i.test(name) || (isUrl && !isSafeUrl(value))) {
                 n.removeAttribute(name);
             }
         });
     });
+}
+
+/**
+ * Allowlist for link targets: http(s), mailto, and relative or fragment URLs.
+ *
+ * Browsers drop whitespace and control characters inside a scheme (`java&#x09;script:` runs),
+ * so those are stripped before the scheme is read.
+ */
+function isSafeUrl(value) {
+    const url = value.replace(/[\u0000- \u007f]/g, "");
+    const scheme = url.match(/^([a-z][a-z0-9+.-]*):/i);
+    return !scheme || /^(https?|mailto)$/i.test(scheme[1]);
 }
 
 const MANAGER_ACTIONS = { search: "Search", build: "Build", validate: "Validate", chat: "Chat", done: "Done" };
@@ -1088,11 +1102,21 @@ function styleFor(entry, distances) {
     };
 }
 
+/** Popup content for one feature, as nodes: the properties come from OSM and other external data. */
 function describeProperties(properties) {
-    const rows = Object.entries(properties || {})
-        .filter(([, v]) => v !== null && typeof v !== "object")
-        .map(([k, v]) => `<strong>${k}</strong>: ${v}`);
-    return rows.length ? rows.join("<br>") : "no attributes";
+    const rows = Object.entries(properties || {}).filter(([, v]) => v !== null && typeof v !== "object");
+    const el = document.createElement("div");
+    if (!rows.length) {
+        el.textContent = "no attributes";
+        return el;
+    }
+    rows.forEach(([k, v], i) => {
+        if (i) el.append(document.createElement("br"));
+        const key = document.createElement("strong");
+        key.textContent = k;
+        el.append(key, `: ${v}`);
+    });
+    return el;
 }
 
 /** Fit the map to everything currently switched on. */
@@ -1267,8 +1291,14 @@ form.addEventListener("submit", (e) => {
 
                 try {
                     const parsedContent = JSON.parse(currentStepText);
-                    currentStepMessage.innerHTML = `<strong>Action (${node}):</strong><br/>
-                        <pre style="margin: 5px 0 0 0; font-size: 0.9em;">${JSON.stringify(parsedContent, null, 2)}</pre>`;
+                    // Built as nodes, not HTML: tool results carry external text (OSM names, echoed prompts).
+                    const label = document.createElement("strong");
+                    label.textContent = `Action (${node}):`;
+                    const pre = document.createElement("pre");
+                    pre.style.margin = "5px 0 0 0";
+                    pre.style.fontSize = "0.9em";
+                    pre.textContent = JSON.stringify(parsedContent, null, 2);
+                    currentStepMessage.replaceChildren(label, pre);
                 } catch (e) {
                     renderMarkdown(currentStepMessage, currentStepText);
                 }
