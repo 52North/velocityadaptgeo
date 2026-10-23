@@ -74,7 +74,7 @@ def cmd_rejudge(args) -> None:
     from datetime import datetime
 
     from prompt_gen import config, seeds, stems, typology
-    from prompt_gen.judge import Judge
+    from prompt_gen.judge import Judge, JudgeError
     from prompt_gen.run import OUT_DIR, read_jsonl
 
     cfg = config.load()
@@ -98,7 +98,14 @@ def cmd_rejudge(args) -> None:
             if c["category"] in cfg.thresholds.stem_check
             else None
         )
-        j = judge.check(seed, typology.get(c["category"]), c["prompt"], stem_result)
+        try:
+            j = judge.check(seed, typology.get(c["category"]), c["prompt"], stem_result)
+        except JudgeError as e:
+            print(
+                f"  {c['category']}#{c['attempt']}: skipped, judge error: {e}",
+                flush=True,
+            )
+            continue
         old = c.get("judge") or {}
         with out.open("a", encoding="utf-8") as f:
             f.write(

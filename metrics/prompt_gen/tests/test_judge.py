@@ -1,8 +1,11 @@
+import pytest
+
 from prompt_gen import seeds, typology
 from prompt_gen.judge import (
     CategoryGrammarOutput,
     ConstraintVerdict,
     Judge,
+    JudgeError,
     combine,
     same_text,
 )
@@ -92,3 +95,36 @@ def test_call_b_runs_even_when_a_constraint_fails():
     )
     assert not j.grammatical
     assert j.corrected == "Identify all areas in Münster."
+
+
+def _judge(client) -> Judge:
+    judge = Judge.__new__(Judge)
+    judge.config = type(  # type: ignore[assignment]
+        "C", (), {"model": "m", "think": False, "temperature": 0.0}
+    )()
+    judge.num_ctx = 8192
+    judge.client = client  # type: ignore[assignment]
+    return judge
+
+
+class WrongIdsClient(FakeClient):
+    """Answers call A with the verdicts out of order."""
+
+    def chat(self, model, messages, think, format, options):
+        response = super().chat(model, messages, think, format, options)
+        if "verdicts" in format["properties"]:
+            data = __import__("json").loads(response.message.content)
+            data["verdicts"].reverse()
+            return FakeResponse(__import__("json").dumps(data))
+        return response
+
+
+class BadJsonClient(FakeClient):
+    def chat(self, model, messages, think, format, options):
+        return FakeResponse("{not json")
+
+
+@pytest.mark.parametrize("client", [WrongIdsClient(), BadJsonClient()])
+def test_unusable_judge_answers_raise_judge_error(client):
+    with pytest.raises(JudgeError):
+        _judge(client).check(SEED, typology.get("lexical"), "Identify all areas")
