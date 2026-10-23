@@ -9,7 +9,8 @@ cp LangGraph/.env.sample LangGraph/.env
 ```bash
 docker compose up
 ```
-then open `http://localhost:8000/`
+then open `http://localhost:8000/` - the API starts only after pygeoapi answers and the
+catalog crawl has finished, so the first start takes a while
 
 re-crawl the process catalog without restarting the stack
 ```bash
