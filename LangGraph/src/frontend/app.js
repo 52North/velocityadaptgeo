@@ -1266,8 +1266,26 @@ form.addEventListener("submit", (e) => {
         `/api/stream?prompt=${encodeURIComponent(prompt)}&thread_id=${encodeURIComponent(threadId)}`
     );
 
+    // The server ends every turn with a `done` event, so a stream that closes without one broke.
+    let finished = false;
+    const finish = () => {
+        finished = true;
+        evtSource.close();
+        setChatting(false);
+        if (currentStepMessage) {
+            currentStepMessage.classList.remove("streaming");
+            currentStepMessage.classList.add("final");
+        }
+    };
+    const streamError = (text) => {
+        addMessage("assistant", text).classList.add("stream-error");
+    };
+
     evtSource.onmessage = (event) => {
         const data = JSON.parse(event.data);
+
+        if (data.event === "done") return finish();
+        if (data.event === "error") return streamError(`The assistant stopped with an error: ${data.error}`);
 
         if (data.event === "graph") {
             if (data.workflow_graph) {
@@ -1342,13 +1360,10 @@ form.addEventListener("submit", (e) => {
     };
 
 
+    // Closed here either way: left open, EventSource reconnects and the prompt runs again.
     evtSource.onerror = () => {
-        evtSource.close();
-        setChatting(false);
-        if (currentStepMessage) {
-            currentStepMessage.classList.remove("streaming");
-            currentStepMessage.classList.add("final");
-        }
+        if (!finished) streamError("Connection to the assistant was lost; the reply may be incomplete.");
+        finish();
     };
 });
 

@@ -185,6 +185,11 @@ body {
     border-top: 1px solid #334155;
 }
 
+.stream-error {
+    border-left: 3px solid #f87171;
+    color: #fecaca;
+}
+
 .user {
     background: #1e3a8a;
     color: #dbeafe;
