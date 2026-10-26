@@ -25,10 +25,8 @@ from pathlib import Path
 
 import geopandas as gpd
 import osmnx as ox
-from shapely import Polygon
-from shapely.geometry import box
 
-# 1) Define location (city name, bbox or polygon)
+# 1) Geocode the city's boundary
 # 2) Download OSM data
 # 3) Reproject from EPSG:4326 to UTM
 # 4) Merge different datasets
@@ -42,21 +40,6 @@ from shapely.geometry import box
 # - UTCI (Universal Thermal Climate Index), e.g. using ERA5
 # - landuse data
 
-# -------------------------------------------------
-# Define your city's bounding box (min longitude, min latitude, max longitude, max latitude)
-# Example coordinates for a region in UTM zone 34N:
-bbox = [7.7, 51.85, 7.75, 52.0]
-polygon = Polygon(
-    [
-        [7.4851106, 52.0054937],
-        [7.5165422, 51.9345983],
-        [7.6355149, 51.8846002],
-        [7.7843607, 51.9067216],
-        [7.7311087, 52.0149273],
-        [7.5960305, 52.006773],
-        [7.4851106, 52.0054937],
-    ]
-)  # counter-clockwise
 CITY_NAME = "muenster"
 MIN_AREA = 4000  # in m²; large enough for recreation, a little below the 5000 m² the agents often pick
 INTERVALS = [0, 75, 150, 225, 300]  # in m; the last one is the distance limit
@@ -70,10 +53,13 @@ def fetch(
     # Next to this file, not the working directory, so every caller shares one download.
     ox.settings.use_cache = True
     ox.settings.cache_folder = Path(__file__).parent / "cache"
+    # No stand-in area when this fails: every grade is measured against this boundary.
     try:
         city_gdf_geogr = ox.geocode_to_gdf({"city": city_name})
-    except Exception:  # noqa: BLE001 - geocoder down or name unknown: fall back to the bbox
-        city_gdf_geogr = gpd.GeoDataFrame(geometry=[box(*bbox)], crs="EPSG:4326")
+    except Exception as err:  # geocoder down, rate limit or unknown name
+        raise SystemExit(
+            f"could not geocode the city boundary of {city_name!r}: {err}"
+        ) from err
     target_crs = city_gdf_geogr.estimate_utm_crs()
     city = city_gdf_geogr[["geometry"]].to_crs(target_crs)
 
