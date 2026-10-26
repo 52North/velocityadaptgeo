@@ -9,6 +9,21 @@ from prompt_gen.config import PACKAGE_ROOT
 os.environ.setdefault("HF_HOME", str(PACKAGE_ROOT / "models"))
 
 
+DEFAULT_SEED = "muenster_green_300m"
+
+
+def run_seed(seed: str | None, resume: str | None) -> str:
+    """The seed id for `run`: a resumed run keeps its own seed, so its candidates never mix two seeds."""
+    if not resume:
+        return seed or DEFAULT_SEED
+    from prompt_gen.run import OUT_DIR, run_seed_id
+
+    own = run_seed_id(OUT_DIR / resume)
+    if seed and seed != own:
+        raise SystemExit(f"--seed {seed} does not match run {resume}, which uses {own}")
+    return own
+
+
 def cmd_run(args) -> None:
     from prompt_gen import config, seeds, typology
     from prompt_gen.run import Run
@@ -17,7 +32,7 @@ def cmd_run(args) -> None:
     categories = args.categories or [c.key for c in typology.CATEGORIES]
     for key in categories:
         typology.get(key)
-    seed = seeds.load(args.seed)
+    seed = seeds.load(run_seed(args.seed, args.resume))
     run = Run(cfg, seed, args.resume)
     print(f"Run {run.run_id} -> {run.dir}")
     run.execute(categories, args.n or cfg.loop.n_per_category, args.hours)
@@ -75,13 +90,11 @@ def cmd_rejudge(args) -> None:
 
     from prompt_gen import config, seeds, stems, typology
     from prompt_gen.judge import Judge, JudgeError
-    from prompt_gen.run import OUT_DIR, read_jsonl
+    from prompt_gen.run import OUT_DIR, read_jsonl, run_seed_id
 
     cfg = config.load()
     run_dir = OUT_DIR / args.run_id
-    seed = seeds.load(
-        json.loads((run_dir / "config.json").read_text(encoding="utf-8"))["seed"]["id"]
-    )
+    seed = seeds.load(run_seed_id(run_dir))
     judge = Judge(cfg.judge, cfg.ollama_host, cfg.num_ctx)
     picked = [
         c
@@ -188,7 +201,10 @@ def main() -> None:
     sub = parser.add_subparsers(required=True)
 
     p = sub.add_parser("run", help="generate paraphrases for one seed")
-    p.add_argument("--seed", default="muenster_green_300m")
+    p.add_argument(
+        "--seed",
+        help=f"seed id (default: {DEFAULT_SEED}; with --resume: the run's own)",
+    )
     p.add_argument("--categories", nargs="+", help="category keys (default: all six)")
     p.add_argument(
         "--n", type=int, help="accepted prompts per category (default: config)"
@@ -202,7 +218,7 @@ def main() -> None:
     p.set_defaults(func=cmd_run)
 
     p = sub.add_parser("check-judge", help="run the judge on the seed's trap set")
-    p.add_argument("--seed", default="muenster_green_300m")
+    p.add_argument("--seed", default=DEFAULT_SEED)
     p.set_defaults(func=cmd_check_judge)
 
     p = sub.add_parser(

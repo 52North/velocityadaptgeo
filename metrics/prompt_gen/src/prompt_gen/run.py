@@ -39,6 +39,14 @@ def read_jsonl(path: Path) -> list[dict]:
     ]
 
 
+def run_seed_id(run_dir: Path) -> str:
+    """The seed a run was started with, from the config.json its first session wrote."""
+    path = run_dir / "config.json"
+    if not path.exists():
+        raise SystemExit(f"{path} not found: not a prompt-gen run")
+    return json.loads(path.read_text(encoding="utf-8"))["seed"]["id"]
+
+
 def _append(path: Path, record: dict) -> None:
     with path.open("a", encoding="utf-8") as f:
         f.write(json.dumps(record, ensure_ascii=False) + "\n")

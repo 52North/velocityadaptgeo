@@ -243,3 +243,23 @@ def test_judge_error_is_stored_and_resume_moves_on(cfg, tmp_path, monkeypatch):
     assert all(r["reject_reason"].startswith("judge_error: ") for r in records)
     assert all(r["prompt"] and "sem" in r for r in records)
     assert len(set(seeds_used)) == 4
+
+
+def test_resume_keeps_the_runs_own_seed(tmp_path, monkeypatch):
+    from prompt_gen import cli, run
+
+    monkeypatch.setattr(run, "OUT_DIR", tmp_path)
+    (tmp_path / "cool").mkdir()
+    (tmp_path / "cool" / "config.json").write_text(
+        json.dumps({"seed": {"id": "muenster_coolspots_300m"}}), encoding="utf-8"
+    )
+
+    assert cli.run_seed(None, None) == "muenster_green_300m"
+    assert cli.run_seed("muenster_coolspots_300m", None) == "muenster_coolspots_300m"
+    # Resuming without --seed used to load the default seed into the CoolSpots run.
+    assert cli.run_seed(None, "cool") == "muenster_coolspots_300m"
+    assert cli.run_seed("muenster_coolspots_300m", "cool") == "muenster_coolspots_300m"
+    with pytest.raises(SystemExit, match="does not match"):
+        cli.run_seed("muenster_green_300m", "cool")
+    with pytest.raises(SystemExit, match="not a prompt-gen run"):
+        cli.run_seed(None, "missing")
