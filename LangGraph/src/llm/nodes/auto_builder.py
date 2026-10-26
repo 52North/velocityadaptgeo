@@ -121,6 +121,13 @@ async def auto_build_node(state: WorkflowState, llm, variant: str = "pgvector") 
     capability = (state.get("step") or {}).get("instruction")
 
     if not candidates:
+        last = (state.get("decision_history") or [{}])[-1]
+        if last.get("node") == "retriever" and last.get("error"):
+            # The catalog was not searched, so this says nothing about what it holds: not unmet.
+            logger.info("Auto-build skipped: the search failed.")
+            return {
+                "decision_history": _log(state, "auto_build", None, error="The search failed; nothing added."),
+            }
         logger.info("Auto-build skipped: no candidate processes to build from.")
         return {
             "unmet_capabilities": _unmet(state, capability, None, None),

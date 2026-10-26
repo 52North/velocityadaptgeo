@@ -165,3 +165,101 @@ def test_config_snapshot_lists_the_whole_typology(cfg, tmp_path, monkeypatch):
     assert snapshot["typology"] == [
         {"key": c.key, "name": c.name} for c in typology.CATEGORIES
     ]
+
+
+def test_judge_error_is_stored_and_resume_moves_on(cfg, tmp_path, monkeypatch):
+    """A judge error must not abort the run, and must count as an attempt: the judge is deterministic,
+    so a resume that retried the same sampling seed would fail on the same candidate again."""
+    from types import SimpleNamespace
+
+    from prompt_gen import run
+    from prompt_gen.judge import JudgeError
+
+    seeds_used = []
+
+    class FakeGenerator:
+        def __init__(self, *a, **k):
+            pass
+
+        def generate(
+            self, category, examples, seed, entries, sampling_seed, target, feedback
+        ):
+            seeds_used.append(sampling_seed)
+            return SimpleNamespace(
+                paraphrase=f"Find the green areas, take {sampling_seed}",
+                operations_applied=[],
+                reasoning="",
+                sampling_seed=sampling_seed,
+                attempts=1,
+                eval_tokens=0,
+                discarded=[],
+            )
+
+    class FakeJudge:
+        def __init__(self, *a, **k):
+            pass
+
+        def check(self, *a, **k):
+            raise JudgeError(
+                "judge returned constraint ids ['b', 'a'], expected ['a', 'b']"
+            )
+
+    class FakeScorer:
+        def __init__(self, *a, **k):
+            self.semantic = SimpleNamespace(embed=lambda texts: [[1.0, 0.0]])
+
+        def semantic_similarities(self, text, others):
+            return [0.0] * len(others)
+
+        def score(self, candidate, seed, same_category, other_categories):
+            return {
+                "sem": 0.9,
+                "prag": 0.9,
+                "prag_no_instruction": 0.9,
+                "max_sem_same_category": None,
+                "max_sem_other_categories": None,
+            }
+
+    monkeypatch.setattr(run, "Generator", FakeGenerator)
+    monkeypatch.setattr(run, "Judge", FakeJudge)
+    monkeypatch.setattr(run, "Scorer", FakeScorer)
+    monkeypatch.setattr(run, "_model_digest", lambda host, model: None)
+    monkeypatch.setattr(run.shutil, "copytree", lambda *a, **k: None)
+    monkeypatch.setattr(run, "OUT_DIR", tmp_path)
+    cfg = cfg.model_copy(
+        update={
+            "loop": cfg.loop.model_copy(
+                update={"max_attempts_factor": 10, "max_consecutive_rejects": 2}
+            )
+        }
+    )
+    seed = seeds.load("muenster_green_300m")
+
+    run.Run(cfg, seed, "test").execute(["lexical"], 1)
+    run.Run(cfg, seed, "test").execute(["lexical"], 1)  # resume
+
+    records = read_jsonl(tmp_path / "test" / "candidates.jsonl")
+    assert [r["attempt"] for r in records] == [1, 2, 3, 4]
+    assert all(r["reject_reason"].startswith("judge_error: ") for r in records)
+    assert all(r["prompt"] and "sem" in r for r in records)
+    assert len(set(seeds_used)) == 4
+
+
+def test_resume_keeps_the_runs_own_seed(tmp_path, monkeypatch):
+    from prompt_gen import cli, run
+
+    monkeypatch.setattr(run, "OUT_DIR", tmp_path)
+    (tmp_path / "cool").mkdir()
+    (tmp_path / "cool" / "config.json").write_text(
+        json.dumps({"seed": {"id": "muenster_coolspots_300m"}}), encoding="utf-8"
+    )
+
+    assert cli.run_seed(None, None) == "muenster_green_300m"
+    assert cli.run_seed("muenster_coolspots_300m", None) == "muenster_coolspots_300m"
+    # Resuming without --seed used to load the default seed into the CoolSpots run.
+    assert cli.run_seed(None, "cool") == "muenster_coolspots_300m"
+    assert cli.run_seed("muenster_coolspots_300m", "cool") == "muenster_coolspots_300m"
+    with pytest.raises(SystemExit, match="does not match"):
+        cli.run_seed("muenster_green_300m", "cool")
+    with pytest.raises(SystemExit, match="not a prompt-gen run"):
+        cli.run_seed(None, "missing")

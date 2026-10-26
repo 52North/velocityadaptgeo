@@ -11,6 +11,19 @@ uv run prompt-review ../prompt_gen/out/<run_id> --summary  # per-category counts
 
 Decisions are saved to `<run_dir>/reviewed.jsonl` after every change. `candidates.jsonl` is never changed.
 
+## Files
+
+`src/prompt_review/`:
+
+- `cli.py`: the `prompt-review` command.
+- `app.py`: the full-screen Textual app: list screen, review page, category and note dialogs.
+- `state.py`: candidates, decisions, filters, sort and navigation, and the summary counts; no file access or drawing.
+- `render.py`: the Rich renderables: review page, list rows and preview, summary table.
+- `data.py`: reads the run folder and saves `reviewed.jsonl`.
+- `similarity.py`: live closest matches from the generator's `embeddings.jsonl`.
+
+`tests/`: pytest (`uv run pytest`).
+
 ## Live similarity
 
 With the run's `embeddings.jsonl` (written by the generator; for older runs `prompt-gen backfill-embeddings <run_id>`), the closest matches are recomputed after every decision, against all other kept paraphrases: accepted in review, or accepted by the gates and not reviewed yet. The details show them under **Now**, and the matches stored at generation (earlier gate-accepted paraphrases only, what the gate's near-duplicate check saw) under **At generation**. A kept paraphrase whose closest kept paraphrase in its category is above the run's near-duplicate threshold is marked "kept near-duplicate of …", and the filter **kept near-duplicates** steps through them. `--summary` adds their count.

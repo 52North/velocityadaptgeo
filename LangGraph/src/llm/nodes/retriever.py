@@ -3,24 +3,13 @@ import logging
 from langchain_core.messages import AIMessage
 
 from src.llm.state.state import WorkflowState
-from src.llm.nodes._helpers import _log, _last_tool_result
+from src.llm.nodes._helpers import _log
 
 from src.llm.tools.mcp_client import load_mcp_tools
 from src.llm.tools.ogc_client import search_ogc_processes
 
 
 logger = logging.getLogger(__name__)
-
-
-RETRIEVER_SYSTEM = """You are an OGC process retrieval agent.
-
-Use `search_ogc_processes` to find candidates that match the current need.
-
-Rules:
-- Issue focused, capability-oriented queries (e.g. "buffer polygon by distance").
-- Do not invent process IDs. Only return what the tools provide.
-- Do not attempt to build or modify the workflow graph.
-"""
 
 
 async def retriever_node(state: WorkflowState, llm) -> dict:

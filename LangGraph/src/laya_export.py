@@ -80,7 +80,9 @@ def decisions(
         for d in r.get("decision_history") or []:
             if d.get("node") != "management_node" or "iteration" not in d:
                 continue  # other nodes, and the max_iterations stop, which no model decided
-            if "state" not in d:
+            if d.get("error"):
+                skipped["decision whose LLM call failed"] += 1
+            elif "state" not in d:
                 skipped["decision without state (run before 2026-10-21)"] += 1
             elif d.get("reasoning") == UNPARSED:
                 skipped["decision with unparsed reply"] += 1

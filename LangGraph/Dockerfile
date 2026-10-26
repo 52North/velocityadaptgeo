@@ -1,5 +1,6 @@
 
-FROM python:3.14-slim
+# The version in .python-version, which local runs and uv.lock use.
+FROM python:3.12-slim
 
 WORKDIR /app
 

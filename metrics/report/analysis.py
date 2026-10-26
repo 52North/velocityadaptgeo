@@ -23,7 +23,7 @@ from IPython.display import Markdown
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "LangGraph"))
 
-from src.batch import DEFAULT_VARIANT, SEED_CATEGORY, _read_jsonl, _sha1, latest_results, load_results, seed_prompt
+from src.batch import DEFAULT_VARIANT, SEED_CATEGORY, _key, _read_jsonl, _sha1, latest_results, load_results, seed_prompt
 from src.batch_summary import _edges, _structure, fisher, lenient, strict, trend, wilson
 
 RUN_DIR = Path(os.environ.get("REPORT_RUN_DIR", ROOT / "metrics/prompt_gen/out/20261012-174604_muenster_green_300m"))
@@ -217,10 +217,6 @@ def paraphrases(results: list[dict] | None = None, variant: str = DEFAULT_VARIAN
 
 def reviewed(name: str = "reviewed.jsonl") -> list[dict]:
     return _read_jsonl(RUN_DIR / name)
-
-
-def _key(c: dict) -> str:
-    return f"{c['category']}#{c['attempt']}"
 
 
 def size_dropped() -> dict[str, dict]:

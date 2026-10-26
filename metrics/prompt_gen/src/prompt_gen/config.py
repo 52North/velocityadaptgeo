@@ -1,3 +1,6 @@
+"""config.yaml as pydantic models: Ollama host and context window, generator, judge, embedding models,
+loop limits and gate thresholds. The comments in config.yaml explain each value."""
+
 from pathlib import Path
 
 import yaml

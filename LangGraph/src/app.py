@@ -110,54 +110,61 @@ async def stream(prompt: str, thread_id: str):
 
         Two stream modes are multiplexed onto one event stream: "messages" carries the
         chat tokens, "updates" carries node state so the workflow graph can be drawn
-        while it is being built. Every event names its kind in `event`.
+        while it is being built. Every event names its kind in `event`. The stream always
+        ends with a `done` event, after an `error` event if the turn failed.
         """
-        async for path, mode, chunk in compiled_graph.astream(
-            turn_input(prompt),
-            config={**turn_config(thread_id), "callbacks": [RunTracker(thread_id)]},
-            stream_mode=["messages", "updates"],
-            subgraphs=True
-        ):
-            if mode == "updates":
-                for node_name, update in (chunk or {}).items():
-                    if not isinstance(update, dict):
-                        continue
-                    graph_payload = {
-                        key: update[key]
-                        for key in ("workflow_graph", "last_validation", "unmet_capabilities")
-                        if update.get(key) is not None
-                    }
-                    if graph_payload:
-                        graph_payload.update({"event": "graph", "node": node_name})
-                        yield f"data: {json.dumps(graph_payload)}\n\n"
-                continue
+        try:
+            async for path, mode, chunk in compiled_graph.astream(
+                turn_input(prompt),
+                config={**turn_config(thread_id), "callbacks": [RunTracker(thread_id)]},
+                stream_mode=["messages", "updates"],
+                subgraphs=True
+            ):
+                if mode == "updates":
+                    for node_name, update in (chunk or {}).items():
+                        if not isinstance(update, dict):
+                            continue
+                        graph_payload = {
+                            key: update[key]
+                            for key in ("workflow_graph", "last_validation", "unmet_capabilities")
+                            if update.get(key) is not None
+                        }
+                        if graph_payload:
+                            graph_payload.update({"event": "graph", "node": node_name})
+                            yield f"data: {json.dumps(graph_payload)}\n\n"
+                    continue
 
-            message_chunk, metadata = chunk
-            content = message_chunk.content
+                message_chunk, metadata = chunk
+                content = message_chunk.content
 
-            payload = {
-                "event": "message",
-                "path": path,
-                "metadata": metadata,
-                "type": message_chunk.type,
-                "id": message_chunk.id,
-            }
+                payload = {
+                    "event": "message",
+                    "path": path,
+                    "metadata": metadata,
+                    "type": message_chunk.type,
+                    "id": message_chunk.id,
+                }
 
-            # Stream artifact if present to render geometry on frontend map
-            if getattr(message_chunk, "artifact", None):
-                payload["artifact"] = message_chunk.artifact
-                logging.getLogger(__name__).info("Streaming artifact: %s", message_chunk.artifact)
+                # Stream artifact if present to render geometry on frontend map
+                if getattr(message_chunk, "artifact", None):
+                    payload["artifact"] = message_chunk.artifact
+                    logging.getLogger(__name__).info("Streaming artifact: %s", message_chunk.artifact)
 
-            # Normal textual streaming
-            if isinstance(content, str):
-                payload["content"] = content
-                yield f"data: {json.dumps(payload)}\n\n"
+                # Normal textual streaming
+                if isinstance(content, str):
+                    payload["content"] = content
+                    yield f"data: {json.dumps(payload)}\n\n"
 
-            elif isinstance(content, list):
-                for block in content:
-                    if block.get("type") == "text":
-                        payload["content"] = block["text"]
-                        yield f"data: {json.dumps(payload)}\n\n"
+                elif isinstance(content, list):
+                    for block in content:
+                        if block.get("type") == "text":
+                            payload["content"] = block["text"]
+                            yield f"data: {json.dumps(payload)}\n\n"
+        except Exception as exc:
+            # Sent as an event: to EventSource a dropped connection looks like a finished reply.
+            logging.getLogger(__name__).exception("Stream of thread %s failed", thread_id)
+            yield f"data: {json.dumps({'event': 'error', 'error': (str(exc) or type(exc).__name__)[:300]})}\n\n"
+        yield f"data: {json.dumps({'event': 'done'})}\n\n"
 
     return StreamingResponse(gen(), media_type="text/event-stream")
 

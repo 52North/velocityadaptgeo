@@ -15,7 +15,8 @@ x-pygeoapi: &pygeoapi
   LOCAL_PYGEOAPI_INTERNAL: pygeoapi:80
 
 # Remote OGC API servers, besides the local pygeoapi. The catalog crawler and the MCP server
-# read the same list, so both workflow variants see the same processes.
+# read the same list, so both workflow variants see the same processes; the langgraph runner
+# executes nodes only against these servers.
 x-ogc-servers: &ogc-servers
   OGC_SERVERS: https://demo.pygeoapi.io/master/,https://maps.ecere.com/ogcapi/
 
@@ -37,29 +38,43 @@ services:
       OVERPASS_ATTEMPTS: "3"
       OVERPASS_BACKOFF: "2"
       OVERPASS_DEADLINE: "240"
+      # Per request: the largest bounding box queried, and Overpass's memory cap (256 MiB).
+      OVERPASS_MAX_AREA_KM2: "2500"
+      OVERPASS_MAXSIZE: "268435456"
+    # Host loopback only, like every published port: containers reach each other by service
+    # name, and host runs (SETUP.md, src.batch) use localhost.
     ports:
-      - "5000:80"
+      - "127.0.0.1:5000:80"
+    # The mcp server and the catalog crawler read /processes once at startup, so they wait
+    # until it answers, not just until the container has started.
+    healthcheck:
+      test: [ "CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:80/processes?f=json', timeout=4)" ]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
 
   langgraph:
     build:
       context: ./LangGraph
       dockerfile: Dockerfile
+    # No auth, and every chat turn spends the Anthropic key: host loopback only. From another
+    # machine, tunnel in: ssh -L 8000:localhost:8000 <user>@<host>
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     dns:
       - 8.8.8.8
     env_file:
       - path: ./LangGraph/.env
         required: false
     environment:
-      <<: [*postgres, *ollama, *pygeoapi]
+      <<: [*postgres, *ollama, *pygeoapi, *ogc-servers]
       ANTHROPIC_MODEL: claude-haiku-5-5
       ANTHROPIC_EFFORT: medium
       ANTHROPIC_MAX_RETRIES: "3"
       MODEL_PRICES_PER_MTOK: claude-haiku-5-5=0.10,0.50
       MAX_WORKFLOW_ITERATIONS: "16"
       MAX_MAP_FEATURES: "3000"
-      HTTP_TIMEOUT: "30"
       # pgvector (catalog search) or mcp (every tool of the mcp service); src.batch --variant overrides it.
       WORKFLOW_VARIANT: pgvector
       MCP_URL: http://mcp:8001/mcp
@@ -78,6 +93,9 @@ services:
         condition: service_healthy
       ollama-pull:
         condition: service_completed_successfully
+      # pgvector variant: the catalog is complete before the first request searches it.
+      ogc-database:
+        condition: service_completed_successfully
     restart: unless-stopped
 
   # Tools for the mcp workflow variant; the tool list is crawled once at startup.
@@ -88,10 +106,10 @@ services:
     dns:
       - 8.8.8.8
     ports:
-      - "8001:8001"
+      - "127.0.0.1:8001:8001"
     depends_on:
       pygeoapi:
-        condition: service_started
+        condition: service_healthy
     restart: unless-stopped
 
   # Laya decision model for DECISION_MODEL=laya-shadow; only started with `--profile laya`, since
@@ -124,8 +142,9 @@ services:
     container_name: ollama
     environment:
       OLLAMA_HOST: 0.0.0.0:11434
+    # No auth on the Ollama API: host loopback only.
     ports:
-      - "11434:11434"
+      - "127.0.0.1:11434:11434"
     volumes:
       - ollama:/root/.ollama
     restart: unless-stopped
@@ -153,8 +172,9 @@ services:
     environment:
       <<: *postgres
       EMBED_DIM: "768"
+    # Superuser postgres/postgres: host loopback only.
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - ./ogc_database/sql:/docker-entrypoint-initdb.d:ro
       - postgres_data:/var/lib/postgresql/data
@@ -176,7 +196,7 @@ services:
       - 8.8.8.8
     depends_on:
       pygeoapi:
-        condition: service_started
+        condition: service_healthy
       postgres-vector:
         condition: service_healthy
       ollama-pull:

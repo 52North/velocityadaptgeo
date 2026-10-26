@@ -10,10 +10,12 @@ produce is runnable without changes here.
 """
 
 import asyncio
+import contextlib
 import logging
 import os
 import time
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
+from urllib.parse import quote
 
 import httpx
 
@@ -24,6 +26,17 @@ logger = logging.getLogger(__name__)
 DEFAULT_TIMEOUT_SECONDS = 300.0
 LOCAL_PYGEOAPI_HOST = os.environ.get("LOCAL_PYGEOAPI_HOST", "localhost:5000")
 LOCAL_PYGEOAPI_INTERNAL = os.environ.get("LOCAL_PYGEOAPI_INTERNAL", "pygeoapi:80")
+# The only servers a node may be executed against: the ones the catalog crawler and the MCP server
+# read (same compose setting and default), plus the local pygeoapi under either address. A graph can
+# come from a client (POST /api/execute, /api/graph/op), so its server_url is not trusted as given.
+OGC_SERVERS = frozenset(
+    url.strip().rstrip("/")
+    for url in os.environ.get(
+        "OGC_SERVERS", "https://demo.pygeoapi.io/master/,https://maps.ecere.com/ogcapi/"
+    ).split(",")
+    + [os.environ.get("LOCAL_PYGEOAPI_URL", ""), f"http://{LOCAL_PYGEOAPI_HOST}", f"http://{LOCAL_PYGEOAPI_INTERNAL}"]
+    if url.strip()
+)
 
 GEOJSON_TYPES = frozenset({
     "Feature", "FeatureCollection", "Point", "MultiPoint", "LineString",
@@ -197,7 +210,11 @@ async def _post_execution(client: httpx.AsyncClient, node: dict, inputs: dict) -
     if not server_url:
         raise ExecutionError(f"node '{node['id']}' has no server_url to execute against")
 
-    url = f"{_resolve_server_url(str(server_url)).rstrip('/')}/processes/{node['type']}/execution"
+    server = _resolve_server_url(str(server_url)).rstrip("/")
+    if server not in OGC_SERVERS:
+        raise ExecutionError(f"node '{node['id']}': {server_url} is not one of the configured OGC servers")
+    # One path segment, so a process id cannot reach another path or add a query.
+    url = f"{server}/processes/{quote(str(node['type']), safe='')}/execution"
     timeout = float(config.get("timeout_seconds") or DEFAULT_TIMEOUT_SECONDS)
 
     response = await client.post(
@@ -213,12 +230,18 @@ async def _post_execution(client: httpx.AsyncClient, node: dict, inputs: dict) -
     return response.json()
 
 
-async def run_graph(graph: dict) -> AsyncIterator[dict]:
+async def run_graph(
+    graph: dict,
+    client: httpx.AsyncClient | None = None,
+    post: Callable[[httpx.AsyncClient, dict, dict], Awaitable[dict]] = _post_execution,
+) -> AsyncIterator[dict]:
     """Execute every node in dependency order, yielding progress events as they happen.
 
     Events carry full payloads under `outputs`/`inputs`; use `summarise()` before sending
     them anywhere size-sensitive. A failing node does not abort the run - its dependents
-    are reported as skipped so a partial result is still useful for debugging.
+    are reported as skipped so a partial result is still useful for debugging. `client` and
+    `post` (how one node is run) let a caller share a client or wrap the call, as the batch
+    executor does with its output cache.
     """
     nodes = {n["id"]: n for n in graph.get("nodes", [])}
     if not nodes:
@@ -236,7 +259,7 @@ async def run_graph(graph: dict) -> AsyncIterator[dict]:
     results: dict[str, dict] = {}
     failed: set[str] = set()
 
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient() if client is None else contextlib.nullcontext(client) as http:
         for node_id in order:
             node = nodes[node_id]
 
@@ -260,7 +283,7 @@ async def run_graph(graph: dict) -> AsyncIterator[dict]:
 
             started = time.monotonic()
             try:
-                produced = await _post_execution(client, node, inputs)
+                produced = await post(http, node, inputs)
             except (ExecutionError, httpx.HTTPError, ValueError) as err:
                 failed.add(node_id)
                 message = str(err) or type(err).__name__

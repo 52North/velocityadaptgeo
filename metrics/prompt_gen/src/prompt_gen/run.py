@@ -21,7 +21,7 @@ import numpy as np
 from prompt_gen import examples, stems, typology
 from prompt_gen.config import PACKAGE_ROOT, Config
 from prompt_gen.generator import GenerationError, Generator
-from prompt_gen.judge import Judge
+from prompt_gen.judge import Judge, JudgeError
 from prompt_gen.scoring import Scorer
 from prompt_gen.seeds import Seed
 
@@ -37,6 +37,14 @@ def read_jsonl(path: Path) -> list[dict]:
         for line in path.read_text(encoding="utf-8").splitlines()
         if line.strip()
     ]
+
+
+def run_seed_id(run_dir: Path) -> str:
+    """The seed a run was started with, from the config.json its first session wrote."""
+    path = run_dir / "config.json"
+    if not path.exists():
+        raise SystemExit(f"{path} not found: not a prompt-gen run")
+    return json.loads(path.read_text(encoding="utf-8"))["seed"]["id"]
 
 
 def _append(path: Path, record: dict) -> None:
@@ -452,19 +460,31 @@ class Run:
                                 **scores,
                             )
                         else:
-                            judgement = judge.check(
-                                self.seed, category, g.paraphrase, stem_result
-                            )
-                            reason = gate(self.cfg, key, scores, judgement)
-                            record.update(
-                                generation,
-                                accepted=reason is None,
-                                reject_reason=reason,
-                                relative=judgement.relative_ids,
-                                ungrammatical=not judgement.grammatical,
-                                **scores,
-                                judge=judgement.model_dump(),
-                            )
+                            try:
+                                judgement = judge.check(
+                                    self.seed, category, g.paraphrase, stem_result
+                                )
+                            except JudgeError as e:
+                                # Stored as a reject so the attempt counts: a resume then moves on to the
+                                # next sampling seed instead of regenerating this candidate and failing again.
+                                record.update(
+                                    generation,
+                                    accepted=False,
+                                    reject_reason=f"judge_error: {e}",
+                                    relative=[],
+                                    **scores,
+                                )
+                            else:
+                                reason = gate(self.cfg, key, scores, judgement)
+                                record.update(
+                                    generation,
+                                    accepted=reason is None,
+                                    reject_reason=reason,
+                                    relative=judgement.relative_ids,
+                                    ungrammatical=not judgement.grammatical,
+                                    **scores,
+                                    judge=judgement.model_dump(),
+                                )
                 record["duration_s"] = round(time.monotonic() - started, 1)
                 _append(self.candidates_path, record)
                 if record[

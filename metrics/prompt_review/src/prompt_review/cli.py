@@ -1,3 +1,5 @@
+"""prompt-review <run_dir> [--summary]: the full-screen review (app.py), or the per-category counts."""
+
 import argparse
 from pathlib import Path
 

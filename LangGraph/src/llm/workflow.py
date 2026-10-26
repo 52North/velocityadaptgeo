@@ -1,7 +1,6 @@
 import os
 from functools import partial
 
-from dotenv import load_dotenv
 from langchain_anthropic import ChatAnthropic
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, StateGraph
@@ -19,8 +18,6 @@ from src.llm.nodes import (
 )
 from src.llm.nodes.management import MAX_WORKFLOW_ITERATIONS
 from src.llm.state.state import WorkflowState
-
-load_dotenv(override=True)
 
 _SUPERSTEPS_PER_ITERATION = 3
 _TRAILING_SUPERSTEPS = 5

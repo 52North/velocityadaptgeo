@@ -29,8 +29,3 @@ def save_node_result(thread_id: str, node_id: str, outputs: dict) -> None:
 def get_node_output(thread_id: str, node_id: str, output: str):
     """Return one named output of one node, or None when it was never produced."""
     return (_runs.get(thread_id) or {}).get(node_id, {}).get(output)
-
-
-def run_nodes(thread_id: str) -> list[str]:
-    """List the nodes that produced results in a thread's last run."""
-    return list((_runs.get(thread_id) or {}).keys())

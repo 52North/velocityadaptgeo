@@ -4,7 +4,6 @@ import logging
 import os
 import re
 
-from dotenv import load_dotenv
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from src.llm.nodes._helpers import _for_prompt
@@ -13,8 +12,6 @@ from src.llm.state.state import WorkflowState
 from src.llm.tools.laya_client import shadow_next_action
 
 logger = logging.getLogger(__name__)
-
-load_dotenv(override=True)
 
 ALLOWED_ACTIONS = ("search", "build", "validate", "chat", "done")
 
@@ -314,18 +311,42 @@ async def management_node(state: WorkflowState, llm) -> dict:
 
     seen = decision_state(state, latest_user)
     laya = None
-    if DECISION_MODEL == "laya-shadow":
-        # Side by side, so the shadow call adds no wall time.
-        resp, laya = await asyncio.gather(llm.ainvoke(prompt), shadow_next_action(seen))
-    else:
-        resp = await llm.ainvoke(prompt)
+    try:
+        if DECISION_MODEL == "laya-shadow":
+            # Side by side, so the shadow call adds no wall time.
+            resp, laya = await asyncio.gather(llm.ainvoke(prompt), shadow_next_action(seen))
+        else:
+            resp = await llm.ainvoke(prompt)
+    except Exception as exc:
+        # End the turn: the responder then explains the failure instead of the stream just stopping.
+        logger.exception("Manager failed to plan the next action")
+        decision_history.append({
+            "node": "management_node",
+            "iteration": iteration + 1,
+            "current_action": "done",
+            "step": None,
+            "reasoning": f"The manager LLM call failed, so the turn ends here: {exc}",
+            "error": str(exc),
+            "state": seen,
+        })
+        return {
+            "current_action": "done",
+            "step": None,
+            "iteration": iteration + 1,
+            "decision_history": decision_history,
+        }
     data = parse_llm_json(resp.text) or {}
 
     next_action = data.get("next_action", "done")
     if next_action not in ALLOWED_ACTIONS:
         next_action = "done"
 
+    # The retriever and builders read `step` as a dict; a bare string is the instruction alone.
     step = data.get("step")
+    if isinstance(step, str):
+        step = {"name": "", "instruction": step}
+    elif not isinstance(step, dict):
+        step = None
     reasoning = data.get("reasoning", "")
 
     decision_history.append({

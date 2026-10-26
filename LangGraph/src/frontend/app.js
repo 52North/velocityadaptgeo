@@ -1,6 +1,7 @@
 const form = document.getElementById("chat-form");
 const testPrompts = document.getElementById("test-prompts");
 const input = document.getElementById("prompt");
+const sendButton = form.querySelector('button[type="submit"]');
 const graphCanvas = document.getElementById("graph");
 const graphStatus = document.getElementById("graph-status");
 const graphLegend = document.getElementById("graph-legend");
@@ -28,6 +29,15 @@ let lastValidation = null;
 let unmetCapabilities = [];
 let nodeRuns = {};
 let running = false;
+let chatting = false;
+
+/**
+ * No hand edits or runs while a run or a chat turn is in progress: a turn rewrites the
+ * thread's graph as it goes, so an edit made meanwhile could be lost or lose the turn's.
+ */
+function graphLocked() {
+    return running || chatting;
+}
 let deleting = false;
 let picked = null;
 let nodeH = NODE_H;
@@ -48,15 +58,29 @@ function renderMarkdown(el, text) {
     }
     el.classList.add("markdown");
     el.innerHTML = window.marked.parse(text, { breaks: true, gfm: true });
-    el.querySelectorAll("script, style, iframe, object, embed, form").forEach((n) => n.remove());
+    el.querySelectorAll("script, style, iframe, object, embed, form, meta, link, base, svg, math").forEach((n) =>
+        n.remove()
+    );
     el.querySelectorAll("*").forEach((n) => {
         [...n.attributes].forEach(({ name, value }) => {
-            const isUrl = /^(href|src|xlink:href)$/i.test(name);
-            if (/^on/i.test(name) || (isUrl && /^(javascript|data):/i.test(value.trim()))) {
+            const isUrl = /^(href|src|xlink:href|action|formaction)$/i.test(name);
+            if (/^on/i.test(name) || /^(style|srcdoc)$/i.test(name) || (isUrl && !isSafeUrl(value))) {
                 n.removeAttribute(name);
             }
         });
     });
+}
+
+/**
+ * Allowlist for link targets: http(s), mailto, and relative or fragment URLs.
+ *
+ * Browsers drop whitespace and control characters inside a scheme (`java&#x09;script:` runs),
+ * so those are stripped before the scheme is read.
+ */
+function isSafeUrl(value) {
+    const url = value.replace(/[\u0000- \u007f]/g, "");
+    const scheme = url.match(/^([a-z][a-z0-9+.-]*):/i);
+    return !scheme || /^(https?|mailto)$/i.test(scheme[1]);
 }
 
 const MANAGER_ACTIONS = { search: "Search", build: "Build", validate: "Validate", chat: "Chat", done: "Done" };
@@ -513,9 +537,9 @@ function renderGraph() {
 
     graphLegend.hidden = !nodes.length;
     renderNotes();
-    runButton.disabled = running || !nodes.length;
+    runButton.disabled = graphLocked() || !nodes.length;
     runButton.textContent = running ? "Running…" : "Run";
-    deleteButton.disabled = running || !nodes.length;
+    deleteButton.disabled = graphLocked() || !nodes.length;
     if (deleteButton.disabled && deleting) armDelete(false);
 
     clearPick();
@@ -754,7 +778,7 @@ graphCanvas.addEventListener("scroll", closeEditor);
 
 graphCanvas.addEventListener("pointerdown", (evt) => {
     const port = evt.target.closest(".gport-group");
-    if (!port || running || deleting || picked || evt.button !== 0) return;
+    if (!port || graphLocked() || deleting || picked || evt.button !== 0) return;
     const svg = graphCanvas.querySelector("svg");
     if (!svg) return;
     evt.preventDefault();
@@ -805,7 +829,7 @@ window.addEventListener("pointerup", (evt) => {
  * both the confirmation and the way out. Escape leaves without removing anything.
  */
 function armDelete(on) {
-    deleting = on && !running;
+    deleting = on && !graphLocked();
     graphCanvas.classList.toggle("deleting", deleting);
     deleteButton.classList.toggle("armed", deleting);
     deleteButton.textContent = deleting ? "Click to delete…" : "Delete";
@@ -889,7 +913,7 @@ async function swapWith(nodeId) {
 
 graphCanvas.addEventListener("click", (evt) => {
     if (suppressClick) return void (suppressClick = false);
-    if (running) return;
+    if (graphLocked()) return;
 
     const hit = evt.target.closest("[data-edge]");
     const port = evt.target.closest(".gport-group");
@@ -937,7 +961,7 @@ graphCanvas.addEventListener("click", (evt) => {
  */
 graphCanvas.addEventListener("contextmenu", (evt) => {
     const hit = evt.target.closest("[data-edge]");
-    if (!hit || running) return;
+    if (!hit || graphLocked()) return;
     evt.preventDefault();
     if (picked) clearPick();
     if (deleting) armDelete(false);
@@ -954,6 +978,9 @@ function resetResultLayers() {
         layerCache.forEach((layer) => leafletMap.removeLayer(layer));
     }
     layerCache.clear();
+    layerLoads.clear();
+    resultsGeneration += 1;
+    layersListed = false;
     mapLayers = [];
     resultsButton.disabled = true;
     if (resultsWindow && !resultsWindow.hidden) renderLayerList();
@@ -984,7 +1011,7 @@ function logRun(kind, text, detail) {
  * Node states are mirrored onto the diagram so the run is visible where the graph is.
  */
 function runGraph() {
-    if (running || !(executionGraph.nodes || []).length) return;
+    if (graphLocked() || !(executionGraph.nodes || []).length) return;
 
     running = true;
     nodeRuns = {};
@@ -1057,6 +1084,12 @@ let mapLayers = [];
 let leafletMap = null;
 let baseLayer = null;
 const layerCache = new Map();
+// Fetches still loading, by layer key, so ticking a box twice never builds two layers.
+const layerLoads = new Map();
+// Bumped by every reset: a fetch that returns under an older number belongs to a previous run.
+let resultsGeneration = 0;
+// Whether this run's layers have been listed yet; the first listing shows the last layer.
+let layersListed = false;
 
 /**
  * Register the drawable outputs a finished node reported, so they can be offered as
@@ -1067,6 +1100,7 @@ function registerLayers(nodeId, process, geo) {
         mapLayers.push({
             key: `${nodeId}.${port}`, node: nodeId, process, port,
             kind: info.kind, count: info.features, index: mapLayers.length,
+            on: false, note: `${info.kind}${info.features > 1 ? ` · ${info.features}` : ""}`, noteEl: null,
         });
     });
     resultsButton.disabled = mapLayers.length === 0;
@@ -1088,11 +1122,21 @@ function styleFor(entry, distances) {
     };
 }
 
+/** Popup content for one feature, as nodes: the properties come from OSM and other external data. */
 function describeProperties(properties) {
-    const rows = Object.entries(properties || {})
-        .filter(([, v]) => v !== null && typeof v !== "object")
-        .map(([k, v]) => `<strong>${k}</strong>: ${v}`);
-    return rows.length ? rows.join("<br>") : "no attributes";
+    const rows = Object.entries(properties || {}).filter(([, v]) => v !== null && typeof v !== "object");
+    const el = document.createElement("div");
+    if (!rows.length) {
+        el.textContent = "no attributes";
+        return el;
+    }
+    rows.forEach(([k, v], i) => {
+        if (i) el.append(document.createElement("br"));
+        const key = document.createElement("strong");
+        key.textContent = k;
+        el.append(key, `: ${v}`);
+    });
+    return el;
 }
 
 /** Fit the map to everything currently switched on. */
@@ -1106,7 +1150,40 @@ function fitToVisible() {
     if (bounds && bounds.isValid()) leafletMap.fitBounds(bounds, { padding: [24, 24] });
 }
 
-async function toggleLayer(entry, on, noteEl) {
+/** Show `text` in the entry's row, and keep it for when the list is drawn again. */
+function setNote(entry, text) {
+    entry.note = text;
+    if (entry.noteEl) entry.noteEl.textContent = text;
+}
+
+/** Fetch one output and build its map layer; throws when the server has none. */
+async function fetchLayer(entry) {
+    const url = `/api/result?thread_id=${encodeURIComponent(threadId)}` +
+        `&node=${encodeURIComponent(entry.node)}&output=${encodeURIComponent(entry.port)}`;
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(String(response.status));
+    const collection = await response.json();
+    const distances = [...new Set((collection.features || [])
+        .map((f) => f.properties && f.properties.outerDistance)
+        .filter((v) => typeof v === "number"))].sort((a, b) => a - b);
+
+    const layer = L.geoJSON(collection, {
+        style: styleFor(entry, distances),
+        pointToLayer: (feature, latlng) => L.circleMarker(latlng, { radius: 5 }),
+        onEachFeature: (feature, lyr) => lyr.bindPopup(describeProperties(feature.properties)),
+    });
+    const note = collection.truncated
+        ? `showing ${collection.features.length} of ${collection.total}`
+        : `${collection.features.length} feature(s)`;
+    return { layer, note };
+}
+
+/**
+ * Switch one layer on or off. `entry.on` is what its box shows, so the map is made to
+ * follow it even when a fetch returns after the box changed or the results were reset.
+ */
+async function toggleLayer(entry, on) {
+    entry.on = on;
     if (!on) {
         const existing = layerCache.get(entry.key);
         if (existing) leafletMap.removeLayer(existing);
@@ -1115,28 +1192,25 @@ async function toggleLayer(entry, on, noteEl) {
     }
 
     if (!layerCache.has(entry.key)) {
-        noteEl.textContent = "loading…";
-        const url = `/api/result?thread_id=${encodeURIComponent(threadId)}` +
-            `&node=${encodeURIComponent(entry.node)}&output=${encodeURIComponent(entry.port)}`;
-        const response = await fetch(url);
-        if (!response.ok) {
-            noteEl.textContent = `failed (${response.status})`;
+        const generation = resultsGeneration;
+        setNote(entry, "loading…");
+        if (!layerLoads.has(entry.key)) layerLoads.set(entry.key, fetchLayer(entry));
+        let loaded;
+        try {
+            loaded = await layerLoads.get(entry.key);
+        } catch (err) {
+            if (generation !== resultsGeneration) return;
+            layerLoads.delete(entry.key);  // ticking again retries
+            setNote(entry, `failed (${err.message})`);
             return;
         }
-        const collection = await response.json();
-        const distances = [...new Set((collection.features || [])
-            .map((f) => f.properties && f.properties.outerDistance)
-            .filter((v) => typeof v === "number"))].sort((a, b) => a - b);
-
-        const layer = L.geoJSON(collection, {
-            style: styleFor(entry, distances),
-            pointToLayer: (feature, latlng) => L.circleMarker(latlng, { radius: 5 }),
-            onEachFeature: (feature, lyr) => lyr.bindPopup(describeProperties(feature.properties)),
-        });
-        layerCache.set(entry.key, layer);
-        noteEl.textContent = collection.truncated
-            ? `showing ${collection.features.length} of ${collection.total}`
-            : `${collection.features.length} feature(s)`;
+        // Reset while loading: the layer belongs to a run whose results are gone.
+        if (generation !== resultsGeneration) return;
+        layerLoads.delete(entry.key);
+        if (!layerCache.has(entry.key)) layerCache.set(entry.key, loaded.layer);
+        setNote(entry, loaded.note);
+        // Unticked while loading: kept for the next tick, not drawn.
+        if (!entry.on) return;
     }
 
     layerCache.get(entry.key).addTo(leafletMap);
@@ -1151,15 +1225,23 @@ function renderLayerList() {
         return;
     }
 
-    mapLayers.forEach((entry, i) => {
+    // Afterwards the boxes show what each entry holds, so a reopened list matches the map.
+    if (!layersListed) {
+        layersListed = true;
+        mapLayers[mapLayers.length - 1].on = true;
+    }
+
+    mapLayers.forEach((entry) => {
         const row = document.createElement("label");
         row.className = "layer-row";
 
         const box = document.createElement("input");
         box.type = "checkbox";
+        box.checked = entry.on;
         const note = document.createElement("span");
         note.className = "layer-note";
-        note.textContent = `${entry.kind}${entry.count > 1 ? ` · ${entry.count}` : ""}`;
+        entry.noteEl = note;
+        note.textContent = entry.note;
 
         const swatch = document.createElement("span");
         swatch.className = "layer-swatch";
@@ -1169,15 +1251,12 @@ function renderLayerList() {
         title.className = "layer-title";
         title.textContent = `${entry.process}.${entry.port}`;
 
-        box.addEventListener("change", () => toggleLayer(entry, box.checked, note));
+        box.addEventListener("change", () => toggleLayer(entry, box.checked));
 
         row.append(box, swatch, title, note);
         resultsLayers.appendChild(row);
 
-        if (i === mapLayers.length - 1) {
-            box.checked = true;
-            toggleLayer(entry, true, note);
-        }
+        if (entry.on) toggleLayer(entry, true);
     });
 }
 
@@ -1198,14 +1277,31 @@ document.getElementById("close-results").addEventListener("click", () => {
     resultsWindow.hidden = true;
 });
 
+/**
+ * Hold further sends while a turn streams. A second turn on the same thread would run
+ * alongside the first: both write into one conversation and their tokens interleave here.
+ * The input stays editable, so the next message can be typed while waiting. The graph is
+ * locked too, see `graphLocked`.
+ */
+function setChatting(on) {
+    chatting = on;
+    sendButton.disabled = on;
+    testPrompts.querySelectorAll("button").forEach((button) => {
+        button.disabled = on;
+    });
+    renderGraph();  // the Run and Delete buttons follow the lock
+}
+
 form.addEventListener("submit", (e) => {
     e.preventDefault();
+    if (chatting) return;
 
     const prompt = input.value.trim();
     if (!prompt) return;
 
     addMessage("user", prompt);
     input.value = "";
+    setChatting(true);
 
     let currentStep = null;
     let currentStepMessage = null;
@@ -1215,8 +1311,26 @@ form.addEventListener("submit", (e) => {
         `/api/stream?prompt=${encodeURIComponent(prompt)}&thread_id=${encodeURIComponent(threadId)}`
     );
 
+    // The server ends every turn with a `done` event, so a stream that closes without one broke.
+    let finished = false;
+    const finish = () => {
+        finished = true;
+        evtSource.close();
+        setChatting(false);
+        if (currentStepMessage) {
+            currentStepMessage.classList.remove("streaming");
+            currentStepMessage.classList.add("final");
+        }
+    };
+    const streamError = (text) => {
+        addMessage("assistant", text).classList.add("stream-error");
+    };
+
     evtSource.onmessage = (event) => {
         const data = JSON.parse(event.data);
+
+        if (data.event === "done") return finish();
+        if (data.event === "error") return streamError(`The assistant stopped with an error: ${data.error}`);
 
         if (data.event === "graph") {
             if (data.workflow_graph) {
@@ -1267,8 +1381,14 @@ form.addEventListener("submit", (e) => {
 
                 try {
                     const parsedContent = JSON.parse(currentStepText);
-                    currentStepMessage.innerHTML = `<strong>Action (${node}):</strong><br/>
-                        <pre style="margin: 5px 0 0 0; font-size: 0.9em;">${JSON.stringify(parsedContent, null, 2)}</pre>`;
+                    // Built as nodes, not HTML: tool results carry external text (OSM names, echoed prompts).
+                    const label = document.createElement("strong");
+                    label.textContent = `Action (${node}):`;
+                    const pre = document.createElement("pre");
+                    pre.style.margin = "5px 0 0 0";
+                    pre.style.fontSize = "0.9em";
+                    pre.textContent = JSON.stringify(parsedContent, null, 2);
+                    currentStepMessage.replaceChildren(label, pre);
                 } catch (e) {
                     renderMarkdown(currentStepMessage, currentStepText);
                 }
@@ -1285,12 +1405,10 @@ form.addEventListener("submit", (e) => {
     };
 
 
+    // Closed here either way: left open, EventSource reconnects and the prompt runs again.
     evtSource.onerror = () => {
-        evtSource.close();
-        if (currentStepMessage) {
-            currentStepMessage.classList.remove("streaming");
-            currentStepMessage.classList.add("final");
-        }
+        if (!finished) streamError("Connection to the assistant was lost; the reply may be incomplete.");
+        finish();
     };
 });
 
@@ -1318,6 +1436,7 @@ fetch("/api/test-prompts")
             button.className = "test-prompt";
             button.textContent = label;
             button.title = prompt;
+            button.disabled = chatting;
             button.addEventListener("click", () => {
                 input.value = prompt;
                 form.requestSubmit();

@@ -75,18 +75,30 @@ class CityBoundaryProcessor(BaseProcessor):
         super().__init__(processor_def, process_metadata)
 
     def _geocode(self, place: str):
-        """Return the boundary polygon Nominatim holds for a place name, or None."""
+        """Return the first area among Nominatim's hits for a place name, and why there is none.
+
+        The top hit is often a `place=*` node or a street rather than a boundary. A Point or
+        LineString would pass for a study area and leave every later step empty, so the first
+        polygon among the top hits is taken instead.
+        """
         response = requests.get(
             NOMINATIM_URL,
-            params={"q": place, "format": "jsonv2", "polygon_geojson": 1, "limit": 1},
+            params={"q": place, "format": "jsonv2", "polygon_geojson": 1, "limit": 5},
             headers={"User-Agent": USER_AGENT},
             timeout=HTTP_TIMEOUT,
         )
         response.raise_for_status()
-        hits = response.json()
-        if not hits or "geojson" not in hits[0]:
-            return None
-        return shape(hits[0]["geojson"])
+        found = []
+        for hit in response.json():
+            if "geojson" not in hit:
+                continue
+            geom = shape(hit["geojson"])
+            if geom.geom_type in ("Polygon", "MultiPolygon") and not geom.is_empty:
+                return geom, None
+            found.append(geom.geom_type)
+        if not found:
+            return None, None
+        return None, f"Nominatim matched only {', '.join(dict.fromkeys(found))}, not an area"
 
     def execute(self, data, outputs=None):
         place = data.get("place")
@@ -100,7 +112,7 @@ class CityBoundaryProcessor(BaseProcessor):
         geocode_error = None
         if place:
             try:
-                geom = self._geocode(place)
+                geom, geocode_error = self._geocode(place)
                 source = "nominatim"
             except (requests.RequestException, ValueError, KeyError, ShapelyError) as err:
                 geocode_error = f"Nominatim lookup failed ({type(err).__name__}: {err})"
@@ -114,7 +126,10 @@ class CityBoundaryProcessor(BaseProcessor):
                 )
             if len(bbox) != 4:
                 raise ProcessorExecuteError("bbox must be [minLon, minLat, maxLon, maxLat]")
-            geom = box(*(float(v) for v in bbox))
+            min_lon, min_lat, max_lon, max_lat = (float(v) for v in bbox)
+            if not (min_lon < max_lon and min_lat < max_lat):
+                raise ProcessorExecuteError("bbox must be [minLon, minLat, maxLon, maxLat] with min < max")
+            geom = box(min_lon, min_lat, max_lon, max_lat)
             source = "bbox"
 
         try:

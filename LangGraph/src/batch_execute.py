@@ -31,13 +31,12 @@ from pathlib import Path
 
 import httpx
 
-from src.batch import DEFAULT_VARIANT, load_results
+from src.batch import DEFAULT_VARIANT, load_results, variant_suffix
 from src.execution.runner import (
     ExecutionError,
     _post_execution,
-    _resolve_inputs,
     _resolve_server_url,
-    execution_order,
+    run_graph,
 )
 from src.llm.state.graph import CONFIG_KEYS
 
@@ -50,9 +49,7 @@ PLACEHOLDER = re.compile(r"^\s*<.*>\s*$")
 
 
 def executed_file(variant: str = DEFAULT_VARIANT) -> str:
-    return (
-        "executed.jsonl" if variant == DEFAULT_VARIANT else f"executed.{variant}.jsonl"
-    )
+    return f"executed{variant_suffix(variant)}.jsonl"
 
 
 def _sha1(value) -> str:
@@ -76,9 +73,19 @@ async def _describe(client: httpx.AsyncClient, cache: dict, node: dict) -> dict:
     server = _resolve_server_url(str(node["config"]["server_url"])).rstrip("/")
     key = (server, node["type"])
     if key not in cache:
-        response = await client.get(f"{server}/processes/{node['type']}", timeout=30)
-        response.raise_for_status()
-        cache[key] = response.json().get("inputs") or {}
+        try:
+            response = await client.get(
+                f"{server}/processes/{node['type']}", timeout=30
+            )
+            response.raise_for_status()
+            cache[key] = response.json().get("inputs") or {}
+        except (httpx.HTTPError, ValueError, AttributeError) as err:
+            # Nothing is answered and the node runs as built; with its server down it
+            # fails there and runs again next call. Cached: a dead server is asked once.
+            logger.warning(
+                "no description of %s from %s: %s", node["type"], server, err
+            )
+            cache[key] = {}
     return cache[key]
 
 
@@ -135,57 +142,44 @@ def signature(graph: dict) -> str:
 
 
 async def execute(graph: dict, client: httpx.AsyncClient, node_dir: Path) -> dict:
-    """Run a graph node by node, every output through the cache; never raises for a node."""
-    nodes = {n["id"]: n for n in graph["nodes"]}
-    incoming = {node_id: [] for node_id in nodes}
-    for edge in graph.get("edges", []):
-        if edge.get("target") in nodes and edge.get("source") in nodes:
-            incoming[edge["target"]].append(edge)
+    """Run a graph through the runner, every node's output through the cache; never raises for a node."""
+    keys, cached = {}, set()
 
-    results, record = {}, {}
-    for node_id in execution_order(graph):
-        node = nodes[node_id]
-        entry = record[node_id] = {
-            "type": node["type"],
-            "output": None,
-            "error": None,
-            "ms": 0,
-        }
-        failed = sorted(
-            e["source"] for e in incoming[node_id] if e["source"] not in results
-        )
-        if failed:
-            entry["error"] = f"skipped: depends on failed node(s) {', '.join(failed)}"
-            continue
-        try:
-            inputs = _resolve_inputs(node, incoming[node_id], results)
-        except ExecutionError as err:
-            entry["error"] = str(err)
-            continue
-        key = _sha1(
+    async def post(client: httpx.AsyncClient, node: dict, inputs: dict) -> dict:
+        key = keys[node["id"]] = _sha1(
             {
                 "process": node["type"],
-                "server": _resolve_server_url(node["config"]["server_url"]),
+                "server": _resolve_server_url(
+                    str((node.get("config") or {}).get("server_url"))
+                ),
                 "inputs": inputs,
             }
         )
         path = node_dir / f"{key}.json"
         if path.exists():
-            results[node_id] = json.loads(path.read_text(encoding="utf-8"))
+            cached.add(node["id"])
+            return json.loads(path.read_text(encoding="utf-8"))
+        produced = await _post_execution(client, node, inputs)
+        path.write_text(json.dumps(produced, ensure_ascii=False), encoding="utf-8")
+        return produced
+
+    record = {}
+    async for event in run_graph(graph, client, post):
+        if event["event"] not in ("node-done", "node-error", "node-skipped"):
+            continue
+        node_id = event["node"]
+        if event["event"] == "node-done":
+            output, error = keys[node_id], None
         else:
-            started = time.monotonic()
-            try:
-                results[node_id] = await _post_execution(client, node, inputs)
-            except (ExecutionError, httpx.HTTPError, ValueError) as err:
-                entry["error"] = str(err) or type(err).__name__
-                entry["ms"] = round((time.monotonic() - started) * 1000)
-                logger.warning("%s failed: %s", node["type"], entry["error"])
-                continue
-            entry["ms"] = round((time.monotonic() - started) * 1000)
-            path.write_text(
-                json.dumps(results[node_id], ensure_ascii=False), encoding="utf-8"
-            )
-        entry["output"] = key
+            output, error = None, event.get("error") or f"skipped: {event['reason']}"
+        # Time spent executing, so none for an output from the cache.
+        ms = 0 if node_id in cached else event.get("ms", 0)
+        record[node_id] = {
+            "type": event["process"],
+            "output": output,
+            "error": error,
+            "ms": ms,
+        }
     return {"ok": all(e["error"] is None for e in record.values()), "nodes": record}
 
 
@@ -235,6 +229,10 @@ async def execute_all(run_dir: Path, variant: str = DEFAULT_VARIANT) -> None:
                 run = await execute(graphs[sig], client, node_dir)
             except ExecutionError as err:  # a cycle: the graph cannot run at all
                 run = {"ok": False, "error": str(err), "nodes": {}}
+            except Exception as err:
+                # Recorded as not clean, so it runs again next call; the others go on.
+                logger.exception("%s failed", sig)
+                run = {"ok": False, "error": repr(err), "nodes": {}}
             record = {
                 "signature": sig,
                 "at": time.strftime("%Y-%m-%dT%H:%M:%S"),

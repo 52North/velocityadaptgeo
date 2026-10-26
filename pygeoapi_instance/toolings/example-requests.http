@@ -25,7 +25,7 @@ Accept: application/json
       "type": "Point",
       "coordinates": [7.1, 50.7]
     },
-    "distance": 0.01
+    "distance": 1000
   }
 }
 
@@ -46,7 +46,7 @@ Accept: application/json
         [7.2, 50.8]
       ]
     },
-    "distance": 0.02
+    "distance": 2000
   }
 }
 
@@ -72,6 +72,6 @@ Accept: application/json
         ]
       ]
     },
-    "distance": 0.05
+    "distance": 5000
   }
 }

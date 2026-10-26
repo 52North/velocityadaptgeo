@@ -28,7 +28,7 @@ async def fetch_json(client: httpx.AsyncClient, url: str) -> dict[str, Any] | No
         return None
 
 
-async def list_processes(client: httpx.AsyncClient, server: str) -> list[dict]:
+async def list_processes(client: httpx.AsyncClient, server: str) -> tuple[list[dict], bool]:
     """Fetch list of processes from OGC server, handling pagination.
 
     Retrieves {server}/processes and follows 'next' links for pagination.
@@ -38,7 +38,8 @@ async def list_processes(client: httpx.AsyncClient, server: str) -> list[dict]:
         server: Base server URL
 
     Returns:
-        List of process summaries
+        List of process summaries, and whether every page was fetched: only a complete
+        listing shows which processes the server no longer has
     """
     server = server.rstrip("/") + "/"
     url = urljoin(server, "processes")
@@ -46,8 +47,8 @@ async def list_processes(client: httpx.AsyncClient, server: str) -> list[dict]:
 
     while url:
         data = await fetch_json(client, url)
-        if not data:
-            break
+        if data is None:
+            return processes, False
         processes.extend(data.get("processes", []))
 
         next_url = None
@@ -57,7 +58,7 @@ async def list_processes(client: httpx.AsyncClient, server: str) -> list[dict]:
                 break
         url = next_url
 
-    return processes
+    return processes, True
 
 
 async def fetch_process_detail(

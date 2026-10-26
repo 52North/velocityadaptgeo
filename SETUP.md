@@ -9,15 +9,35 @@ cp LangGraph/.env.sample LangGraph/.env
 ```bash
 docker compose up
 ```
-then open `http://localhost:8000/`
+then open `http://localhost:8000/` - the API starts only after pygeoapi answers and the
+catalog crawl has finished, so the first start takes a while
+
+every port is published on the host's loopback only: the API has no auth and each chat turn
+spends the Anthropic key. From another machine, tunnel in and open the same address
+```bash
+ssh -L 8000:localhost:8000 <user>@<host>
+```
 
 re-crawl the process catalog without restarting the stack
 ```bash
 docker compose run --rm ogc-database
 ```
+a crawl also removes processes a server no longer lists and those of servers dropped from
+`OGC_SERVERS`; a server that cannot be listed completely keeps its entries
 
-change a model, embedding dimension, crawl target or OSM endpoint: edit the
-`environment:` block of that service in `docker-compose.yml`
+change the LLM, a crawl target or an OSM endpoint: edit the `environment:` block of that
+service in `docker-compose.yml`
+
+change the embedding model: set `OLLAMA_MODEL` (`x-ollama`) and `EMBED_DIM` (`postgres-vector`,
+the model's vector size) in `docker-compose.yml`, then rebuild the catalog. The vector column
+is sized only when the database volume is created, and vectors from two models cannot be
+compared, so the catalog is recreated rather than updated (it holds nothing a crawl does not
+rebuild)
+```bash
+docker compose down
+docker volume rm velocityadaptgeo_postgres_data
+docker compose up
+```
 
 run the API on the host instead of in compose - addresses default to the compose
 service names, so off-network runs must override them
@@ -25,5 +45,5 @@ service names, so off-network runs must override them
 # ./LangGraph
 DB_DSN=postgresql://postgres:postgres@localhost:5432/velocityadaptgeo \
 OLLAMA_BASE_URL=http://localhost:11434 \
-uv run uvicorn src.app:app --host 0.0.0.0 --port 8000
+uv run uvicorn src.app:app --host 127.0.0.1 --port 8000
 ```

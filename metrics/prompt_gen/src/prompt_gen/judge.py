@@ -187,6 +187,11 @@ errors, copy the rewritten request unchanged."""
 # --- both --------------------------------------------------------------------------------------
 
 
+class JudgeError(RuntimeError):
+    """The judge's answer is unusable (bad JSON, wrong constraint ids). Deterministic at temperature 0,
+    so retrying the same candidate gives the same error; Ollama connection errors are not wrapped."""
+
+
 class Judge:
     def __init__(self, config: JudgeConfig, host: str, num_ctx: int):
         self.config = config
@@ -260,11 +265,14 @@ class Judge:
         candidate: str,
         stem_result: StemCheck | None = None,
     ) -> Judgement:
-        verdicts, timing_a = self.check_constraints(seed, candidate)
-        # Always run, even after a failed constraint: review may overrule the constraint verdict.
-        b, timing_b = self.check_category_grammar(
-            seed, category, candidate, stem_result
-        )
+        try:
+            verdicts, timing_a = self.check_constraints(seed, candidate)
+            # Always run, even after a failed constraint: review may overrule the constraint verdict.
+            b, timing_b = self.check_category_grammar(
+                seed, category, candidate, stem_result
+            )
+        except ValueError as e:  # includes pydantic's ValidationError
+            raise JudgeError(str(e)) from e
         return combine(verdicts, b, candidate, timing_a, timing_b)
 
 

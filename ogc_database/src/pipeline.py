@@ -8,7 +8,7 @@ import httpx
 
 from .client import fetch_process_detail, list_processes
 from .config import CONCURRENT_REQUESTS, HTTP_TIMEOUT
-from .database import save_all
+from .database import check_dimension, save_all
 from .embeddings import build_embedding_text, create_embedder, encode_texts
 
 log = logging.getLogger("ogc-indexer")
@@ -18,7 +18,7 @@ async def crawl_server(
     client: httpx.AsyncClient,
     sem: asyncio.Semaphore,
     server: str,
-) -> list[tuple[str, str, str, dict]]:
+) -> tuple[list[tuple[str, str, str, dict]], bool]:
     """Crawl a single OGC server for all processes and their metadata.
 
     Args:
@@ -27,11 +27,12 @@ async def crawl_server(
         server: Server URL to crawl
 
     Returns:
-        List of (server, process_id, resource_url, metadata) tuples
+        List of (server, process_id, resource_url, metadata) tuples, and whether the
+        server's process listing was complete
     """
     log.info("Listing processes for %s", server)
-    summaries = await list_processes(client, server)
-    log.info("  Found %d processes", len(summaries))
+    summaries, complete = await list_processes(client, server)
+    log.info("  Found %d processes%s", len(summaries), "" if complete else " (listing incomplete)")
 
     results: list[tuple[str, str, str, dict]] = []
 
@@ -48,31 +49,37 @@ async def crawl_server(
         results.append((server, pid, resource_url, detail))
 
     await asyncio.gather(*(handle(s) for s in summaries))
-    return results
+    return results, complete
 
 
 async def crawl_all_servers(
     servers: list[str],
-) -> list[tuple[str, str, str, dict]]:
+) -> tuple[list[tuple[str, str, str, dict]], set[str]]:
     """Crawl all configured OGC servers.
 
     Args:
         servers: List of server base URLs
 
     Returns:
-        Combined list of (server, process_id, resource_url, metadata) from all servers
+        Combined list of (server, process_id, resource_url, metadata) from all servers,
+        and the servers whose process listing was complete
     """
     all_results: list[tuple[str, str, str, dict]] = []
+    listed: set[str] = set()
 
     async with httpx.AsyncClient(timeout=HTTP_TIMEOUT, follow_redirects=True) as client:
         sem = asyncio.Semaphore(CONCURRENT_REQUESTS)
         for server in servers:
             try:
-                all_results.extend(await crawl_server(client, sem, server))
+                results, complete = await crawl_server(client, sem, server)
             except Exception as e:
                 log.error("Server %s failed: %s", server, e)
+                continue
+            all_results.extend(results)
+            if complete:
+                listed.add(server)
 
-    return all_results
+    return all_results, listed
 
 
 async def run_pipeline(
@@ -92,19 +99,20 @@ async def run_pipeline(
     log.info("Starting OGC crawl pipeline...")
 
     # Crawl
-    all_results = await crawl_all_servers(servers)
-
-    if not all_results:
-        log.warning("No processes collected, exiting.")
-        return
+    all_results, listed = await crawl_all_servers(servers)
 
     # Embed
-    log.info("Embedding %d process descriptions...", len(all_results))
-    embedder = create_embedder(embed_model_name, embed_base_url)
-    texts = [build_embedding_text(meta) for _, _, _, meta in all_results]
-    embeddings = encode_texts(embedder, texts)
+    embeddings: list[list[float]] = []
+    if all_results:
+        log.info("Embedding %d process descriptions...", len(all_results))
+        embedder = create_embedder(embed_model_name, embed_base_url)
+        texts = [build_embedding_text(meta) for _, _, _, meta in all_results]
+        embeddings = encode_texts(embedder, texts)
+        check_dimension(db_dsn, len(embeddings[0]), embed_model_name)
+    else:
+        log.warning("No processes collected.")
 
-    # Store
-    save_all(db_dsn, all_results, embeddings)
+    # Store, and remove what the servers no longer have
+    save_all(db_dsn, all_results, embeddings, servers, listed)
 
     log.info("Pipeline complete.")

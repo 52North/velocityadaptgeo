@@ -49,3 +49,27 @@ ON CONFLICT (server_url, process_id) DO UPDATE SET
     embedding    = EXCLUDED.embedding,
     fetched_at   = now();
 """
+
+# Declared size of the embedding column: pgvector keeps it as the type modifier
+EMBEDDING_DIM_SQL = """
+SELECT atttypmod FROM pg_attribute
+WHERE attrelid = 'ogc_processes'::regclass AND attname = 'embedding';
+"""
+
+# How to change the embedding model, for the error when the sizes do not match (SETUP.md)
+REBUILD_HINT = (
+    "The column is sized once, from EMBED_DIM, when the database volume is created. To change "
+    "the embedding model, set OLLAMA_MODEL (x-ollama) and EMBED_DIM (postgres-vector) in "
+    "docker-compose.yml to the model and its size, then rebuild the catalog: docker compose down "
+    "&& docker volume rm velocityadaptgeo_postgres_data && docker compose up"
+)
+
+# Processes a server no longer lists; run only for servers whose listing was complete
+DELETE_GONE_SQL = """
+DELETE FROM ogc_processes WHERE server_url = %s AND NOT (process_id = ANY(%s));
+"""
+
+# Processes of servers no longer configured; the LangGraph runner refuses to execute them
+DELETE_UNCONFIGURED_SQL = """
+DELETE FROM ogc_processes WHERE NOT (server_url = ANY(%s));
+"""
