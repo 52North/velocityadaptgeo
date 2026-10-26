@@ -41,8 +41,10 @@ services:
       # Per request: the largest bounding box queried, and Overpass's memory cap (256 MiB).
       OVERPASS_MAX_AREA_KM2: "2500"
       OVERPASS_MAXSIZE: "268435456"
+    # Host loopback only, like every published port: containers reach each other by service
+    # name, and host runs (SETUP.md, src.batch) use localhost.
     ports:
-      - "5000:80"
+      - "127.0.0.1:5000:80"
     # The mcp server and the catalog crawler read /processes once at startup, so they wait
     # until it answers, not just until the container has started.
     healthcheck:
@@ -56,8 +58,10 @@ services:
     build:
       context: ./LangGraph
       dockerfile: Dockerfile
+    # No auth, and every chat turn spends the Anthropic key: host loopback only. From another
+    # machine, tunnel in: ssh -L 8000:localhost:8000 <user>@<host>
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     dns:
       - 8.8.8.8
     env_file:
@@ -103,7 +107,7 @@ services:
     dns:
       - 8.8.8.8
     ports:
-      - "8001:8001"
+      - "127.0.0.1:8001:8001"
     depends_on:
       pygeoapi:
         condition: service_healthy
@@ -139,8 +143,9 @@ services:
     container_name: ollama
     environment:
       OLLAMA_HOST: 0.0.0.0:11434
+    # No auth on the Ollama API: host loopback only.
     ports:
-      - "11434:11434"
+      - "127.0.0.1:11434:11434"
     volumes:
       - ollama:/root/.ollama
     restart: unless-stopped
@@ -168,8 +173,9 @@ services:
     environment:
       <<: *postgres
       EMBED_DIM: "768"
+    # Superuser postgres/postgres: host loopback only.
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - ./ogc_database/sql:/docker-entrypoint-initdb.d:ro
       - postgres_data:/var/lib/postgresql/data

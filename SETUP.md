@@ -12,6 +12,12 @@ docker compose up
 then open `http://localhost:8000/` - the API starts only after pygeoapi answers and the
 catalog crawl has finished, so the first start takes a while
 
+every port is published on the host's loopback only: the API has no auth and each chat turn
+spends the Anthropic key. From another machine, tunnel in and open the same address
+```bash
+ssh -L 8000:localhost:8000 <user>@<host>
+```
+
 re-crawl the process catalog without restarting the stack
 ```bash
 docker compose run --rm ogc-database
@@ -26,5 +32,5 @@ service names, so off-network runs must override them
 # ./LangGraph
 DB_DSN=postgresql://postgres:postgres@localhost:5432/velocityadaptgeo \
 OLLAMA_BASE_URL=http://localhost:11434 \
-uv run uvicorn src.app:app --host 0.0.0.0 --port 8000
+uv run uvicorn src.app:app --host 127.0.0.1 --port 8000
 ```
