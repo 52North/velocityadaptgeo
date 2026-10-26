@@ -1,6 +1,7 @@
 const form = document.getElementById("chat-form");
 const testPrompts = document.getElementById("test-prompts");
 const input = document.getElementById("prompt");
+const sendButton = form.querySelector('button[type="submit"]');
 const graphCanvas = document.getElementById("graph");
 const graphStatus = document.getElementById("graph-status");
 const graphLegend = document.getElementById("graph-legend");
@@ -28,6 +29,15 @@ let lastValidation = null;
 let unmetCapabilities = [];
 let nodeRuns = {};
 let running = false;
+let chatting = false;
+
+/**
+ * No hand edits or runs while a run or a chat turn is in progress: a turn rewrites the
+ * thread's graph as it goes, so an edit made meanwhile could be lost or lose the turn's.
+ */
+function graphLocked() {
+    return running || chatting;
+}
 let deleting = false;
 let picked = null;
 let nodeH = NODE_H;
@@ -527,9 +537,9 @@ function renderGraph() {
 
     graphLegend.hidden = !nodes.length;
     renderNotes();
-    runButton.disabled = running || !nodes.length;
+    runButton.disabled = graphLocked() || !nodes.length;
     runButton.textContent = running ? "Running…" : "Run";
-    deleteButton.disabled = running || !nodes.length;
+    deleteButton.disabled = graphLocked() || !nodes.length;
     if (deleteButton.disabled && deleting) armDelete(false);
 
     clearPick();
@@ -768,7 +778,7 @@ graphCanvas.addEventListener("scroll", closeEditor);
 
 graphCanvas.addEventListener("pointerdown", (evt) => {
     const port = evt.target.closest(".gport-group");
-    if (!port || running || deleting || picked || evt.button !== 0) return;
+    if (!port || graphLocked() || deleting || picked || evt.button !== 0) return;
     const svg = graphCanvas.querySelector("svg");
     if (!svg) return;
     evt.preventDefault();
@@ -819,7 +829,7 @@ window.addEventListener("pointerup", (evt) => {
  * both the confirmation and the way out. Escape leaves without removing anything.
  */
 function armDelete(on) {
-    deleting = on && !running;
+    deleting = on && !graphLocked();
     graphCanvas.classList.toggle("deleting", deleting);
     deleteButton.classList.toggle("armed", deleting);
     deleteButton.textContent = deleting ? "Click to delete…" : "Delete";
@@ -903,7 +913,7 @@ async function swapWith(nodeId) {
 
 graphCanvas.addEventListener("click", (evt) => {
     if (suppressClick) return void (suppressClick = false);
-    if (running) return;
+    if (graphLocked()) return;
 
     const hit = evt.target.closest("[data-edge]");
     const port = evt.target.closest(".gport-group");
@@ -951,7 +961,7 @@ graphCanvas.addEventListener("click", (evt) => {
  */
 graphCanvas.addEventListener("contextmenu", (evt) => {
     const hit = evt.target.closest("[data-edge]");
-    if (!hit || running) return;
+    if (!hit || graphLocked()) return;
     evt.preventDefault();
     if (picked) clearPick();
     if (deleting) armDelete(false);
@@ -998,7 +1008,7 @@ function logRun(kind, text, detail) {
  * Node states are mirrored onto the diagram so the run is visible where the graph is.
  */
 function runGraph() {
-    if (running || !(executionGraph.nodes || []).length) return;
+    if (graphLocked() || !(executionGraph.nodes || []).length) return;
 
     running = true;
     nodeRuns = {};
@@ -1222,14 +1232,31 @@ document.getElementById("close-results").addEventListener("click", () => {
     resultsWindow.hidden = true;
 });
 
+/**
+ * Hold further sends while a turn streams. A second turn on the same thread would run
+ * alongside the first: both write into one conversation and their tokens interleave here.
+ * The input stays editable, so the next message can be typed while waiting. The graph is
+ * locked too, see `graphLocked`.
+ */
+function setChatting(on) {
+    chatting = on;
+    sendButton.disabled = on;
+    testPrompts.querySelectorAll("button").forEach((button) => {
+        button.disabled = on;
+    });
+    renderGraph();  // the Run and Delete buttons follow the lock
+}
+
 form.addEventListener("submit", (e) => {
     e.preventDefault();
+    if (chatting) return;
 
     const prompt = input.value.trim();
     if (!prompt) return;
 
     addMessage("user", prompt);
     input.value = "";
+    setChatting(true);
 
     let currentStep = null;
     let currentStepMessage = null;
@@ -1317,6 +1344,7 @@ form.addEventListener("submit", (e) => {
 
     evtSource.onerror = () => {
         evtSource.close();
+        setChatting(false);
         if (currentStepMessage) {
             currentStepMessage.classList.remove("streaming");
             currentStepMessage.classList.add("final");
@@ -1348,6 +1376,7 @@ fetch("/api/test-prompts")
             button.className = "test-prompt";
             button.textContent = label;
             button.title = prompt;
+            button.disabled = chatting;
             button.addEventListener("click", () => {
                 input.value = prompt;
                 form.requestSubmit();

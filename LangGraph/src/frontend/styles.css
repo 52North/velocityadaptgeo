@@ -262,6 +262,20 @@ button:hover {
     background: #16a34a;
 }
 
+button:disabled,
+button:disabled:hover {
+    background: #1e293b;
+    color: #64748b;
+    cursor: not-allowed;
+}
+
+.test-prompt:disabled,
+.test-prompt:disabled:hover {
+    border-color: #1e293b;
+    background: #0f172a;
+    color: #475569;
+}
+
 /* RIGHT SIDE (EXECUTION GRAPH) */
 
 .right-panel {
