@@ -6,7 +6,7 @@ import logging
 import psycopg
 from pgvector.psycopg import register_vector
 
-from .config import UPSERT_SQL
+from .config import DELETE_GONE_SQL, DELETE_UNCONFIGURED_SQL, UPSERT_SQL
 
 log = logging.getLogger("ogc-indexer")
 
@@ -62,17 +62,37 @@ def save_all(
     dsn: str,
     results: list[tuple[str, str, str, dict]],
     embeddings: list[list[float]],
+    servers: list[str],
+    listed: set[str],
 ) -> None:
-    """Save all process records to the database.
+    """Save all process records and remove the ones the servers no longer have.
+
+    A server keeps its existing records unless its listing was complete: a server that
+    is down or failed partway through would otherwise lose its whole catalog. Everything
+    happens in one transaction.
 
     Args:
         dsn: PostgreSQL connection string
         results: List of (server, process_id, url, metadata) tuples
         embeddings: List of embedding vectors
+        servers: Every configured server
+        listed: The servers whose process listing was complete
     """
     log.info("Writing to database...")
     with connect(dsn) as conn:
         for (server, pid, url, meta), emb in zip(results, embeddings):
             upsert_process(conn, server, pid, url, meta, emb)
+        with conn.cursor() as cur:
+            for server in servers:
+                if server not in listed:
+                    log.warning("Kept the existing records of %s: its listing was incomplete.", server)
+                    continue
+                ids = [pid for s, pid, _, _ in results if s == server]
+                cur.execute(DELETE_GONE_SQL, (server, ids))
+                if cur.rowcount:
+                    log.info("Removed %d processes %s no longer lists.", cur.rowcount, server)
+            cur.execute(DELETE_UNCONFIGURED_SQL, (list(servers),))
+            if cur.rowcount:
+                log.info("Removed %d processes of servers no longer configured.", cur.rowcount)
         conn.commit()
     log.info("Stored %d records.", len(results))

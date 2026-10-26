@@ -22,6 +22,8 @@ re-crawl the process catalog without restarting the stack
 ```bash
 docker compose run --rm ogc-database
 ```
+a crawl also removes processes a server no longer lists and those of servers dropped from
+`OGC_SERVERS`; a server that cannot be listed completely keeps its entries
 
 change a model, embedding dimension, crawl target or OSM endpoint: edit the
 `environment:` block of that service in `docker-compose.yml`

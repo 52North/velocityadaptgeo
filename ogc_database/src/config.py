@@ -49,3 +49,13 @@ ON CONFLICT (server_url, process_id) DO UPDATE SET
     embedding    = EXCLUDED.embedding,
     fetched_at   = now();
 """
+
+# Processes a server no longer lists; run only for servers whose listing was complete
+DELETE_GONE_SQL = """
+DELETE FROM ogc_processes WHERE server_url = %s AND NOT (process_id = ANY(%s));
+"""
+
+# Processes of servers no longer configured; the LangGraph runner refuses to execute them
+DELETE_UNCONFIGURED_SQL = """
+DELETE FROM ogc_processes WHERE NOT (server_url = ANY(%s));
+"""
