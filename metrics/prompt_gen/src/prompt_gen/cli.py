@@ -1,4 +1,13 @@
-"""prompt-gen run | check-judge | rejudge | backfill-closest | backfill-embeddings"""
+"""prompt-gen run | check-judge | rejudge | backfill-closest | backfill-embeddings
+
+    run                  generate paraphrases for a seed into out/<run_id>/, or resume a run
+    check-judge          run the judge on the seed's trap and grammar sets, to check it before a run
+    rejudge              re-judge stored candidates with the current judge (rejudged_<time>.jsonl)
+    backfill-closest     add each candidate's closest matches to an older run's candidates.jsonl
+    backfill-embeddings  write embeddings.jsonl for an older run, for prompt-review's live similarities
+
+Hugging Face models are cached in models/ (HF_HOME), set before sentence-transformers is imported.
+"""
 
 import argparse
 import os
