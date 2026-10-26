@@ -4,9 +4,7 @@ from functools import lru_cache
 import os
 import time
 import logging
-from typing import Any
 
-import httpx
 import psycopg
 from langchain_core.tools import tool
 from langchain_ollama import OllamaEmbeddings
@@ -23,7 +21,6 @@ DB_DSN = os.environ.get("DB_DSN") or "postgresql://{}:{}@{}:{}/{}".format(
 )
 OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://ollama:11434")
 OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "nomic-embed-text")
-HTTP_TIMEOUT = float(os.environ.get("HTTP_TIMEOUT", "30.0"))
 
 logger = logging.getLogger(__name__)
 
@@ -68,8 +65,7 @@ def search_ogc_processes(query: str, k: int = 5) -> list[dict]:
 
     Use this whenever you need to find a geospatial process that can perform
     a requested operation (buffering, routing, raster ops, etc.). Returns a
-    ranked list of candidate processes. To actually run one, call
-    `execute_ogc_process` with the chosen `server_url` and `process_id`.
+    ranked list of candidate processes.
 
     Args:
         query: What you want to do, in plain language.
@@ -132,35 +128,3 @@ def search_ogc_processes(query: str, k: int = 5) -> list[dict]:
         }
         for r in rows
     ]
-
-@tool
-async def execute_ogc_process(
-    server_url: str,
-    process_id: str,
-    inputs: dict[str, Any],
-) -> dict:
-    """Execute an OGC API process discovered via `search_ogc_processes`.
-
-    Args:
-        server_url: Base URL of the OGC API server (from the search result).
-        process_id: ID of the process to run (from the search result).
-        inputs: Dict matching the process's `inputs` schema.
-
-    Returns:
-        The process result as returned by the server (synchronous execution).
-    """
-    url = f"{server_url.rstrip('/')}/processes/{process_id}/execution"
-    payload = {"inputs": inputs}
-
-    async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
-        resp = await client.post(
-            url,
-            json=payload,
-            headers={"Prefer": "respond-sync", "Accept": "application/json"},
-        )
-        resp.raise_for_status()
-        return resp.json()
-
-async def load_ogc_tools() -> list:
-    """Return LangChain tools backed by the pgvector OGC catalog."""
-    return [search_ogc_processes, execute_ogc_process]

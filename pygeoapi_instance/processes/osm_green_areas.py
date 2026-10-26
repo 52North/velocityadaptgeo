@@ -52,6 +52,8 @@ def ql_string(value) -> str:
 class OsmGreenAreasProcessor(BaseProcessor):
     """OGC API - Processes: tagged OSM land-cover polygons within an area."""
 
+    default_tags = DEFAULT_TAGS  # replaced by subclasses that extract other features
+
     def __init__(self, processor_def):
         process_metadata = {
             "id": "osm-green-areas",
@@ -214,9 +216,9 @@ class OsmGreenAreasProcessor(BaseProcessor):
         try:
             area = load_area(data["area"])
         except (KeyError, ValueError, ShapelyError) as err:
-            raise ProcessorExecuteError(f"osm-green-areas needs a valid 'area': {err}")
+            raise ProcessorExecuteError(f"{self.metadata['id']} needs a valid 'area': {err}")
 
-        tags = data.get("tags") or DEFAULT_TAGS
+        tags = data.get("tags") or self.default_tags
         if not isinstance(tags, dict) or not tags:
             raise ProcessorExecuteError("'tags' must be a non-empty object")
 

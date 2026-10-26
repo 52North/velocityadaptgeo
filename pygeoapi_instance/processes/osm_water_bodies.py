@@ -1,14 +1,13 @@
 """Blue-space branch of the enriched cool-spots chain: open water inside the study area.
 
 Runs independently of `osm-green-areas` - both need only the study-area boundary - so the
-two extractions form the parallel branches of the graph. The Overpass querying and
-polygon assembly are inherited unchanged; only the tag defaults and the metadata differ.
+two extractions form the parallel branches of the graph. Everything else - the Overpass
+querying, the polygon assembly and `execute` - is inherited; only the tag defaults and the
+metadata differ.
 """
 
-from pygeoapi.process.base import BaseProcessor, ProcessorExecuteError
-from shapely.errors import ShapelyError
+from pygeoapi.process.base import BaseProcessor
 
-from processes._geo import explode_polygons, feature_collection, load_area
 from processes.osm_green_areas import OsmGreenAreasProcessor
 
 DEFAULT_WATER_TAGS = {
@@ -20,6 +19,8 @@ DEFAULT_WATER_TAGS = {
 
 class OsmWaterBodiesProcessor(OsmGreenAreasProcessor):
     """OGC API - Processes: open-water polygons within an area."""
+
+    default_tags = DEFAULT_WATER_TAGS
 
     def __init__(self, processor_def):
         # BaseProcessor directly, not super(): the parent's __init__ exists only to install
@@ -79,23 +80,3 @@ class OsmWaterBodiesProcessor(OsmGreenAreasProcessor):
                 }
             },
         })
-
-    def execute(self, data, outputs=None):
-        try:
-            area = load_area(data["area"])
-        except (KeyError, ValueError, ShapelyError) as err:
-            raise ProcessorExecuteError(f"osm-water-bodies needs a valid 'area': {err}")
-
-        tags = data.get("tags") or DEFAULT_WATER_TAGS
-        if not isinstance(tags, dict) or not tags:
-            raise ProcessorExecuteError("'tags' must be a non-empty object")
-
-        kept = []
-        for polygon, osm_tags in self._polygons(self._query(area.bounds, tags)):
-            for part in explode_polygons(polygon.intersection(area)):
-                kept.append((part, {k: v for k, v in osm_tags.items() if k in tags}))
-
-        return "application/json", {
-            "features": feature_collection(kept),
-            "count": len(kept),
-        }

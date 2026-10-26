@@ -34,8 +34,8 @@ reasonable readings of the prompt lie, which is what the ballpark thresholds are
 
 import argparse
 import json
-import math
 import statistics
+import sys
 from collections import defaultdict
 from pathlib import Path
 
@@ -46,6 +46,11 @@ from shapely.geometry import shape
 
 import cool_spots
 
+# Run-file names and format, and the summary's interval, from LangGraph (stdlib only).
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "LangGraph"))
+from src.batch import _read_jsonl, variant_suffix
+from src.batch_summary import wilson
+
 REFERENCE = Path(__file__).parent / "outputs" / "reference.gpkg"
 TARGETS = {"muenster_green_300m": "within", "muenster_coolspots_300m": "beyond"}
 GRID_M = 25
@@ -53,15 +58,6 @@ GRID_M = 25
 # natural=wood: 0.911 / 0.582 / 0.805), less the ~0.01 the process chain scores below the reference.
 THRESHOLDS = {"within": 0.90, "beyond": 0.55, "bands": 0.78}
 GREEN = (-1.0, 0.0)  # band of a point inside a green space: agrees only with the same
-
-
-def _suffix(variant: str) -> str:
-    return "" if variant == "pgvector" else f".{variant}"
-
-
-def _read_jsonl(path: Path) -> list[dict]:
-    with path.open(encoding="utf-8") as f:
-        return [json.loads(line) for line in f if line.strip()]
 
 
 def load_reference(path: Path = REFERENCE) -> dict:
@@ -229,16 +225,6 @@ def correct(m: dict, target: str, limit: float) -> bool:
     )
 
 
-def wilson(k: int, n: int, z: float = 1.96) -> tuple[float, float]:
-    """95% Wilson score interval, as in LangGraph/src/batch_summary.py."""
-    if n == 0:
-        return 0.0, 1.0
-    p = k / n
-    centre = (p + z * z / (2 * n)) / (1 + z * z / n)
-    half = z / (1 + z * z / n) * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n))
-    return max(0.0, centre - half), min(1.0, centre + half)
-
-
 def grade(run_dir: Path, variant: str, target: str | None, grid_m: float) -> None:
     seed_id = json.loads((run_dir / "config.json").read_text(encoding="utf-8"))["seed"][
         "id"
@@ -249,7 +235,12 @@ def grade(run_dir: Path, variant: str, target: str | None, grid_m: float) -> Non
     ref_bands = grid.bands(ref)
     executions = run_dir / "executions"
 
-    lines = _read_jsonl(run_dir / f"executed{_suffix(variant)}.jsonl")
+    executed = run_dir / f"executed{variant_suffix(variant)}.jsonl"
+    if not executed.exists():
+        raise SystemExit(
+            f"{executed} does not exist; run `python -m src.batch {run_dir} --execute` first"
+        )
+    lines = _read_jsonl(executed)
     by_sig = {}
     for sig in sorted({line["signature"] for line in lines}):
         execution = json.loads((executions / f"{sig}.json").read_text(encoding="utf-8"))
@@ -272,7 +263,9 @@ def grade(run_dir: Path, variant: str, target: str | None, grid_m: float) -> Non
             "correct": correct(m, target, ref["outer_m"]),
         }
 
-    with (run_dir / f"grades{_suffix(variant)}.jsonl").open("w", encoding="utf-8") as f:
+    with (run_dir / f"grades{variant_suffix(variant)}.jsonl").open(
+        "w", encoding="utf-8"
+    ) as f:
         for line in lines:
             f.write(
                 json.dumps(

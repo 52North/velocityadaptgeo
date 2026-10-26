@@ -75,7 +75,6 @@ services:
       MODEL_PRICES_PER_MTOK: claude-haiku-5-5=0.10,0.50
       MAX_WORKFLOW_ITERATIONS: "16"
       MAX_MAP_FEATURES: "3000"
-      HTTP_TIMEOUT: "30"
       # pgvector (catalog search) or mcp (every tool of the mcp service); src.batch --variant overrides it.
       WORKFLOW_VARIANT: pgvector
       MCP_URL: http://mcp:8001/mcp

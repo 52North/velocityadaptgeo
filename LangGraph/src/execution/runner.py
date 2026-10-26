@@ -10,10 +10,11 @@ produce is runnable without changes here.
 """
 
 import asyncio
+import contextlib
 import logging
 import os
 import time
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from urllib.parse import quote
 
 import httpx
@@ -229,12 +230,18 @@ async def _post_execution(client: httpx.AsyncClient, node: dict, inputs: dict) -
     return response.json()
 
 
-async def run_graph(graph: dict) -> AsyncIterator[dict]:
+async def run_graph(
+    graph: dict,
+    client: httpx.AsyncClient | None = None,
+    post: Callable[[httpx.AsyncClient, dict, dict], Awaitable[dict]] = _post_execution,
+) -> AsyncIterator[dict]:
     """Execute every node in dependency order, yielding progress events as they happen.
 
     Events carry full payloads under `outputs`/`inputs`; use `summarise()` before sending
     them anywhere size-sensitive. A failing node does not abort the run - its dependents
-    are reported as skipped so a partial result is still useful for debugging.
+    are reported as skipped so a partial result is still useful for debugging. `client` and
+    `post` (how one node is run) let a caller share a client or wrap the call, as the batch
+    executor does with its output cache.
     """
     nodes = {n["id"]: n for n in graph.get("nodes", [])}
     if not nodes:
@@ -252,7 +259,7 @@ async def run_graph(graph: dict) -> AsyncIterator[dict]:
     results: dict[str, dict] = {}
     failed: set[str] = set()
 
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient() if client is None else contextlib.nullcontext(client) as http:
         for node_id in order:
             node = nodes[node_id]
 
@@ -276,7 +283,7 @@ async def run_graph(graph: dict) -> AsyncIterator[dict]:
 
             started = time.monotonic()
             try:
-                produced = await _post_execution(client, node, inputs)
+                produced = await post(http, node, inputs)
             except (ExecutionError, httpx.HTTPError, ValueError) as err:
                 failed.add(node_id)
                 message = str(err) or type(err).__name__

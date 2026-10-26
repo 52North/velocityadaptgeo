@@ -75,9 +75,14 @@ def _sha1(text: str) -> str:
     return hashlib.sha1(text.encode("utf-8")).hexdigest()
 
 
+def variant_suffix(variant: str = DEFAULT_VARIANT) -> str:
+    """`.<variant>` in a variant's file names; none for pgvector's, as before there were variants."""
+    return "" if variant == DEFAULT_VARIANT else f".{variant}"
+
+
 def results_file(variant: str = DEFAULT_VARIANT) -> str:
-    """The results file of a variant; the bare name is pgvector's, as before there were variants."""
-    return RESULTS_FILE if variant == DEFAULT_VARIANT else f"workflows.{variant}.jsonl"
+    """The results file of a variant (`workflows[.<variant>].jsonl`)."""
+    return f"workflows{variant_suffix(variant)}.jsonl"
 
 
 def thread_id(run_dir: Path, key: str, variant: str = DEFAULT_VARIANT) -> str:

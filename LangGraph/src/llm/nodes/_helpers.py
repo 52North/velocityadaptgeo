@@ -1,9 +1,6 @@
 """Shared helpers for retriever, builder, and validator nodes."""
 
-import json
 from typing import Any
-
-from langchain_core.messages import ToolMessage
 
 
 def _log(
@@ -63,18 +60,3 @@ def _summarize(obj: Any) -> Any:
     if isinstance(obj, dict):
         return {k: type(v).__name__ for k, v in obj.items()}
     return str(obj)[:200]
-
-
-def _last_tool_result(messages: list, tool_name: str) -> Any:
-    """Walk the agent transcript backwards to find the most recent ToolMessage
-    produced by the named tool, returning its parsed content."""
-    for msg in reversed(messages):
-        if isinstance(msg, ToolMessage) and getattr(msg, "name", None) == tool_name:
-            content = msg.content
-            if isinstance(content, str):
-                try:
-                    return json.loads(content)
-                except json.JSONDecodeError:
-                    return content
-            return content
-    return None
