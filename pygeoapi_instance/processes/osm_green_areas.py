@@ -10,7 +10,7 @@ from shapely.errors import ShapelyError
 from shapely.geometry import LineString
 from shapely.ops import polygonize, unary_union
 
-from processes._geo import explode_polygons, feature_collection, load_geometry
+from processes._geo import explode_polygons, feature_collection, load_area
 
 OVERPASS_ENDPOINTS = [
     url.strip()
@@ -212,7 +212,7 @@ class OsmGreenAreasProcessor(BaseProcessor):
 
     def execute(self, data, outputs=None):
         try:
-            area = load_geometry(data["area"])
+            area = load_area(data["area"])
         except (KeyError, ValueError, ShapelyError) as err:
             raise ProcessorExecuteError(f"osm-green-areas needs a valid 'area': {err}")
 

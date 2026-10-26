@@ -60,6 +60,14 @@ def load_geometry(value):
     return shape(value)
 
 
+def load_area(value):
+    """`load_geometry` for an input that must cover ground: a point or line would empty every result."""
+    geom = load_geometry(value)
+    if geom.is_empty or geom.area <= 0:
+        raise ValueError(f"expected a polygon, got {geom.geom_type}")
+    return geom
+
+
 def load_features(value):
     """Coerce any GeoJSON shape into a list of (geometry, properties) pairs."""
     if not isinstance(value, dict):

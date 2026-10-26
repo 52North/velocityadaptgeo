@@ -8,7 +8,7 @@ polygon assembly are inherited unchanged; only the tag defaults and the metadata
 from pygeoapi.process.base import BaseProcessor, ProcessorExecuteError
 from shapely.errors import ShapelyError
 
-from processes._geo import explode_polygons, feature_collection, load_geometry
+from processes._geo import explode_polygons, feature_collection, load_area
 from processes.osm_green_areas import OsmGreenAreasProcessor
 
 DEFAULT_WATER_TAGS = {
@@ -82,7 +82,7 @@ class OsmWaterBodiesProcessor(OsmGreenAreasProcessor):
 
     def execute(self, data, outputs=None):
         try:
-            area = load_geometry(data["area"])
+            area = load_area(data["area"])
         except (KeyError, ValueError, ShapelyError) as err:
             raise ProcessorExecuteError(f"osm-water-bodies needs a valid 'area': {err}")
 
