@@ -978,6 +978,9 @@ function resetResultLayers() {
         layerCache.forEach((layer) => leafletMap.removeLayer(layer));
     }
     layerCache.clear();
+    layerLoads.clear();
+    resultsGeneration += 1;
+    layersListed = false;
     mapLayers = [];
     resultsButton.disabled = true;
     if (resultsWindow && !resultsWindow.hidden) renderLayerList();
@@ -1081,6 +1084,12 @@ let mapLayers = [];
 let leafletMap = null;
 let baseLayer = null;
 const layerCache = new Map();
+// Fetches still loading, by layer key, so ticking a box twice never builds two layers.
+const layerLoads = new Map();
+// Bumped by every reset: a fetch that returns under an older number belongs to a previous run.
+let resultsGeneration = 0;
+// Whether this run's layers have been listed yet; the first listing shows the last layer.
+let layersListed = false;
 
 /**
  * Register the drawable outputs a finished node reported, so they can be offered as
@@ -1091,6 +1100,7 @@ function registerLayers(nodeId, process, geo) {
         mapLayers.push({
             key: `${nodeId}.${port}`, node: nodeId, process, port,
             kind: info.kind, count: info.features, index: mapLayers.length,
+            on: false, note: `${info.kind}${info.features > 1 ? ` · ${info.features}` : ""}`, noteEl: null,
         });
     });
     resultsButton.disabled = mapLayers.length === 0;
@@ -1140,7 +1150,40 @@ function fitToVisible() {
     if (bounds && bounds.isValid()) leafletMap.fitBounds(bounds, { padding: [24, 24] });
 }
 
-async function toggleLayer(entry, on, noteEl) {
+/** Show `text` in the entry's row, and keep it for when the list is drawn again. */
+function setNote(entry, text) {
+    entry.note = text;
+    if (entry.noteEl) entry.noteEl.textContent = text;
+}
+
+/** Fetch one output and build its map layer; throws when the server has none. */
+async function fetchLayer(entry) {
+    const url = `/api/result?thread_id=${encodeURIComponent(threadId)}` +
+        `&node=${encodeURIComponent(entry.node)}&output=${encodeURIComponent(entry.port)}`;
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(String(response.status));
+    const collection = await response.json();
+    const distances = [...new Set((collection.features || [])
+        .map((f) => f.properties && f.properties.outerDistance)
+        .filter((v) => typeof v === "number"))].sort((a, b) => a - b);
+
+    const layer = L.geoJSON(collection, {
+        style: styleFor(entry, distances),
+        pointToLayer: (feature, latlng) => L.circleMarker(latlng, { radius: 5 }),
+        onEachFeature: (feature, lyr) => lyr.bindPopup(describeProperties(feature.properties)),
+    });
+    const note = collection.truncated
+        ? `showing ${collection.features.length} of ${collection.total}`
+        : `${collection.features.length} feature(s)`;
+    return { layer, note };
+}
+
+/**
+ * Switch one layer on or off. `entry.on` is what its box shows, so the map is made to
+ * follow it even when a fetch returns after the box changed or the results were reset.
+ */
+async function toggleLayer(entry, on) {
+    entry.on = on;
     if (!on) {
         const existing = layerCache.get(entry.key);
         if (existing) leafletMap.removeLayer(existing);
@@ -1149,28 +1192,25 @@ async function toggleLayer(entry, on, noteEl) {
     }
 
     if (!layerCache.has(entry.key)) {
-        noteEl.textContent = "loading…";
-        const url = `/api/result?thread_id=${encodeURIComponent(threadId)}` +
-            `&node=${encodeURIComponent(entry.node)}&output=${encodeURIComponent(entry.port)}`;
-        const response = await fetch(url);
-        if (!response.ok) {
-            noteEl.textContent = `failed (${response.status})`;
+        const generation = resultsGeneration;
+        setNote(entry, "loading…");
+        if (!layerLoads.has(entry.key)) layerLoads.set(entry.key, fetchLayer(entry));
+        let loaded;
+        try {
+            loaded = await layerLoads.get(entry.key);
+        } catch (err) {
+            if (generation !== resultsGeneration) return;
+            layerLoads.delete(entry.key);  // ticking again retries
+            setNote(entry, `failed (${err.message})`);
             return;
         }
-        const collection = await response.json();
-        const distances = [...new Set((collection.features || [])
-            .map((f) => f.properties && f.properties.outerDistance)
-            .filter((v) => typeof v === "number"))].sort((a, b) => a - b);
-
-        const layer = L.geoJSON(collection, {
-            style: styleFor(entry, distances),
-            pointToLayer: (feature, latlng) => L.circleMarker(latlng, { radius: 5 }),
-            onEachFeature: (feature, lyr) => lyr.bindPopup(describeProperties(feature.properties)),
-        });
-        layerCache.set(entry.key, layer);
-        noteEl.textContent = collection.truncated
-            ? `showing ${collection.features.length} of ${collection.total}`
-            : `${collection.features.length} feature(s)`;
+        // Reset while loading: the layer belongs to a run whose results are gone.
+        if (generation !== resultsGeneration) return;
+        layerLoads.delete(entry.key);
+        if (!layerCache.has(entry.key)) layerCache.set(entry.key, loaded.layer);
+        setNote(entry, loaded.note);
+        // Unticked while loading: kept for the next tick, not drawn.
+        if (!entry.on) return;
     }
 
     layerCache.get(entry.key).addTo(leafletMap);
@@ -1185,15 +1225,23 @@ function renderLayerList() {
         return;
     }
 
-    mapLayers.forEach((entry, i) => {
+    // Afterwards the boxes show what each entry holds, so a reopened list matches the map.
+    if (!layersListed) {
+        layersListed = true;
+        mapLayers[mapLayers.length - 1].on = true;
+    }
+
+    mapLayers.forEach((entry) => {
         const row = document.createElement("label");
         row.className = "layer-row";
 
         const box = document.createElement("input");
         box.type = "checkbox";
+        box.checked = entry.on;
         const note = document.createElement("span");
         note.className = "layer-note";
-        note.textContent = `${entry.kind}${entry.count > 1 ? ` · ${entry.count}` : ""}`;
+        entry.noteEl = note;
+        note.textContent = entry.note;
 
         const swatch = document.createElement("span");
         swatch.className = "layer-swatch";
@@ -1203,15 +1251,12 @@ function renderLayerList() {
         title.className = "layer-title";
         title.textContent = `${entry.process}.${entry.port}`;
 
-        box.addEventListener("change", () => toggleLayer(entry, box.checked, note));
+        box.addEventListener("change", () => toggleLayer(entry, box.checked));
 
         row.append(box, swatch, title, note);
         resultsLayers.appendChild(row);
 
-        if (i === mapLayers.length - 1) {
-            box.checked = true;
-            toggleLayer(entry, true, note);
-        }
+        if (entry.on) toggleLayer(entry, true);
     });
 }
 
