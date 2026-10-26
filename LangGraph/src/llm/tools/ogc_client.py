@@ -108,15 +108,13 @@ def search_ogc_processes(query: str, k: int = 5) -> list[dict]:
         register_vector(conn)
         db_dim = _get_embedding_dim(conn)
         if db_dim is not None and db_dim != len(vec):
-            logger.warning(
-                "Embedding dimension mismatch (query=%d, db=%d). Resizing query vector for compatibility.",
-                len(vec),
-                db_dim,
+            # Another size means another model than the catalog was embedded with. Its vectors
+            # are not comparable, so a resized query would rank the processes at random.
+            raise ValueError(
+                f"query embedding from {OLLAMA_MODEL} has {len(vec)} dimensions, but the catalog "
+                f"stores {db_dim}: it was embedded with another model. Use the same OLLAMA_MODEL "
+                "for the catalog crawler and LangGraph, or rebuild the catalog."
             )
-            if len(vec) > db_dim:
-                vec = vec[:db_dim]
-            else:
-                vec = vec + [0.0] * (db_dim - len(vec))
 
         # Cast through text to pgvector so `<=>` compares VECTOR to VECTOR.
         vec_param = "[" + ",".join(str(v) for v in vec) + "]"
