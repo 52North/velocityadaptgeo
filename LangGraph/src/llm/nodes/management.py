@@ -4,7 +4,6 @@ import logging
 import os
 import re
 
-from dotenv import load_dotenv
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from src.llm.nodes._helpers import _for_prompt
@@ -13,8 +12,6 @@ from src.llm.state.state import WorkflowState
 from src.llm.tools.laya_client import shadow_next_action
 
 logger = logging.getLogger(__name__)
-
-load_dotenv(override=True)
 
 ALLOWED_ACTIONS = ("search", "build", "validate", "chat", "done")
 
