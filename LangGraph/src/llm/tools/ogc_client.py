@@ -113,7 +113,7 @@ def search_ogc_processes(query: str, k: int = 5) -> list[dict]:
             raise ValueError(
                 f"query embedding from {OLLAMA_MODEL} has {len(vec)} dimensions, but the catalog "
                 f"stores {db_dim}: it was embedded with another model. Use the same OLLAMA_MODEL "
-                "for the catalog crawler and LangGraph, or rebuild the catalog."
+                "for the catalog crawler and LangGraph, or rebuild the catalog (SETUP.md)."
             )
 
         # Cast through text to pgvector so `<=>` compares VECTOR to VECTOR.

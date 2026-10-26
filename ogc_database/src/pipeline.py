@@ -8,7 +8,7 @@ import httpx
 
 from .client import fetch_process_detail, list_processes
 from .config import CONCURRENT_REQUESTS, HTTP_TIMEOUT
-from .database import save_all
+from .database import check_dimension, save_all
 from .embeddings import build_embedding_text, create_embedder, encode_texts
 
 log = logging.getLogger("ogc-indexer")
@@ -108,6 +108,7 @@ async def run_pipeline(
         embedder = create_embedder(embed_model_name, embed_base_url)
         texts = [build_embedding_text(meta) for _, _, _, meta in all_results]
         embeddings = encode_texts(embedder, texts)
+        check_dimension(db_dsn, len(embeddings[0]), embed_model_name)
     else:
         log.warning("No processes collected.")
 

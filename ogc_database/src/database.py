@@ -6,7 +6,13 @@ import logging
 import psycopg
 from pgvector.psycopg import register_vector
 
-from .config import DELETE_GONE_SQL, DELETE_UNCONFIGURED_SQL, UPSERT_SQL
+from .config import (
+    DELETE_GONE_SQL,
+    DELETE_UNCONFIGURED_SQL,
+    EMBEDDING_DIM_SQL,
+    REBUILD_HINT,
+    UPSERT_SQL,
+)
 
 log = logging.getLogger("ogc-indexer")
 
@@ -23,6 +29,26 @@ def connect(dsn: str) -> psycopg.Connection:
     conn = psycopg.connect(dsn)
     register_vector(conn)
     return conn
+
+
+def check_dimension(dsn: str, size: int, model: str) -> None:
+    """Fail before writing when the model's vectors do not fit the catalog's column.
+
+    Otherwise every row fails with pgvector's own error, which does not say how to fix it.
+
+    Args:
+        dsn: PostgreSQL connection string
+        size: Length of the vectors the model produced
+        model: Name of the embedding model
+    """
+    with connect(dsn) as conn:
+        row = conn.execute(EMBEDDING_DIM_SQL).fetchone()
+    column = row[0] if row else -1
+    if column > 0 and column != size:
+        raise RuntimeError(
+            f"{model} produces {size}-dimensional embeddings, but the catalog column holds "
+            f"{column}. {REBUILD_HINT}"
+        )
 
 
 def upsert_process(

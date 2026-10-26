@@ -25,8 +25,19 @@ docker compose run --rm ogc-database
 a crawl also removes processes a server no longer lists and those of servers dropped from
 `OGC_SERVERS`; a server that cannot be listed completely keeps its entries
 
-change a model, embedding dimension, crawl target or OSM endpoint: edit the
-`environment:` block of that service in `docker-compose.yml`
+change the LLM, a crawl target or an OSM endpoint: edit the `environment:` block of that
+service in `docker-compose.yml`
+
+change the embedding model: set `OLLAMA_MODEL` (`x-ollama`) and `EMBED_DIM` (`postgres-vector`,
+the model's vector size) in `docker-compose.yml`, then rebuild the catalog. The vector column
+is sized only when the database volume is created, and vectors from two models cannot be
+compared, so the catalog is recreated rather than updated (it holds nothing a crawl does not
+rebuild)
+```bash
+docker compose down
+docker volume rm velocityadaptgeo_postgres_data
+docker compose up
+```
 
 run the API on the host instead of in compose - addresses default to the compose
 service names, so off-network runs must override them
