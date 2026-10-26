@@ -76,9 +76,19 @@ async def _describe(client: httpx.AsyncClient, cache: dict, node: dict) -> dict:
     server = _resolve_server_url(str(node["config"]["server_url"])).rstrip("/")
     key = (server, node["type"])
     if key not in cache:
-        response = await client.get(f"{server}/processes/{node['type']}", timeout=30)
-        response.raise_for_status()
-        cache[key] = response.json().get("inputs") or {}
+        try:
+            response = await client.get(
+                f"{server}/processes/{node['type']}", timeout=30
+            )
+            response.raise_for_status()
+            cache[key] = response.json().get("inputs") or {}
+        except (httpx.HTTPError, ValueError, AttributeError) as err:
+            # Nothing is answered and the node runs as built; with its server down it
+            # fails there and runs again next call. Cached: a dead server is asked once.
+            logger.warning(
+                "no description of %s from %s: %s", node["type"], server, err
+            )
+            cache[key] = {}
     return cache[key]
 
 
@@ -165,7 +175,9 @@ async def execute(graph: dict, client: httpx.AsyncClient, node_dir: Path) -> dic
         key = _sha1(
             {
                 "process": node["type"],
-                "server": _resolve_server_url(node["config"]["server_url"]),
+                "server": _resolve_server_url(
+                    str((node.get("config") or {}).get("server_url"))
+                ),
                 "inputs": inputs,
             }
         )
@@ -235,6 +247,10 @@ async def execute_all(run_dir: Path, variant: str = DEFAULT_VARIANT) -> None:
                 run = await execute(graphs[sig], client, node_dir)
             except ExecutionError as err:  # a cycle: the graph cannot run at all
                 run = {"ok": False, "error": str(err), "nodes": {}}
+            except Exception as err:
+                # Recorded as not clean, so it runs again next call; the others go on.
+                logger.exception("%s failed", sig)
+                run = {"ok": False, "error": repr(err), "nodes": {}}
             record = {
                 "signature": sig,
                 "at": time.strftime("%Y-%m-%dT%H:%M:%S"),
