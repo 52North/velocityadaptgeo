@@ -38,6 +38,9 @@ services:
       OVERPASS_ATTEMPTS: "3"
       OVERPASS_BACKOFF: "2"
       OVERPASS_DEADLINE: "240"
+      # Per request: the largest bounding box queried, and Overpass's memory cap (256 MiB).
+      OVERPASS_MAX_AREA_KM2: "2500"
+      OVERPASS_MAXSIZE: "268435456"
     ports:
       - "5000:80"
     # The mcp server and the catalog crawler read /processes once at startup, so they wait

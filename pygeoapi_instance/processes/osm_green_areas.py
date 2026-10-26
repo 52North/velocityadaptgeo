@@ -1,5 +1,6 @@
 """Step 2 of the cool-spots chain: pull tagged OSM polygons inside the study area."""
 
+import math
 import os
 import time
 
@@ -29,8 +30,23 @@ OVERPASS_BACKOFF = float(os.environ.get("OVERPASS_BACKOFF", "2"))
 # per-node timeout (300s) so a dead upstream surfaces as this error rather than as an
 # opaque client-side timeout.
 OVERPASS_DEADLINE = float(os.environ.get("OVERPASS_DEADLINE", "240"))
+# Limits on what one request may ask of the public instances: the bounding box queried (about
+# 5x Münster's), the memory the instance may spend on the query (and so the size of the answer
+# this process holds in memory), and the number of tag values.
+OVERPASS_MAX_AREA_KM2 = float(os.environ.get("OVERPASS_MAX_AREA_KM2", "2500"))
+OVERPASS_MAXSIZE = int(os.environ.get("OVERPASS_MAXSIZE", str(256 * 1024 * 1024)))
+MAX_TAG_VALUES = 20
 
 DEFAULT_TAGS = {"landuse": "forest", "natural": "wood", "leisure": "park"}
+
+
+def ql_string(value) -> str:
+    """Quote a tag key or value for Overpass QL, so it cannot end the string and add a query."""
+    if isinstance(value, bool) or not isinstance(value, (str, int, float)):
+        raise ProcessorExecuteError(f"tag keys and values must be strings, not {value!r}")
+    text = str(value).replace("\\", "\\\\").replace('"', '\\"')
+    text = text.replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t")
+    return f'"{text}"'
 
 
 class OsmGreenAreasProcessor(BaseProcessor):
@@ -123,15 +139,26 @@ class OsmGreenAreasProcessor(BaseProcessor):
         """
         min_lon, min_lat, max_lon, max_lat = bounds
         extent = f"({min_lat:.6f},{min_lon:.6f},{max_lat:.6f},{max_lon:.6f})"
+        # Exact for a lat/lon box on the authalic sphere, at any size (a projection is not).
+        km2 = 6371.0072**2 * math.radians(max_lon - min_lon) * abs(
+            math.sin(math.radians(max_lat)) - math.sin(math.radians(min_lat))
+        )
+        if not km2 <= OVERPASS_MAX_AREA_KM2:
+            raise ProcessorExecuteError(
+                f"the study area's bounding box covers {km2:,.0f} km²; one query may cover at "
+                f"most {OVERPASS_MAX_AREA_KM2:,.0f} km² (OVERPASS_MAX_AREA_KM2)"
+            )
 
-        clauses = []
-        for key, value in tags.items():
-            values = value if isinstance(value, (list, tuple)) else [value]
-            for item in values:
-                clauses.append(f'way["{key}"="{item}"]{extent};')
-                clauses.append(f'relation["{key}"="{item}"]{extent};')
+        filters = [
+            f"[{ql_string(key)}={ql_string(item)}]"
+            for key, value in tags.items()
+            for item in (value if isinstance(value, (list, tuple)) else [value])
+        ]
+        if len(filters) > MAX_TAG_VALUES:
+            raise ProcessorExecuteError(f"at most {MAX_TAG_VALUES} tag values per query, got {len(filters)}")
+        clauses = [f"{kind}{f}{extent};" for f in filters for kind in ("way", "relation")]
 
-        query = f"[out:json][timeout:90];({''.join(clauses)});out geom;"
+        query = f"[out:json][timeout:90][maxsize:{OVERPASS_MAXSIZE}];({''.join(clauses)});out geom;"
 
         attempts = max(OVERPASS_ATTEMPTS, 1)
         deadline = time.monotonic() + OVERPASS_DEADLINE
