@@ -196,7 +196,9 @@ async def builder_node(state: WorkflowState) -> dict:
     graph = state.get("workflow_graph") or {"nodes": [], "edges": []}
 
     op = instruction.get("op") if isinstance(instruction, dict) else None
-    args = dict(instruction.get("args", {})) if isinstance(instruction, dict) else {}
+    args = instruction.get("args") if isinstance(instruction, dict) else None
+    # `args: null` or a non-object leaves the op without its arguments, which apply_build_op reports.
+    args = dict(args) if isinstance(args, dict) else {}
 
     if op == "add_top_candidate":
         # Always use the actual ranked search results from state - never let
