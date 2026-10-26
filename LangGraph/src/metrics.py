@@ -6,6 +6,7 @@ a node returns - so the same file works on every branch. Each turn appends one J
 METRICS_FILE, labelled with WORKFLOW_VARIANT.
 """
 
+import asyncio
 import json
 import os
 import time
@@ -30,7 +31,7 @@ def _name(candidate: dict) -> str:
     return candidate.get("tool") or candidate.get("process_id") or ""
 
 
-@lru_cache(maxsize=None)
+@lru_cache(maxsize=1024)
 def _tokens(model: str, text: str) -> int | None:
     """Exact token count of `text` for `model` via Anthropic's free count_tokens endpoint (None if unavailable)."""
     try:
@@ -55,6 +56,7 @@ class RunTracker(BaseCallbackHandler):
     similar tool names and descriptions, as a measure of how well-differentiated the visible tools are.
     """
 
+    # Callbacks run in order on the event loop, as they share state; only the token counting in `_write` goes to a thread.
     run_inline = True
 
     def __init__(self, thread_id: str, path: str = METRICS_FILE):
@@ -69,9 +71,9 @@ class RunTracker(BaseCallbackHandler):
         elif kwargs.get("name") and kwargs.get("name") == (metadata or {}).get("langgraph_node"):
             self.open[run_id] = {"node": kwargs["name"], "t": time.time()}
 
-    def on_chain_end(self, outputs, *, run_id, **kwargs):
+    async def on_chain_end(self, outputs, *, run_id, **kwargs):
         if run_id == self.root:
-            return self._write(outputs if isinstance(outputs, dict) else {})
+            return await asyncio.to_thread(self._write, outputs if isinstance(outputs, dict) else {})
         node = self.open.pop(run_id, None)
         if node is None:
             return
@@ -85,9 +87,9 @@ class RunTracker(BaseCallbackHandler):
                 "closest_descriptions": _closest_pair(self.candidates, lambda c: c.get("description") or ""),
             })
 
-    def on_chain_error(self, error, *, run_id, **kwargs):
+    async def on_chain_error(self, error, *, run_id, **kwargs):
         if run_id == self.root:
-            self._write({}, error=repr(error))
+            await asyncio.to_thread(self._write, {}, error=repr(error))
 
     def on_chat_model_start(self, serialized, messages, *, run_id, metadata=None, **kwargs):
         text = "".join(str(m.content) for m in messages[0])
