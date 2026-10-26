@@ -15,7 +15,8 @@ x-pygeoapi: &pygeoapi
   LOCAL_PYGEOAPI_INTERNAL: pygeoapi:80
 
 # Remote OGC API servers, besides the local pygeoapi. The catalog crawler and the MCP server
-# read the same list, so both workflow variants see the same processes.
+# read the same list, so both workflow variants see the same processes; the langgraph runner
+# executes nodes only against these servers.
 x-ogc-servers: &ogc-servers
   OGC_SERVERS: https://demo.pygeoapi.io/master/,https://maps.ecere.com/ogcapi/
 
@@ -60,7 +61,7 @@ services:
       - path: ./LangGraph/.env
         required: false
     environment:
-      <<: [*postgres, *ollama, *pygeoapi]
+      <<: [*postgres, *ollama, *pygeoapi, *ogc-servers]
       ANTHROPIC_MODEL: claude-haiku-5-5
       ANTHROPIC_EFFORT: medium
       ANTHROPIC_MAX_RETRIES: "3"
