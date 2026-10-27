@@ -41,6 +41,15 @@ chosen with `WORKFLOW_VARIANT` (or `python -m src.batch --variant`).
 
 Independent of the variant, `VALIDATE_IO_TYPES` adds a check of the data kinds an edge carries.
 
+### Few-shot examples
+
+1. Add `fewshot_examples/<id>.yaml` (copy `_template.yaml`): `id`, `request`, `solution.workflow_graph`,
+   optional `notes`. Team remarks go in `#` comments — `notes` is shown to the agent.
+2. Load: `docker compose run --rm ogc-database` (also runs on every `docker compose up`).
+3. Use: `WORKFLOW_VARIANT=fewshot`; `FEWSHOT_K` examples per turn, `FEWSHOT_MIN_SIMILARITY` as cutoff.
+
+Never use seed/paraphrase tasks (CoolSpots) as examples. Details: `fewshot_examples/README.md`.
+
 ## Evaluation
 
 `metrics/` generates paraphrases of a seed task, runs every variant on them, executes and grades the
