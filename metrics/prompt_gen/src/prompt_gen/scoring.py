@@ -36,7 +36,7 @@ class Scorer:
         self.pragmatic = Embedder(
             e5, f"Instruct: {config.pragmatic_instruction}\nQuery: "
         )
-        # Same model without the instruction, to test whether the instruction helps (plan step 5).
+        # Same model without the instruction, to test whether the instruction helps.
         self.pragmatic_plain = Embedder(e5)
 
     @staticmethod

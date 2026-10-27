@@ -98,7 +98,7 @@ class ReviewState:
             (k, d["decision"], d["category"]) for k, d in self.decisions.items()
         )
 
-    # --- live similarity (review_similarity_plan.md) ---
+    # --- live similarity ---
 
     def kept(self) -> dict[str, str]:
         return kept(self.candidates, self.decisions)

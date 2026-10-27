@@ -1,6 +1,6 @@
 # grading
 
-Grades the output of the workflow graphs built by `LangGraph/src/batch.py` against a reference solution for the Münster green-space prompts. A result in the same ballpark as the reference counts as correct, since the agent may choose a different minimum park size or other ring steps. Plan and results: `metrics/.docs/output_grading_plan.md`.
+Grades the output of the workflow graphs built by `LangGraph/src/batch.py` against a reference solution for the Münster green-space prompts. A result in the same ballpark as the reference counts as correct, since the agent may choose a different minimum park size or other ring steps.
 
 ## Usage
 

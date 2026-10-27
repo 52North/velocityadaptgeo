@@ -18,7 +18,7 @@ ALLOWED_ACTIONS = ("search", "build", "validate", "chat", "done")
 MAX_WORKFLOW_ITERATIONS = int(os.environ.get("MAX_WORKFLOW_ITERATIONS", "16"))
 
 # Unset: Haiku decides alone. "laya-shadow": Laya also picks next_action, logged as `laya` next
-# to Haiku's decision; Haiku still routes (metrics/.docs/laya_finetune_plan.md).
+# to Haiku's decision; Haiku still routes.
 DECISION_MODELS = ("", "laya-shadow")
 DECISION_MODEL = os.environ.get("DECISION_MODEL", "")
 if DECISION_MODEL not in DECISION_MODELS:
@@ -186,7 +186,7 @@ def decision_state(state: WorkflowState, goal: str) -> dict:
     """What the manager sees when it picks `next_action`, compacted for a small decision model.
 
     Logged as `state` with each manager decision: the input side of a training row for Laya,
-    with the action picked as its label (metrics/.docs/laya_finetune_plan.md). Process ids,
+    with the action picked as its label. Process ids,
     config values and port names only, no descriptions, to fit Laya's ~1k-token context.
     """
     graph = state.get("workflow_graph") or {"nodes": [], "edges": []}

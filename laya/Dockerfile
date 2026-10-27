@@ -1,5 +1,5 @@
 # Laya decision model (https://huggingface.co/convaiinnovations/laya) behind `laya-serve`
-# (POST /v1/systemone, GET /health), on CPU. See metrics/.docs/laya_finetune_plan.md.
+# (POST /v1/systemone, GET /health), on CPU.
 FROM python:3.12-slim
 
 # Both pinned: laya releases almost daily. Torch first, from the CPU index, so laya's

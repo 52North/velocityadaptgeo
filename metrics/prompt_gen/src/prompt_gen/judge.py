@@ -9,7 +9,7 @@ correction with the original. Any difference beyond case, whitespace and punctua
 ungrammatical (a gate in strict mode).
 
 The two jobs used to share one call; with both in one prompt, qwen3:8b got worse at the constraint
-check (.docs/judge_split_plan.md. Call B always runs, also after a failed constraint, so that a
+check. Call B always runs, also after a failed constraint, so that a
 review that overrules the constraint verdict still has the category and grammar results.
 """
 

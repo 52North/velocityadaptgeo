@@ -163,7 +163,7 @@ def test_match_status():
     assert match_status("lexical#99", s.by_key, {}) is None
 
 
-# --- sorting (review_table_plan.md) --------------------------------------------------------------
+# --- sorting -------------------------------------------------------------------------------------
 
 from helpers import embeddings_for
 
@@ -276,7 +276,7 @@ def test_visible_cache_follows_direct_decision_changes():
     assert "lexical#1" not in keys(s.visible())
 
 
-# --- accepted/rejected filter (review_accepted_filter_plan.md) ---
+# --- accepted/rejected filter ---
 
 
 def test_status_follows_the_current_decision():

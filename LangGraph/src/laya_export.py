@@ -16,7 +16,7 @@ same row hundreds of times. `--no-merge` keeps one row per decision.
 `--train` and `--eval` split by run folder, never by row: paraphrases of one seed are near
 duplicates, so a row split would score memorisation. Writes `<out>/train.jsonl` (and `eval.jsonl`,
 for `TrainConfig(eval_data=...)`); each row also carries `meta` (where it came from), which Laya
-ignores. See metrics/.docs/laya_finetune_plan.md.
+ignores.
 """
 
 import argparse

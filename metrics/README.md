@@ -40,4 +40,3 @@ A workflow counts as correct when its executed output matches a reference soluti
 ## Other files
 
 - `runs.jsonl`: LangGraph's default metrics file (`METRICS_FILE`) for interactive runs; batch runs write theirs into the run folder.
-- `.docs/`: plans and notes (git-ignored).

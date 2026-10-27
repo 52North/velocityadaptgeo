@@ -118,7 +118,7 @@ def _matches_grid(
 
 
 def _stored_grid(candidate: dict, state: "ReviewState") -> Table | Text:
-    """The closest matches stored at generation (closest_match_plan.md)."""
+    """The closest matches stored at generation."""
     if "closest_accepted" not in candidate:
         return Text(
             "not stored; add it with the generator's `prompt-gen backfill-closest <run_id>`",
@@ -136,7 +136,7 @@ def _stored_grid(candidate: dict, state: "ReviewState") -> Table | Text:
 
 
 def closest_panel(candidate: dict, state: "ReviewState") -> Panel:
-    """Live closest matches among all other kept paraphrases (review_similarity_plan.md), then the ones
+    """Live closest matches among all other kept paraphrases, then the ones
     stored at generation, which explain the gate's near-duplicate check. Without embeddings, only the
     stored ones."""
     live = state.live(candidate)
@@ -372,7 +372,7 @@ def footer_text(state: ReviewState) -> Text:
     return t
 
 
-# --- list view (review_table_plan.md) -------------------------------------------------------------
+# --- list view ------------------------------------------------------------------------------------
 
 LIST_COLUMNS = (
     ("#", 4),

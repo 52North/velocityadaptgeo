@@ -28,7 +28,7 @@ loop:
   max_attempts_factor: 3    # max attempts = factor * n
   max_consecutive_rejects: 8
 
-# Stage 1: loose gates. Per-category thresholds come from manual review (see .docs/plan.md, step 5).
+# Stage 1: loose gates. Per-category thresholds come from manual review.
 thresholds:
   near_duplicate_sem: 0.97          # reject if sem(candidate, any accepted in category) is above this
   sem_max: {}                       # per category, e.g. {lexical: 0.9}; empty = not gated

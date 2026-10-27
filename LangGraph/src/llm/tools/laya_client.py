@@ -1,8 +1,7 @@
 """Client for the Laya decision model, served by the `laya` compose service (`laya-serve`).
 
 Laya answers typed questions about a state in one forward pass (no text generation). Here it
-is asked the manager's `next_action`, on the state `management.decision_state` builds. See
-metrics/.docs/laya_finetune_plan.md.
+is asked the manager's `next_action`, on the state `management.decision_state` builds.
 """
 
 import logging

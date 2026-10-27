@@ -100,7 +100,7 @@ a.table(
 )
 ```
 
-The Haiku 4.5 results don't compare with the later ones: process metadata, the UTM `buffer`, the manager/auto-build prompts and the model changed in between (`utm_buffer_metadata_plan.md`, `haiku_5_5_plan.md`). See @sec-earlier.
+The Haiku 4.5 results don't compare with the later ones: process metadata, the UTM `buffer`, the manager/auto-build prompts and the model changed in between. See @sec-earlier.
 
 # Seed control {#sec-seed}
 
@@ -373,7 +373,7 @@ It depends on what the isochrone is for in the test catalog:
 
 # Catalog search vs. all MCP tools {#sec-variants}
 
-The same batch with `--variant mcp`: the retriever lists every process tool of the MCP server (`{python} f"{muse.tools:.0f}"`, unranked, with the input schema as MCP sends it) instead of the top 5 of the pgvector search. Manager, builder, validator, responder, model and execution are shared; the pick format is `process_id` + `server_url` in both (`workflow_batch_plan.md` §5). The MCP server crawls the same servers as the catalog, so both see the same `{python} f"{muse.tools:.0f}"` processes, `multimodal-isochrone` included.
+The same batch with `--variant mcp`: the retriever lists every process tool of the MCP server (`{python} f"{muse.tools:.0f}"`, unranked, with the input schema as MCP sends it) instead of the top 5 of the pgvector search. Manager, builder, validator, responder, model and execution are shared; the pick format is `process_id` + `server_url` in both. The MCP server crawls the same servers as the catalog, so both see the same `{python} f"{muse.tools:.0f}"` processes, `multimodal-isochrone` included.
 
 Runs: the `{python} len(MP)` paraphrases that keep the size requirement on `{python} a.day(MP)`, the seed `{python} len(MS)` times on `{python} a.day(MS)`, concurrency 3, no errors, all graphs valid. A first trial of 10 seed runs, with the manager and responder still showing only the first 5 candidates (for MCP: the first 5 tools in server order, none of them relevant), got 0/10 and is left out; the cap was removed for both variants, which leaves pgvector unchanged since its search returns 5.
 
@@ -580,4 +580,4 @@ a.table(
 - **Strict precision:** about 300 seed runs for ±5 points.
 - **MCP with prompt caching** as a third variant, and a larger catalog for both variants (@sec-variants).
 - **MCP size-filter misses:** the `{python} sum(1 for r in MS + MP if a.failure(r))` MCP graphs without `min-area-filter` have a `decision_history`; check at which step the size requirement got lost.
-- **Execution:** deduplicate graphs by signature, then execute each distinct graph once (`workflow_batch_plan.md` §3).
+- **Execution:** deduplicate graphs by signature, then execute each distinct graph once.
