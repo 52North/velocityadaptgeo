@@ -151,23 +151,23 @@ def swap_nodes(graph: dict, node_a: str, node_b: str) -> dict:
     return {"nodes": nodes, "edges": edges}
 
 
-def set_input(graph: dict, node_id: str, port: str, value=None) -> dict:
-    """Set a literal value for one input port, or clear it with `value=None`.
+def set_input(graph: dict, node_id: str, input: str, value=None) -> dict:
+    """Set a literal value for one input, or clear it with `value=None`.
 
     Static values live in the node's `config`, which is exactly where
     `src.execution.runner._resolve_inputs` looks for an input no edge feeds - so this
-    writes nothing new into the schema. An edge into the same port still wins at run time.
+    writes nothing new into the schema. An edge into the same input still wins at run time.
     """
     nodes = [dict(n) for n in graph.get("nodes", [])]
     node = next((n for n in nodes if n.get("id") == node_id), None)
     if node is None:
         raise ValueError(f"Cannot set input: '{node_id}' is not a node in the graph.")
-    if port in CONFIG_KEYS:
-        raise ValueError(f"Cannot set input: '{port}' is a transport setting, not a parameter.")
+    if input in CONFIG_KEYS:
+        raise ValueError(f"Cannot set input: '{input}' is a transport setting, not a parameter.")
 
-    config = {k: v for k, v in (node.get("config") or {}).items() if k != port}
+    config = {k: v for k, v in (node.get("config") or {}).items() if k != input}
     if value is not None:
-        config[port] = value
+        config[input] = value
     node["config"] = config
     return {"nodes": nodes, "edges": graph.get("edges", [])}
 

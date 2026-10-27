@@ -1,8 +1,9 @@
 """The prompts the manager and auto_build send, against recorded snapshots.
 
 The snapshots of the `pgvector` and `mcp` variants were recorded before the variant registry was
-introduced: as long as they match, those variants send exactly the prompts they were measured with.
-Newer variants were recorded when they were added.
+introduced and changed once on purpose since, when "port" was replaced by input/output in the prompt
+text (docs/modular-variants.md, step 6): as long as they match, the prompts are the ones measured
+after that change. Newer variants were recorded when they were added.
 A deliberate prompt change updates them with `UPDATE_SNAPSHOTS=1 uv run pytest`.
 """
 

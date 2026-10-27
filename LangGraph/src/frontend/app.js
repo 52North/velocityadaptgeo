@@ -752,7 +752,7 @@ function editInput(nodeId, side, input, wired) {
             try { value = JSON.parse(raw); } catch { value = raw; }
         }
         closeEditor();
-        graphOp("set_input", { node_id: nodeId, port: input, value });
+        graphOp("set_input", { node_id: nodeId, input, value });
     });
     field.addEventListener("blur", closeEditor);
 
