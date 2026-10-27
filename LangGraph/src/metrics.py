@@ -17,8 +17,10 @@ from itertools import combinations
 import anthropic
 from langchain_core.callbacks import BaseCallbackHandler
 
+from src.llm.variants import DEFAULT_VARIANT
+
 METRICS_FILE = os.getenv("METRICS_FILE", "metrics/runs.jsonl")
-VARIANT = os.getenv("WORKFLOW_VARIANT", "pgvector")
+VARIANT = os.getenv("WORKFLOW_VARIANT") or DEFAULT_VARIANT
 # "<model>=<input>,<output>;..." in USD per million tokens; models absent here report cost_usd=None.
 PRICES_PER_MTOK = {
     m: (float(i), float(o))

@@ -21,9 +21,9 @@ so a run folder holds everything about its run; they join to the results by `thr
 Each result also keeps the run's `decision_history` (the manager's steps and the auto_builder's
 decisions with their reasoning), so a wrong graph can be traced without re-running it.
 
-`--variant` (default `WORKFLOW_VARIANT`, else pgvector) picks how the agent finds processes:
-pgvector catalog search, or every tool of the MCP server. Each variant keeps its own results on
-the same reviewed prompts: pgvector in `workflows.jsonl` with thread ids `<run_id>/<key>`, any
+`--variant` (default `WORKFLOW_VARIANT`, else pgvector) picks how the agent finds processes,
+one of `src.llm.variants.VARIANTS`: pgvector catalog search, every tool of the MCP server, ...
+Each variant keeps its own results on the same reviewed prompts: pgvector in `workflows.jsonl` with thread ids `<run_id>/<key>`, any
 other variant in `workflows.<variant>.jsonl` with thread ids `<run_id>/<variant>/<key>`. Their
 metrics share `runs.jsonl` (every record carries its `variant`).
 
@@ -49,13 +49,14 @@ import os
 import time
 from pathlib import Path
 
+# Standard library only, so --status stays agent-free.
+from src.llm.variants import DEFAULT_VARIANT, VARIANTS
+
 # Not __name__: run with `python -m`, that is "__main__".
 logger = logging.getLogger("src.batch")
 
 RESULTS_FILE = "workflows.jsonl"
 RUNS_FILE = "runs.jsonl"
-VARIANTS = ("pgvector", "mcp")  # src.llm.workflow.RETRIEVERS; not imported, so --status stays agent-free
-DEFAULT_VARIANT = "pgvector"
 SEED_CATEGORY = "seed"
 STATUS_WINDOW = 20  # recent results the --status estimate is based on
 
