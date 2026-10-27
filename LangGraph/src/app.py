@@ -1,10 +1,11 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
-from pydantic import BaseModel
+from fastapi.responses import FileResponse, JSONResponse
+from pydantic import BaseModel, Field
 from langchain_core.messages import HumanMessage
 from pathlib import Path
 from uuid import uuid4
+import hmac
 import json
 import logging
 import os
@@ -12,6 +13,7 @@ from fastapi.responses import StreamingResponse
 from src.llm.workflow import compiled_graph, DEFAULT_WORKFLOW_CONFIG, MAX_WORKFLOW_ITERATIONS
 from src.llm.nodes.builder import apply_build_op
 from src.llm.nodes.validator import validate_graph
+from src.llm.state.graph import WorkflowGraph
 from src.execution import store
 from src.execution.runner import (
     ExecutionError,
@@ -30,7 +32,31 @@ BASE_DIR = Path(__file__).resolve().parent
 FRONTEND_DIR = BASE_DIR / "frontend"
 PROMPTS_FILE = BASE_DIR.parent / "prompts.jsonl"
 
+# Shared secret for callers such as another service's backend. Unset keeps the API open, as
+# a local run and the demo frontend need it: EventSource cannot send an Authorization header.
+API_TOKEN = os.environ.get("LANGGRAPH_API_TOKEN", "")
+
 app = FastAPI()
+
+
+@app.middleware("http")
+async def require_api_token(request: Request, call_next):
+    """Reject `/api/*` requests without `Authorization: Bearer <LANGGRAPH_API_TOKEN>`, when one is set.
+
+    Only the API is gated: `/health` must answer the orchestrator's unauthenticated probe,
+    and the demo page's static files carry no data.
+    """
+    if API_TOKEN and request.url.path.startswith("/api/"):
+        provided = request.headers.get("authorization", "")
+        if not hmac.compare_digest(provided.encode(), f"Bearer {API_TOKEN}".encode()):
+            return JSONResponse({"detail": "unauthorized"}, status_code=401, headers={"WWW-Authenticate": "Bearer"})
+    return await call_next(request)
+
+
+@app.get("/health")
+async def health():
+    """Liveness only: the process answers. Dependencies (postgres, ollama) are not probed."""
+    return {"status": "ok"}
 
 
 class RevalidatingStaticFiles(StaticFiles):
@@ -53,13 +79,20 @@ app.mount("/static", RevalidatingStaticFiles(directory=FRONTEND_DIR), name="stat
 class ChatRequest(BaseModel):
     prompt: str
     thread_id: str | None = None
+    # The caller's current graph, when the caller rather than this service owns it. It
+    # replaces the thread's graph for this turn; omitted, the turn continues from the
+    # thread's own graph (empty for a new thread).
+    graph: WorkflowGraph | None = None
 
 class ChatResponse(BaseModel):
     response: str
     thread_id: str
+    graph: dict = Field(default_factory=lambda: {"nodes": [], "edges": []})
+    validation: dict | None = None
+    unmet_capabilities: list[dict] = Field(default_factory=list)
 
 
-def turn_input(prompt: str) -> dict:
+def turn_input(prompt: str, graph: dict | None = None) -> dict:
     """Build the state update for one user turn.
 
     `iteration` is reset on every request so a new user turn gets a fresh planning
@@ -67,13 +100,22 @@ def turn_input(prompt: str) -> dict:
     manager hard-stops at `max_iterations` for the rest of the session. The budget is
     sent along so it stays consistent with the `recursion_limit` derived from it.
     `examples` is cleared so the fewshot variant looks them up again for the new request.
+
+    A supplied `graph` goes in with its validation report, so the manager plans against
+    the graph's actual problems rather than the report of whatever graph came before. An
+    empty graph gets no report, as on a new thread: "Graph has no nodes" is not a problem
+    to fix before the first search.
     """
-    return {
+    update = {
         "messages": [HumanMessage(content=prompt)],
         "iteration": 0,
         "max_iterations": MAX_WORKFLOW_ITERATIONS,
         "examples": None,
     }
+    if graph is not None:
+        update["workflow_graph"] = graph
+        update["last_validation"] = validate_graph(graph) if graph["nodes"] else None
+    return update
 
 
 def turn_config(thread_id: str) -> dict:
@@ -89,21 +131,29 @@ def turn_config(thread_id: str) -> dict:
 
 @app.post("/api/chat", response_model=ChatResponse)
 async def chat(req: ChatRequest):
-    """Run the workflow to completion and return the final reply, without streaming.
+    """Run the workflow to completion and return the final reply and graph, without streaming.
 
     Omitting `thread_id` starts a fresh conversation; pass the returned one back to
-    continue it.
+    continue it. A caller that keeps the graph itself can instead send it as `graph`
+    on every turn and leave `thread_id` out.
     """
     thread_id = req.thread_id or str(uuid4())
+    graph = req.graph.model_dump() if req.graph is not None else None
 
-    result = await compiled_graph.ainvoke(turn_input(req.prompt), config={**turn_config(thread_id), "callbacks": [RunTracker(thread_id)]})
+    result = await compiled_graph.ainvoke(turn_input(req.prompt, graph), config={**turn_config(thread_id), "callbacks": [RunTracker(thread_id)]})
 
     # Last message is the assistant reply
     assistant_message = result["messages"][-1].text
 
     pretty_print_messages(result["messages"])
 
-    return ChatResponse(response=assistant_message, thread_id=thread_id)
+    return ChatResponse(
+        response=assistant_message,
+        thread_id=thread_id,
+        graph=result.get("workflow_graph") or {"nodes": [], "edges": []},
+        validation=result.get("last_validation"),
+        unmet_capabilities=result.get("unmet_capabilities") or [],
+    )
 
 @app.get("/api/stream")
 async def stream(prompt: str, thread_id: str):
