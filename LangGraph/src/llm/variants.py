@@ -21,7 +21,8 @@ class Variant:
     # Plain name for reports.
     label: str
     # Which retriever node fills `candidate_processes` (see `RETRIEVER_NODES` in src.llm.workflow):
-    # "search" ranks the catalog by the manager's query, "mcp_all" lists every MCP tool.
+    # "search" ranks the catalog by the manager's query, "mcp_all" lists every MCP tool,
+    # "catalog_all" lists every process of the catalog database.
     tools: str
     # The auto_build prompt's sentence on where the candidates come from.
     candidate_source: str
@@ -49,6 +50,13 @@ VARIANTS: dict[str, Variant] = {
             tools="mcp_all",
             candidate_source="""The candidates are every process
   tool the MCP server exposes, most of them unrelated to the capability. """,
+        ),
+        Variant(
+            name="fewshot",
+            label="whole catalog + examples",
+            tools="catalog_all",
+            candidate_source="""The candidates are every process
+  in the catalog, most of them unrelated to the capability. """,
         ),
     )
 }

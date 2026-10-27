@@ -54,6 +54,18 @@ def _get_embedding_dim(conn: psycopg.Connection) -> int | None:
 
 
 
+def _candidate(row: tuple) -> dict:
+    """A catalog row (server_url, process_id, title, description, metadata, ...) as a candidate process."""
+    return {
+        "server_url": row[0],
+        "process_id": row[1],
+        "title": row[2] or "",
+        "description": (row[3] or "")[:500],
+        "inputs": (row[4] or {}).get("inputs", {}),
+        "outputs": (row[4] or {}).get("outputs", {}),
+    }
+
+
 @lru_cache(maxsize=1)
 def _embedder() -> OllamaEmbeddings:
     logger.info("Using Ollama embeddings at %s with model %s", OLLAMA_BASE_URL, OLLAMA_MODEL)
@@ -116,15 +128,19 @@ def search_ogc_processes(query: str, k: int = 5) -> list[dict]:
         vec_param = "[" + ",".join(str(v) for v in vec) + "]"
         rows = conn.execute(sql, (vec_param, vec_param, k)).fetchall()
 
-    return [
-        {
-            "server_url": r[0],
-            "process_id": r[1],
-            "title": r[2] or "",
-            "description": (r[3] or "")[:500],
-            "inputs": (r[4] or {}).get("inputs", {}),
-            "outputs": (r[4] or {}).get("outputs", {}),
-            "similarity": round(float(r[5]), 3),
-        }
-        for r in rows
-    ]
+    return [{**_candidate(r), "similarity": round(float(r[5]), 3)} for r in rows]
+
+
+def list_ogc_processes() -> list[dict]:
+    """Every process in the catalog, as candidates in the same shape as `search_ogc_processes` returns.
+
+    No query and no ranking: the `fewshot` variant shows the whole catalog to the agent.
+    """
+    sql = """
+        SELECT server_url, process_id, title, description, metadata
+        FROM ogc_processes
+        ORDER BY server_url, process_id;
+    """
+    with psycopg.connect(DB_DSN) as conn:
+        rows = conn.execute(sql).fetchall()
+    return [_candidate(r) for r in rows]

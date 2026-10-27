@@ -9,6 +9,7 @@ from src.llm.nodes import (
     action_router,
     auto_build_node,
     builder_node,
+    catalog_retriever_node,
     chat_node,
     management_node,
     mcp_retriever_node,
@@ -30,8 +31,9 @@ WORKFLOW_RECURSION_LIMIT = int(os.environ.get(
 DEFAULT_WORKFLOW_CONFIG = {"recursion_limit": WORKFLOW_RECURSION_LIMIT}
 
 # How the retriever node finds candidate processes, by `Variant.tools`: a pgvector catalog search
-# (top 5), or every tool of the MCP server in `mcp/`. Everything else in the graph is shared.
-RETRIEVER_NODES = {"search": retriever_node, "mcp_all": mcp_retriever_node}
+# (top 5), every tool of the MCP server in `mcp/`, or every process of the catalog. Everything else
+# in the graph is shared.
+RETRIEVER_NODES = {"search": retriever_node, "mcp_all": mcp_retriever_node, "catalog_all": catalog_retriever_node}
 
 llm = ChatAnthropic(
     model=os.environ.get("ANTHROPIC_MODEL", "claude-haiku-5-5"),

@@ -2,6 +2,7 @@
 
 The snapshots of the `pgvector` and `mcp` variants were recorded before the variant registry was
 introduced: as long as they match, those variants send exactly the prompts they were measured with.
+Newer variants were recorded when they were added.
 A deliberate prompt change updates them with `UPDATE_SNAPSHOTS=1 uv run pytest`.
 """
 
@@ -17,7 +18,6 @@ from src.llm.variants import VARIANTS
 from tests.fakes import STATE, FakeBuildLLM, FakeManagerLLM, render
 
 SNAPSHOTS = Path(__file__).parent / "snapshots"
-MEASURED_VARIANTS = ("pgvector", "mcp")
 
 
 def check(name: str, text: str) -> None:
@@ -34,7 +34,7 @@ def test_manager_prompt(monkeypatch):
     check("manager.txt", render(llm.prompt))
 
 
-@pytest.mark.parametrize("name", MEASURED_VARIANTS)
+@pytest.mark.parametrize("name", list(VARIANTS))
 def test_auto_build_prompt(name):
     llm = FakeBuildLLM()
     asyncio.run(auto_build_node(STATE, llm=llm, variant=VARIANTS[name]))

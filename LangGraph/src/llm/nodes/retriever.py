@@ -1,3 +1,4 @@
+import asyncio
 import logging
 
 from langchain_core.messages import AIMessage
@@ -6,7 +7,7 @@ from src.llm.state.state import WorkflowState
 from src.llm.nodes._helpers import _log
 
 from src.llm.tools.mcp_client import load_mcp_tools
-from src.llm.tools.ogc_client import search_ogc_processes
+from src.llm.tools.ogc_client import list_ogc_processes, search_ogc_processes
 
 
 logger = logging.getLogger(__name__)
@@ -101,6 +102,38 @@ async def mcp_retriever_node(state: WorkflowState, llm) -> dict:
         status = AIMessage(content="\n".join(["MCP process tools:", *lines]))
     else:
         status = AIMessage(content="MCP server exposes no OGC process tools.")
+
+    return {
+        "messages": [status],
+        "candidate_processes": candidates,
+        "decision_history": _log(state, "retriever", instruction, candidates),
+    }
+
+
+async def catalog_retriever_node(state: WorkflowState, llm) -> dict:
+    """List every process of the pgvector catalog as candidates for the manager's search step.
+
+    The `fewshot` variant of `retriever_node`: like `mcp_retriever_node` nothing is ranked or
+    filtered by the query, but the processes come from the catalog database, in the same shape as
+    the catalog search returns them (without a similarity score).
+    """
+    instruction = (state.get("step") or {}).get("instruction", "")
+    try:
+        candidates = await asyncio.to_thread(list_ogc_processes)
+    except Exception as exc:
+        logger.exception("Retriever could not list the catalog")
+        return {
+            "messages": [AIMessage(content=f"Retriever failed: {exc}")],
+            "candidate_processes": [],
+            "decision_history": _log(state, "retriever", instruction, error=str(exc)),
+        }
+    logger.info("Retriever listed %d catalog processes", len(candidates))
+
+    if candidates:
+        lines = [f"{i}. {c['process_id']} | {c['title']}" for i, c in enumerate(candidates, start=1)]
+        status = AIMessage(content="\n".join(["Catalog processes:", *lines]))
+    else:
+        status = AIMessage(content="The catalog holds no OGC processes.")
 
     return {
         "messages": [status],
