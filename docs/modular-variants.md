@@ -153,19 +153,65 @@ Corrected or clarified:
 
 ## 8. Verification
 
-Approved: unit tests and Docker, **no LLM calls** (no Anthropic requests).
+Approved: unit tests and Docker, **no LLM calls** (no Anthropic requests). Done on 2026-10-27:
 
-- Unit tests: registry consistency, prompt snapshots, I/O type check without a database, few-shot
-  file parsing.
-- Docker: build, start the stack, crawler + few-shot sync run, `langgraph` starts with every
-  variant, retrievers return the same candidate shape (Ollama embeddings only), a temporary test
-  example is found by the few-shot retrieval and shows up in the rendered prompt, then is removed.
-- **Not verified here**: real agent runs and measurements — to be done by the team, in particular
-  re-measuring `pgvector`/`mcp` after step 6.
+- **Unit tests** (`cd LangGraph && uv run pytest`: 30 passed; `cd ogc_database && uv run pytest`: 9
+  passed): registry consistency, prompt snapshots, retriever candidate shape, few-shot lookup and
+  prompt blocks, I/O type check with and without the switch, `set_input`, few-shot file parsing.
+  Before step 6 the `pgvector`/`mcp` snapshots, recorded before step 1, matched byte for byte.
+- **Docker**: all images build; the stack starts; the crawler stores 25 processes and the few-shot
+  sync creates `fewshot_examples` (`vector(768)`, like the catalog) with 0 examples; `GET /` and
+  `/api/test-prompts` answer; the app module starts with `WORKFLOW_VARIANT=pgvector|mcp|fewshot` and
+  refuses an unknown name.
+- **Retrievers inside the container** (Ollama embeddings only): `search` returns 5 candidates (with
+  `similarity`), `mcp_all` 25 (with `tool`), `catalog_all` 25; same keys otherwise.
+- **Few-shot end to end**: a temporary example (water bodies in Hamburg) plus a broken file were
+  synced from a scratch folder — the broken file was skipped with an error log. "Which rivers and
+  lakes are within Bremen?" found it (similarity 0.744); with a fake LLM the manager and auto_build
+  prompts contained the SOLVED EXAMPLES block and `decision_history` logged the id; the `mcp`
+  variant ignored it. Re-syncing the real (empty) folder removed it again.
+- **Batch harness**: `python -m src.batch <run_dir> --variant pgvector|mcp|fewshot --status` and
+  `--summary` work on a stub run folder; an unknown variant is refused.
+- **Not verified**: real agent runs and measurements — for the team, in particular re-measuring
+  `pgvector`/`mcp` after step 6 and measuring `fewshot` once examples exist.
 
-## 9. Open points / decisions taken autonomously
+## 9. Decisions taken autonomously (team was away)
 
-The team was away during implementation; decisions taken without asking are listed here.
-
+- Variant IDs: `pgvector` and `mcp` kept (existing run folders and reports stay valid); the new one
+  is `fewshot`.
+- Examples are looked up **once per turn** from the latest user message, kept in the state field
+  `examples` (cleared by `turn_input`), and shown to **both** manager and auto_build. The ids are
+  logged in the manager's `decision_history` entry but never shown to the LLM.
+- The few-shot sync runs inside the `ogc-database` crawler on every run. A broken example file is
+  logged and skipped instead of failing the crawler (`langgraph` waits for the crawler to finish).
+  The table is derived data: it is recreated when the embedding size changes; a missing folder
+  leaves it untouched.
+- `FEWSHOT_K=2`, `FEWSHOT_MIN_SIMILARITY=0` (no threshold).
+- With `VALIDATE_IO_TYPES` off, the validator also skips the branch's other change — filling in
+  undeclared input/output names from the catalog — so it behaves exactly as before.
+- The `set_input` argument is now `input` (it shadows Python's builtin inside that one function).
+- Frontend renames: CSS classes `gport-*` → `gio-*`, `port-editor` → `input-editor`, `legend-port`
+  → `legend-io`, data attribute `data-port` → `data-io`.
+- pytest added as a dev dependency to `LangGraph/` and `ogc_database/` (lockfiles updated).
+- The root `README.md` was rewritten in English; its German open questions were translated.
 - Untracked German files (`docs/integration-velocityadapt-stack.md`, `workflow-migration.md`) were
   left untouched and untranslated; they are the team's local notes.
+- Verification only: the host already serves Ollama on port 11434, so the stack was started with a
+  scratch compose override that does not publish the container's Ollama port. The repository's
+  `docker-compose.yml` was not changed for this.
+
+## 10. Open points for the team
+
+- **Measure again**: step 6 changed every variant's prompts; `pgvector`/`mcp` numbers from before
+  are not strictly comparable. Measure `fewshot` once examples exist.
+- **Add examples** to `fewshot_examples/` — never seed or paraphrase tasks (CoolSpots).
+- **Calibrate `FEWSHOT_MIN_SIMILARITY`**: in the check above an unrelated request ("viewshed from a
+  tower in the Alps") still got the only example, at 0.512 vs. 0.744 for a related one.
+- Example graphs come back from JSONB with their keys reordered (e.g. `edges` before `nodes`);
+  harmless, but visible in the prompt.
+- `RunTracker` does not break out the tokens of the examples block; they are part of `input_tokens`.
+- Unchanged on purpose (would change prompts): the manager prompt still asks for a focused search
+  query, which the `mcp` and `fewshot` retrievers ignore, and still claims the validator checks
+  "type mismatches, dangling inputs" (see `TODO.md`).
+- Still open from the analysis: provenance (`provenance-ogc-prov-json`), two-stage selection,
+  integration into the `velocityadapt-stack`.
