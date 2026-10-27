@@ -82,6 +82,9 @@ services:
       # fewshot variant: examples shown per turn, and the cosine similarity an example needs.
       FEWSHOT_K: "2"
       FEWSHOT_MIN_SIMILARITY: "0"
+      # Independent of the variant: also check the data kinds an edge carries (validator.py). Off by
+      # default, as the variants were measured; on, the validator looks the processes up in the catalog.
+      VALIDATE_IO_TYPES: "false"
       METRICS_FILE: metrics/runs.jsonl
       # Unset: Haiku decides alone. laya-shadow: the laya service also picks the manager's next
       # action, logged next to Haiku's in decision_history; Haiku still routes. Needs --profile laya.

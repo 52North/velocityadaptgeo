@@ -146,7 +146,7 @@ def list_ogc_processes() -> list[dict]:
     return [_candidate(r) for r in rows]
 
 
-def fetch_port_specs(processes) -> dict[tuple[str, str], dict]:
+def fetch_io_specs(processes) -> dict[tuple[str, str], dict]:
     """Look up the declared input/output descriptions of catalogued processes.
 
     `processes` is an iterable of (process_id, server_url) pairs, as a graph node stores
@@ -168,7 +168,7 @@ def fetch_port_specs(processes) -> dict[tuple[str, str], dict]:
         with psycopg.connect(DB_DSN) as conn:
             rows = conn.execute(sql, ([p for p, _ in wanted], [s for _, s in wanted])).fetchall()
     except psycopg.Error as exc:
-        logger.warning("Port lookup failed, skipping type checks: %s", exc)
+        logger.warning("Input/output lookup failed, skipping type checks: %s", exc)
         return {}
 
     return {
