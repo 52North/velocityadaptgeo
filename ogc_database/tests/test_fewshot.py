@@ -33,8 +33,10 @@ def test_template_is_a_valid_example():
     assert example["source_file"] == "_template.yaml"
 
 
-def test_template_and_readme_are_not_loaded():
-    assert load_examples(EXAMPLES) == []
+def test_shipped_examples_load_but_not_the_template():
+    examples = load_examples(EXAMPLES)
+    assert examples, "fewshot_examples/ holds no usable example"
+    assert "_template.yaml" not in {e["source_file"] for e in examples}
 
 
 @pytest.mark.parametrize("text, reason", [

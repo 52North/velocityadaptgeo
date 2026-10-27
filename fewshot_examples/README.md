@@ -4,6 +4,9 @@ Solved examples for the `fewshot` workflow variant (`LangGraph/src/llm/variants.
 user turn, the agent looks up the examples whose **request** is closest to the user's request and
 shows them, with their solution graph, to the manager and auto_build.
 
+`hamburg-water-bodies.yaml` is a **dummy** to start from: it is loaded and shown to the agent like
+any other example, so replace or delete it before measuring.
+
 ## Adding an example
 
 1. Copy `_template.yaml` to `<id>.yaml` and edit it (one example per file).

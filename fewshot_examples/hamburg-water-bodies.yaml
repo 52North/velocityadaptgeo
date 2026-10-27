@@ -1,0 +1,25 @@
+# DUMMY example to start from: it is loaded like any other example and shown to the agent in the
+# fewshot variant. Replace or delete it before measuring. Comments are not loaded; `notes` is
+# shown to the agent, so keep remarks for the team in comments like this one.
+
+id: hamburg-water-bodies
+
+request: "Show me the lakes and rivers inside the city of Hamburg."
+
+solution:
+  workflow_graph:
+    nodes:
+      - id: city-boundary_1
+        type: city-boundary
+        config: {server_url: "http://pygeoapi:80/", place: "Hamburg"}
+        inputs: [place, bbox]
+        outputs: [boundary, bbox, utmCrs, areaSqm]
+      - id: osm-water-bodies_2
+        type: osm-water-bodies
+        config: {server_url: "http://pygeoapi:80/"}
+        inputs: [area, tags]
+        outputs: [features, count]
+    edges:
+      - {source: city-boundary_1, source_output: boundary, target: osm-water-bodies_2, target_input: area}
+
+notes: "Geometry first: the place name becomes a boundary polygon, and the water bodies are extracted inside it."

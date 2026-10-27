@@ -204,7 +204,9 @@ Approved: unit tests and Docker, **no LLM calls** (no Anthropic requests). Done 
 
 - **Measure again**: step 6 changed every variant's prompts; `pgvector`/`mcp` numbers from before
   are not strictly comparable. Measure `fewshot` once examples exist.
-- **Add examples** to `fewshot_examples/` — never seed or paraphrase tasks (CoolSpots).
+- **Add examples** to `fewshot_examples/` — never seed or paraphrase tasks (CoolSpots). The one
+  file there, `hamburg-water-bodies.yaml`, is a dummy to start from; replace or delete it before
+  measuring.
 - **Calibrate `FEWSHOT_MIN_SIMILARITY`**: in the check above an unrelated request ("viewshed from a
   tower in the Alps") still got the only example, at 0.512 vs. 0.744 for a related one.
 - Example graphs come back from JSONB with their keys reordered (e.g. `edges` before `nodes`);
