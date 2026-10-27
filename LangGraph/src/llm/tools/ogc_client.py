@@ -85,7 +85,7 @@ def search_ogc_processes(query: str, k: int = 5) -> list[dict]:
 
     Returns:
         A list of dicts with keys: process_id, server_url, title, description,
-        inputs (schema), outputs (schema), similarity. The port names in `inputs`
+        inputs (schema), outputs (schema), similarity. The input/output names in `inputs`
         and `outputs` are the only valid endpoints for wiring this process into a
         workflow graph.
     """

@@ -187,7 +187,7 @@ def decision_state(state: WorkflowState, goal: str) -> dict:
 
     Logged as `state` with each manager decision: the input side of a training row for Laya,
     with the action picked as its label (metrics/.docs/laya_finetune_plan.md). Process ids,
-    config values and port names only, no descriptions, to fit Laya's ~1k-token context.
+    config values and input/output names only, no descriptions, to fit Laya's ~1k-token context.
     """
     graph = state.get("workflow_graph") or {"nodes": [], "edges": []}
     validation = state.get("last_validation")

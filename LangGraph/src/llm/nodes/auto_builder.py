@@ -209,8 +209,8 @@ Decide whether a candidate performs the searched capability, and if so how to wi
             "process_id": decision.process_id,
             "server_url": decision.server_url,
             "inputs": decision.inputs,
-            "input_ports": list((chosen.get("inputs") or {}).keys()),
-            "output_ports": list((chosen.get("outputs") or {}).keys()),
+            "input_names": list((chosen.get("inputs") or {}).keys()),
+            "output_names": list((chosen.get("outputs") or {}).keys()),
         })
         new_node_id = new_graph["nodes"][-1]["id"]
     except (ValueError, TypeError) as exc:

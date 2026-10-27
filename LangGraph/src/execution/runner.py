@@ -89,22 +89,22 @@ def _static_inputs(node: dict) -> dict:
     return {k: v for k, v in (node.get("config") or {}).items() if k not in CONFIG_KEYS}
 
 
-def _pick_output(node_id: str, produced: dict, port: str) -> object:
+def _pick_output(node_id: str, produced: dict, output: str) -> object:
     """Read one named output from a finished node's response body.
 
     Tolerates a process that answers with a single unnamed value rather than a map of
     named outputs, which OGC API - Processes permits for single-output processes.
     """
     if isinstance(produced, dict):
-        if port in produced:
-            return produced[port]
+        if output in produced:
+            return produced[output]
         if len(produced) == 1:
             only = next(iter(produced))
             logger.info("Node %s has no output '%s'; using its only output '%s'.",
-                        node_id, port, only)
+                        node_id, output, only)
             return produced[only]
         raise ExecutionError(
-            f"node '{node_id}' produced no output '{port}' "
+            f"node '{node_id}' produced no output '{output}' "
             f"(available: {sorted(produced)})"
         )
     return produced
