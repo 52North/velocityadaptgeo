@@ -1,0 +1,31 @@
+# Template for a few-shot example. Files starting with "_" are not loaded: copy this file to
+# <id>.yaml and edit it. Format and rules: README.md in this folder.
+
+# Unique across all example files; logged with every agent run that used the example.
+id: munich-buffer-500m
+
+# The user request, as a user would phrase it. This is the only text that is embedded and
+# compared with incoming requests.
+request: "Buffer the city of Munich by 500 m."
+
+solution:
+  # The workflow graph that solves the request, in the same format as `workflow_graph` in
+  # workflows.jsonl (src/llm/state/graph.py). Only id and type are required per node; config holds
+  # server_url and the static input values, inputs/outputs list the process's input/output names.
+  workflow_graph:
+    nodes:
+      - id: city-boundary_1
+        type: city-boundary
+        config: {server_url: "http://pygeoapi:80/", place: "Munich"}
+        inputs: [place, bbox]
+        outputs: [boundary, bbox, utmCrs, areaSqm]
+      - id: buffer_2
+        type: buffer
+        config: {server_url: "http://pygeoapi:80/", distance: 500}
+        inputs: [geometry, distance]
+        outputs: [result]
+    edges:
+      - {source: city-boundary_1, source_output: boundary, target: buffer_2, target_input: geometry}
+
+# Optional: why the graph looks like this, shown to the agent with the example.
+notes: "Geometry first: the place name is turned into a boundary polygon, which is then buffered."

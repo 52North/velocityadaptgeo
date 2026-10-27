@@ -6,7 +6,7 @@ import re
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from src.llm.nodes._helpers import _for_prompt
+from src.llm.nodes._helpers import _for_prompt, examples_block, lookup_examples
 from src.llm.state.graph import CONFIG_KEYS
 from src.llm.state.state import WorkflowState
 from src.llm.tools.laya_client import shadow_next_action
@@ -238,7 +238,7 @@ def _recent(entry: dict) -> dict:
     return {"node": node, "instruction": instruction, "error": entry.get("error")}
 
 
-async def management_node(state: WorkflowState, llm) -> dict:
+async def management_node(state: WorkflowState, llm, use_examples: bool = False) -> dict:
     """Plan the next action for the current user goal.
 
     The graph built so far is never cleared here: it survives every turn and is only
@@ -278,6 +278,14 @@ async def management_node(state: WorkflowState, llm) -> dict:
             "decision_history": decision_history,
         }
 
+    # fewshot variant: looked up on the turn's first call (turn_input clears them), then kept in state.
+    examples = state.get("examples")
+    looked_up = use_examples and examples is None
+    if looked_up:
+        examples = await asyncio.to_thread(lookup_examples, latest_user)
+    found = {"examples": examples} if looked_up else {}
+    examples_section = f"\n\n            {examples_block(examples)}" if use_examples and examples else ""
+
     graph_blob = json.dumps(workflow_graph, indent=2)
     # Not capped: the pgvector search already returns its top 5, the mcp variant shows every tool.
     candidates_blob = json.dumps(candidate_processes, indent=2)
@@ -287,7 +295,7 @@ async def management_node(state: WorkflowState, llm) -> dict:
     prompt = [
         SystemMessage(content=MANAGER_SYSTEM),
         HumanMessage(content=f"""USER GOAL:
-            {latest_user}
+            {latest_user}{examples_section}
 
             CURRENT WORKFLOW GRAPH:
             {graph_blob}
@@ -334,6 +342,7 @@ async def management_node(state: WorkflowState, llm) -> dict:
             "step": None,
             "iteration": iteration + 1,
             "decision_history": decision_history,
+            **found,
         }
     data = parse_llm_json(resp.text) or {}
 
@@ -359,12 +368,16 @@ async def management_node(state: WorkflowState, llm) -> dict:
     })
     if laya is not None:
         decision_history[-1]["laya"] = laya
+    if looked_up:
+        # Which examples this turn was shown, to audit the fewshot variant for leaked test tasks.
+        decision_history[-1]["examples"] = [{"id": e["id"], "similarity": e["similarity"]} for e in examples]
 
     update = {
         "current_action": next_action,        # "search" | "build" | "validate" | "done"
         "step": step,                         # single step object (or None)
         "iteration": iteration + 1,
         "decision_history": decision_history,
+        **found,
     }
 
     return update

@@ -66,11 +66,13 @@ def turn_input(prompt: str) -> dict:
     budget - it is checkpointed per thread and would otherwise keep growing until the
     manager hard-stops at `max_iterations` for the rest of the session. The budget is
     sent along so it stays consistent with the `recursion_limit` derived from it.
+    `examples` is cleared so the fewshot variant looks them up again for the new request.
     """
     return {
         "messages": [HumanMessage(content=prompt)],
         "iteration": 0,
         "max_iterations": MAX_WORKFLOW_ITERATIONS,
+        "examples": None,
     }
 
 

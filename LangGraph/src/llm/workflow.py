@@ -50,7 +50,7 @@ def build_workflow(variant: Variant):
     """Compile the agent graph for one workflow variant (src.llm.variants)."""
     graph = StateGraph(WorkflowState)
 
-    graph.add_node("manager",       partial(management_node, llm=llm))
+    graph.add_node("manager",       partial(management_node, llm=llm, use_examples=variant.examples))
     graph.add_node("retriever",     partial(RETRIEVER_NODES[variant.tools], llm=llm))
     graph.add_node("auto_build",    partial(auto_build_node, llm=llm, variant=variant))
     graph.add_node("builder",       builder_node)

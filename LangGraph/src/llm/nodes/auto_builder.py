@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 
 from src.llm.state.state import WorkflowState
 from src.llm.variants import DEFAULT_VARIANT, VARIANTS, Variant
-from src.llm.nodes._helpers import _log, _unmet
+from src.llm.nodes._helpers import _log, _unmet, examples_block
 from src.llm.nodes.builder import apply_build_op
 from src.llm.nodes.validator import validate_graph
 
@@ -135,13 +135,16 @@ async def auto_build_node(state: WorkflowState, llm, variant: Variant = VARIANTS
             latest_user = m.content
             break
 
+    examples = state.get("examples") if variant.examples else None
+    examples_section = f"\n\n{examples_block(examples)}" if examples else ""
+
     prompt = [
         SystemMessage(content=auto_build_system(variant)),
         HumanMessage(content=f"""CAPABILITY SEARCHED FOR (judge the candidates against THIS):
 {capability or "(unknown)"}
 
 USER GOAL (context for wiring, input values and choosing between matching candidates - the graph is built one capability per turn):
-{latest_user or "(unknown)"}
+{latest_user or "(unknown)"}{examples_section}
 
 CANDIDATE PROCESSES:
 {candidates}

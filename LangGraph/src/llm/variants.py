@@ -15,7 +15,7 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class Variant:
-    """One way of providing candidate processes to the agent."""
+    """One way of providing candidate processes (and solved examples) to the agent."""
 
     name: str
     # Plain name for reports.
@@ -28,6 +28,8 @@ class Variant:
     candidate_source: str
     # Whether candidates carry a `similarity` score that the auto_build prompt explains.
     similarity_hint: bool = False
+    # Whether the solved examples closest to the request are shown to the manager and auto_build.
+    examples: bool = False
 
 
 DEFAULT_VARIANT = "pgvector"
@@ -57,6 +59,7 @@ VARIANTS: dict[str, Variant] = {
             tools="catalog_all",
             candidate_source="""The candidates are every process
   in the catalog, most of them unrelated to the capability. """,
+            examples=True,
         ),
     )
 }

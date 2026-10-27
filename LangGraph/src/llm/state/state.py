@@ -14,5 +14,6 @@ class WorkflowState(TypedDict, total=False):
     unmet_capabilities: list[dict]  # capabilities asked for that the catalog cannot supply
     current_action: str            # "search" | "build" | "validate" | "chat" | "done"
     step: dict | None              # the single planned step
+    examples: list[dict] | None    # fewshot variant: this turn's solved examples; None = not looked up yet
     iteration: int
     max_iterations: int
