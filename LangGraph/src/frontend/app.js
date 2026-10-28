@@ -14,13 +14,13 @@ const threadId = crypto.randomUUID();
 const SVG_NS = "http://www.w3.org/2000/svg";
 const NODE_W = 186;
 const NODE_H = 78;
-const COL_GAP_MIN = 104;  // floor for the space between columns; widened to fit port labels
+const COL_GAP_MIN = 104;  // floor for the space between columns; widened to fit input/output labels
 const ROW_GAP = 30;
 const BAND_GAP = 62;
 const PAD = 22;
-const PORT_GAP = 15;
-const PORT_R = 3.5;
-const CHAR_W = 6;  // advance width of one character in the 10px monospace port labels
+const IO_GAP = 15;
+const IO_R = 3.5;
+const CHAR_W = 6;  // advance width of one character in the 10px monospace input/output labels
 const HOP_R = 6;
 const HIDDEN_CONFIG_KEYS = ["server_url", "timeout_seconds"];
 
@@ -41,7 +41,7 @@ function graphLocked() {
 let deleting = false;
 let picked = null;
 let nodeH = NODE_H;
-let nodePorts = new Map();
+let nodeIO = new Map();
 
 /**
  * Render assistant prose as markdown into `el`.
@@ -215,38 +215,38 @@ function columnOf(nodes, edges) {
 }
 
 /**
- * Collect, per node, every port the process declares - not only the wired ones - so an
- * unconnected parameter shows up as an empty socket instead of being invisible. Ports keep
+ * Collect, per node, every input and output the process declares - not only the wired ones -
+ * so an unconnected parameter shows up as an empty socket instead of being invisible. They keep
  * the order the catalog declares them in, so a node's parameters always stack in the same
- * order as the process signature. A port named only by an edge is appended rather than
+ * order as the process signature. An input/output named only by an edge is appended rather than
  * dropped: a graph wired to an undeclared name should be visible, not silently centred.
  */
-function portsOf(nodes, edges) {
+function ioOf(nodes, edges) {
     const map = new Map(nodes.map((n) => [n.id, {
         in: [...(n.inputs || [])], out: [...(n.outputs || [])], wired: new Set(),
         values: Object.fromEntries(Object.entries(n.config || {})
             .filter(([k]) => !HIDDEN_CONFIG_KEYS.includes(k))
             .map(([k, v]) => [k, formatValue(v)])),
     }]));
-    // A value set on a port the catalog never declared is still a parameter of this node,
+    // A value set on an input the catalog never declared is still a parameter of this node,
     // so it gets a socket like any other rather than disappearing with the box summary.
     map.forEach((p) => Object.keys(p.values).forEach((k) => {
         if (!p.in.includes(k)) p.in.push(k);
     }));
     edges.forEach((e) => [["out", e.source, e.source_output], ["in", e.target, e.target_input]]
-        .forEach(([side, id, port]) => {
+        .forEach(([side, id, edgeName]) => {
             const p = map.get(id);
             if (!p) return;
-            const name = port || "default";
+            const name = edgeName || "default";
             if (!p[side].includes(name)) p[side].push(name);
             p.wired.add(`${side}:${name}`);
         }));
     return map;
 }
 
-/** Y of one port anchor relative to the node top: anchors spread evenly down the border. */
-function portY(nodeId, side, name) {
-    const list = (nodePorts.get(nodeId) || {})[side] || [];
+/** Y of one input/output anchor relative to the node top: anchors spread evenly down the border. */
+function ioY(nodeId, side, name) {
+    const list = (nodeIO.get(nodeId) || {})[side] || [];
     if (!list.length) return nodeH / 2;
     return (nodeH * (Math.max(0, list.indexOf(name)) + 1)) / (list.length + 1);
 }
@@ -279,18 +279,18 @@ function formatValue(v) {
 }
 
 /**
- * What one port prints beside its socket: its name, and its static value when it has one.
+ * What one input/output prints beside its socket: its name, and its static value when it has one.
  *
  * The values used to be summarised inside the box in `config` order, which is not the
  * order the sockets stack in - so a node listed its parameters twice and the two lists
- * disagreed. Printing each value on the port it belongs to leaves one place to read it.
+ * disagreed. Printing each value on the input it belongs to leaves one place to read it.
  * A wired input shows no value: an edge overrides `config` at run time, so the label
  * would be naming something that will not be used.
  */
-function portLabel(nodeId, side, name) {
-    const ports = nodePorts.get(nodeId);
-    const value = side === "in" && ports && !ports.wired.has(`in:${name}`)
-        ? ports.values[name] : undefined;
+function ioLabel(nodeId, side, name) {
+    const io = nodeIO.get(nodeId);
+    const value = side === "in" && io && !io.wired.has(`in:${name}`)
+        ? io.values[name] : undefined;
     return value === undefined
         ? truncate(name, 14)
         : `${truncate(name, 14)}=${truncate(value, 12)}`;
@@ -324,56 +324,56 @@ function drawNode(svg, node, x, y) {
     id.textContent = truncate(node.id, 28);
     group.appendChild(id);
 
-    const ports = nodePorts.get(node.id) || { in: [], out: [], wired: new Set(), values: {} };
+    const io = nodeIO.get(node.id) || { in: [], out: [], wired: new Set(), values: {} };
     [["in", 0, "end", -7, 13], ["out", NODE_W, "start", 7, -7]].forEach(
         ([side, cx, anchor, dx, dy]) => {
-            ports[side].forEach((name) => {
-                // An unwired port is drawn hollow and its name dimmed, so the sockets still
+            io[side].forEach((name) => {
+                // An unwired input/output is drawn hollow and its name dimmed, so the sockets still
                 // free to be connected read as offers rather than as part of the pipeline.
-                const kind = ports.wired.has(`${side}:${name}`) ? "-wired" : "-open";
-                const cy = portY(node.id, side, name);
-                // One group per port: the dot, an oversized transparent grab area so a
+                const kind = io.wired.has(`${side}:${name}`) ? "-wired" : "-open";
+                const cy = ioY(node.id, side, name);
+                // One group per input/output: the dot, an oversized transparent grab area so a
                 // wire can be started without pixel-hunting, and the name. It carries the
-                // port's identity and its absolute anchor, which is all the drag handlers
+                // input/output's identity and its absolute anchor, which is all the drag handlers
                 // need to know about the drawing.
-                const port = svgEl("g", {
-                    class: "gport-group", "data-node": node.id, "data-side": side,
-                    "data-port": name, "data-ax": x + cx, "data-ay": y + cy,
+                const socket = svgEl("g", {
+                    class: "gio-group", "data-node": node.id, "data-side": side,
+                    "data-io": name, "data-ax": x + cx, "data-ay": y + cy,
                 });
-                port.appendChild(svgEl("circle", { cx, cy, r: PORT_R, class: `gport gport${kind}` }));
-                port.appendChild(svgEl("circle", { cx, cy, r: 8, class: "gport-hit" }));
+                socket.appendChild(svgEl("circle", { cx, cy, r: IO_R, class: `gio gio${kind}` }));
+                socket.appendChild(svgEl("circle", { cx, cy, r: 8, class: "gio-hit" }));
                 const label = svgEl("text", {
                     x: cx + dx, y: cy + dy,
-                    class: `gport-label gport-label${kind}`, "text-anchor": anchor,
+                    class: `gio-label gio-label${kind}`, "text-anchor": anchor,
                 });
-                label.textContent = portLabel(node.id, side, name);
-                port.appendChild(label);
-                group.appendChild(port);
+                label.textContent = ioLabel(node.id, side, name);
+                socket.appendChild(label);
+                group.appendChild(socket);
             });
         },
     );
 
-    // Port labels are truncated to fit beside their socket; the tooltip spells the
+    // Input/output labels are truncated to fit beside their socket; the tooltip spells the
     // values out in full, in the same order the sockets stack.
     const full = svgEl("title");
     full.textContent = [
         node.id, `process: ${node.type}`,
         `server: ${(node.config || {}).server_url || "?"}`,
-        ...ports.in.filter((name) => ports.values[name] !== undefined)
-            .map((name) => `${name} = ${ports.values[name]}`),
+        ...io.in.filter((name) => io.values[name] !== undefined)
+            .map((name) => `${name} = ${io.values[name]}`),
     ].join("\n");
     group.appendChild(full);
 
     svg.appendChild(group);
 }
 
-/** The two endpoints of an edge, each on its own port anchor. */
+/** The two endpoints of an edge, each on its own input/output anchor. */
 function edgeEnds(edge, from, to) {
     return {
         x1: from.x + NODE_W,
-        y1: from.y + portY(edge.source, "out", edge.source_output || "default"),
+        y1: from.y + ioY(edge.source, "out", edge.source_output || "default"),
         x2: to.x,
-        y2: to.y + portY(edge.target, "in", edge.target_input || "default"),
+        y2: to.y + ioY(edge.target, "in", edge.target_input || "default"),
     };
 }
 
@@ -405,7 +405,7 @@ function edgeRoute(edge, from, to, laneY) {
 /**
  * Where two segments genuinely cross, as a distance along the first one. Shared
  * endpoints and collinear overlaps return null: only a real X is worth hopping over,
- * and two edges leaving the same output port are one line splitting, not a crossing.
+ * and two edges leaving the same output are one line splitting, not a crossing.
  */
 function segCross(a, b, c, d) {
     const rx = b.x - a.x, ry = b.y - a.y, sx = d.x - c.x, sy = d.y - c.y;
@@ -428,7 +428,7 @@ function lengths(pts) {
 /**
  * Distances along `pts` at which it crosses any of the routes in `others`, merged when
  * closer together than one hop and kept clear of both endpoints so a bump never lands
- * on a port anchor or under the arrowhead.
+ * on an input/output anchor or under the arrowhead.
  */
 function crossings(pts, others) {
     const cum = lengths(pts);
@@ -492,7 +492,7 @@ function drawRoute(svg, pts, others, edge) {
 }
 
 /**
- * Render the OGC execution graph: one box per process node, one arrow per wired port.
+ * Render the OGC execution graph: one box per process node, one arrow per wired input.
  * Called on every graph update so the DAG grows as the workflow is assembled.
  */
 /**
@@ -554,22 +554,22 @@ function renderGraph() {
         return;
     }
 
-    nodePorts = portsOf(nodes, edges);
-    const maxPorts = Math.max(0, ...[...nodePorts.values()].map(
+    nodeIO = ioOf(nodes, edges);
+    const maxIO = Math.max(0, ...[...nodeIO.values()].map(
         (p) => Math.max(p.in.length, p.out.length)
     ));
-    nodeH = Math.max(NODE_H, (maxPorts + 1) * PORT_GAP);
+    nodeH = Math.max(NODE_H, (maxIO + 1) * IO_GAP);
 
     // Labels print outside the box - inputs into the gap left of their column, outputs into
     // the gap right of it - so the gap is measured from the longest label actually drawn
     // rather than fixed. A graph with no static values keeps a tight layout; a long value
     // widens the columns instead of overprinting its neighbour.
-    const widest = (side) => CHAR_W * Math.max(0, ...[...nodePorts].flatMap(
-        ([id, p]) => p[side].map((name) => portLabel(id, side, name).length)
+    const widest = (side) => CHAR_W * Math.max(0, ...[...nodeIO].flatMap(
+        ([id, p]) => p[side].map((name) => ioLabel(id, side, name).length)
     ));
     const inW = widest("in");
     const outW = widest("out");
-    const colGap = Math.max(COL_GAP_MIN, inW + outW + PORT_R * 4);
+    const colGap = Math.max(COL_GAP_MIN, inW + outW + IO_R * 4);
 
     const column = columnOf(nodes, edges);
     const available = Math.max(canvasContentWidth(), NODE_W + PAD * 2);
@@ -599,11 +599,11 @@ function renderGraph() {
     });
 
     // The outermost columns have no neighbouring gap to print into, so they get a gutter -
-    // reserved only when a node there actually has labelled ports.
+    // reserved only when a node there actually has labelled inputs/outputs.
     const usedCols = Math.min(perBand, Math.max(...column.values()) + 1);
     const gutter = (w, test) => PAD + ([...placed.entries()].some(
-        ([id, slot]) => test(slot, nodePorts.get(id) || { in: [], out: [] })
-    ) ? w + PORT_R * 2 : 0);
+        ([id, slot]) => test(slot, nodeIO.get(id) || { in: [], out: [] })
+    ) ? w + IO_R * 2 : 0);
     const leftPad = gutter(inW, (slot, p) => slot.colInBand === 0 && p.in.length);
     const rightPad = gutter(outW, (slot, p) => slot.colInBand === usedCols - 1 && p.out.length);
 
@@ -720,23 +720,23 @@ function closeEditor() {
     editor = null;
 }
 
-function editPort(nodeId, side, port, wired) {
+function editInput(nodeId, side, input, wired) {
     if (side !== "in" || wired) return;
     closeEditor();
     const node = (executionGraph.nodes || []).find((n) => n.id === nodeId);
-    const current = (node && node.config || {})[port];
+    const current = (node && node.config || {})[input];
     const socket = graphCanvas.querySelector(
-        `.gport-group[data-node="${nodeId}"][data-side="in"][data-port="${port}"]`);
+        `.gio-group[data-node="${nodeId}"][data-side="in"][data-io="${input}"]`);
     if (!socket) return;
     const at = socket.getBoundingClientRect();
 
     // A form, so Enter commits for free.
     editor = document.createElement("form");
-    editor.className = "port-editor";
+    editor.className = "input-editor";
     editor.style.left = `${at.left}px`;
     editor.style.top = `${at.bottom + 6}px`;
     const name = document.createElement("label");
-    name.textContent = port;
+    name.textContent = input;
     const field = document.createElement("input");
     Object.assign(field, { type: "text", autocomplete: "off", placeholder: "empty clears" });
     field.value = current === undefined ? "" : JSON.stringify(current);
@@ -752,7 +752,7 @@ function editPort(nodeId, side, port, wired) {
             try { value = JSON.parse(raw); } catch { value = raw; }
         }
         closeEditor();
-        graphOp("set_input", { node_id: nodeId, port, value });
+        graphOp("set_input", { node_id: nodeId, input, value });
     });
     field.addEventListener("blur", closeEditor);
 
@@ -762,11 +762,11 @@ function editPort(nodeId, side, port, wired) {
 }
 
 /**
- * Drag one port onto another to wire them together.
+ * Drag an output onto an input (or the other way round) to wire them together.
  *
- * A drag that ends where it started is a click, and means "edit this port's value" - the
+ * A drag that ends where it started is a click, and means "edit this input's value" - the
  * two share a target because they are the same gesture on the same thing, and telling
- * them apart by distance costs less than a second affordance per port. Direction is
+ * them apart by distance costs less than a second affordance per socket. Direction is
  * normalised here rather than refused, so dragging an input onto an output works too.
  */
 let draft = null;
@@ -777,14 +777,14 @@ let editor = null;
 graphCanvas.addEventListener("scroll", closeEditor);
 
 graphCanvas.addEventListener("pointerdown", (evt) => {
-    const port = evt.target.closest(".gport-group");
-    if (!port || graphLocked() || deleting || picked || evt.button !== 0) return;
+    const socket = evt.target.closest(".gio-group");
+    if (!socket || graphLocked() || deleting || picked || evt.button !== 0) return;
     const svg = graphCanvas.querySelector("svg");
     if (!svg) return;
     evt.preventDefault();
     const path = svgEl("path", { class: "gedge-draft" });
     svg.appendChild(path);
-    draft = { svg, path, port, moved: false, ax: +port.dataset.ax, ay: +port.dataset.ay };
+    draft = { svg, path, socket, moved: false, ax: +socket.dataset.ax, ay: +socket.dataset.ay };
     graphCanvas.classList.add("wiring");
 });
 
@@ -798,25 +798,25 @@ window.addEventListener("pointermove", (evt) => {
 
 window.addEventListener("pointerup", (evt) => {
     if (!draft) return;
-    const { port, moved } = draft;
+    const { socket, moved } = draft;
     suppressClick = moved;
     draft.path.remove();
     graphCanvas.classList.remove("wiring");
     draft = null;
 
-    const from = port.dataset;
-    if (!moved) return editPort(from.node, from.side, from.port,
-                                port.querySelector(".gport-wired"));
+    const from = socket.dataset;
+    if (!moved) return editInput(from.node, from.side, from.io,
+                                 socket.querySelector(".gio-wired"));
 
-    const target = document.elementFromPoint(evt.clientX, evt.clientY)?.closest(".gport-group");
+    const target = document.elementFromPoint(evt.clientX, evt.clientY)?.closest(".gio-group");
     if (!target) return;
     const to = target.dataset;
     if (to.node === from.node || to.side === from.side) return;
 
     const [out, inp] = from.side === "out" ? [from, to] : [to, from];
     graphOp("connect", {
-        source: out.node, source_output: out.port,
-        target: inp.node, target_input: inp.port,
+        source: out.node, source_output: out.io,
+        target: inp.node, target_input: inp.io,
     });
 });
 
@@ -859,7 +859,7 @@ function clearPick() {
  *
  * Two edits are really the same gesture - re-pointing a connection and trading two nodes'
  * places - and both are corrections of an existing graph rather than additions to it, so
- * neither is reachable by dragging from a free port. Holding the thing between two clicks
+ * neither is reachable by dragging from a free input/output. Holding the thing between two clicks
  * is what makes them one mechanism: the first click says what moves, the second says
  * where, and Escape drops it. Nothing changes until the second click lands.
  */
@@ -867,7 +867,7 @@ function pickEdge(hit) {
     const [source, source_output] = JSON.parse(hit.dataset.edge);
     const svg = graphCanvas.querySelector("svg");
     const anchor = graphCanvas.querySelector(
-        `.gport-group[data-node="${source}"][data-side="out"][data-port="${source_output}"]`);
+        `.gio-group[data-node="${source}"][data-side="out"][data-io="${source_output}"]`);
     if (!svg || !anchor) return;
 
     const path = svgEl("path", { class: "gedge-draft" });
@@ -883,15 +883,15 @@ function pickEdge(hit) {
     graphStatus.className = "graph-status";
 }
 
-async function dropEdge(port) {
+async function dropEdge(end) {
     const [source, source_output, target, target_input] = picked.edge;
     clearPick();
-    if (port.node === target && port.port === target_input) return renderGraph();
+    if (end.node === target && end.io === target_input) return renderGraph();
 
     // Connect first, disconnect second: if the new wiring is refused - a cycle, say - the
     // original connection is still there, rather than lost to a half-finished move.
     if (await graphOp("connect", {
-        source, source_output, target: port.node, target_input: port.port,
+        source, source_output, target: end.node, target_input: end.io,
     })) {
         await graphOp("disconnect", { source, source_output, target, target_input });
     }
@@ -916,7 +916,7 @@ graphCanvas.addEventListener("click", (evt) => {
     if (graphLocked()) return;
 
     const hit = evt.target.closest("[data-edge]");
-    const port = evt.target.closest(".gport-group");
+    const socket = evt.target.closest(".gio-group");
     const node = evt.target.closest(".gnode");
 
     if (deleting) {
@@ -932,7 +932,7 @@ graphCanvas.addEventListener("click", (evt) => {
     }
 
     if (picked) {
-        if (picked.kind === "edge" && port && port.dataset.side === "in") return dropEdge(port.dataset);
+        if (picked.kind === "edge" && socket && socket.dataset.side === "in") return dropEdge(socket.dataset);
         if (picked.kind === "node" && node && node.dataset.node !== picked.id) return swapWith(node.dataset.node);
         clearPick();
         return renderGraph();
@@ -940,8 +940,8 @@ graphCanvas.addEventListener("click", (evt) => {
 
     if (hit) return pickEdge(hit);
     // Only a wired node offers a swap: trading places with nothing to trade is a no-op,
-    // and a port click is the port's own gesture, not the node's.
-    if (!node || port) return;
+    // and a click on an input/output is its own gesture, not the node's.
+    if (!node || socket) return;
     const id = node.dataset.node;
     if (!(executionGraph.edges || []).some((e) => e.source === id || e.target === id)) return;
 
@@ -1096,9 +1096,9 @@ let layersListed = false;
  * map layers. Non-GeoJSON outputs (counts, areas, CRS codes) are simply absent here.
  */
 function registerLayers(nodeId, process, geo) {
-    Object.entries(geo || {}).forEach(([port, info]) => {
+    Object.entries(geo || {}).forEach(([output, info]) => {
         mapLayers.push({
-            key: `${nodeId}.${port}`, node: nodeId, process, port,
+            key: `${nodeId}.${output}`, node: nodeId, process, output,
             kind: info.kind, count: info.features, index: mapLayers.length,
             on: false, note: `${info.kind}${info.features > 1 ? ` · ${info.features}` : ""}`, noteEl: null,
         });
@@ -1159,7 +1159,7 @@ function setNote(entry, text) {
 /** Fetch one output and build its map layer; throws when the server has none. */
 async function fetchLayer(entry) {
     const url = `/api/result?thread_id=${encodeURIComponent(threadId)}` +
-        `&node=${encodeURIComponent(entry.node)}&output=${encodeURIComponent(entry.port)}`;
+        `&node=${encodeURIComponent(entry.node)}&output=${encodeURIComponent(entry.output)}`;
     const response = await fetch(url);
     if (!response.ok) throw new Error(String(response.status));
     const collection = await response.json();
@@ -1249,7 +1249,7 @@ function renderLayerList() {
 
         const title = document.createElement("span");
         title.className = "layer-title";
-        title.textContent = `${entry.process}.${entry.port}`;
+        title.textContent = `${entry.process}.${entry.output}`;
 
         box.addEventListener("change", () => toggleLayer(entry, box.checked));
 

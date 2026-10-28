@@ -75,9 +75,16 @@ services:
       MODEL_PRICES_PER_MTOK: claude-haiku-5-5=0.10,0.50
       MAX_WORKFLOW_ITERATIONS: "16"
       MAX_MAP_FEATURES: "3000"
-      # pgvector (catalog search) or mcp (every tool of the mcp service); src.batch --variant overrides it.
+      # One of LangGraph/src/llm/variants.py: pgvector (catalog search), mcp (every tool of the mcp
+      # service) or fewshot (whole catalog + few-shot examples). src.batch --variant overrides it.
       WORKFLOW_VARIANT: pgvector
       MCP_URL: http://mcp:8001/mcp
+      # fewshot variant: examples shown per turn, and the cosine similarity an example needs.
+      FEWSHOT_K: "2"
+      FEWSHOT_MIN_SIMILARITY: "0"
+      # Independent of the variant: also check the data kinds an edge carries (validator.py). Off by
+      # default, as the variants were measured; on, the validator looks the processes up in the catalog.
+      VALIDATE_IO_TYPES: "false"
       METRICS_FILE: metrics/runs.jsonl
       # Unset: Haiku decides alone. laya-shadow: the laya service also picks the manager's next
       # action, logged next to Haiku's in decision_history; Haiku still routes. Needs --profile laya.
@@ -192,6 +199,10 @@ services:
       <<: [*postgres, *ollama, *pygeoapi, *ogc-servers]
       HTTP_TIMEOUT: "30"
       CONCURRENT_REQUESTS: "5"
+      # Few-shot examples of the fewshot variant, synced into the database on every run.
+      FEWSHOT_DIR: /app/fewshot_examples
+    volumes:
+      - ./fewshot_examples:/app/fewshot_examples:ro
     dns:
       - 8.8.8.8
     depends_on:

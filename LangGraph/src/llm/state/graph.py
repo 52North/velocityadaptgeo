@@ -68,7 +68,7 @@ class NodeDefinition(BaseModel):
 
 
 class EdgeDefinition(BaseModel):
-    """A directed edge between two named ports. `source`/`target` reference node ids."""
+    """A directed edge from a named output to a named input. `source`/`target` reference node ids."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -119,15 +119,16 @@ def new_graph_node(
     config: dict | None = None,
     node_index: int = 0,
     label: str = "",
-    input_ports: list[str] | None = None,
-    output_ports: list[str] | None = None,
+    input_names: list[str] | None = None,
+    output_names: list[str] | None = None,
 ) -> dict:
     """Build a node dict representing one OGC process instance in the graph.
 
     `inputs` holds concrete static parameter values (e.g. {"distance": 500}); these are
     folded into `config`. The node's `inputs`/`outputs` lists hold the process's declared
-    port names, taken from the catalog, so an edge can be validated against the ports
-    that actually exist. When the ports are unknown they fall back to the static keys.
+    input/output names, taken from the catalog, so an edge can be validated against the
+    inputs/outputs that actually exist. When they are unknown, the inputs fall back to the
+    static keys.
     """
     resolved_config = {"server_url": server_url, "timeout_seconds": DEFAULT_TIMEOUT_SECONDS}
     resolved_config.update(inputs or {})
@@ -139,8 +140,8 @@ def new_graph_node(
         label=label,
         position=position or default_position(node_index),
         config=resolved_config,
-        inputs=list(input_ports if input_ports is not None else (inputs or {}).keys()),
-        outputs=list(output_ports or []),
+        inputs=list(input_names if input_names is not None else (inputs or {}).keys()),
+        outputs=list(output_names or []),
     )
 
     logger.info("Graph-node produced: %s", node.model_dump())

@@ -11,8 +11,8 @@ app the user would be asked; here the scripted `ANSWERS` reply for them. A requi
 scripted answer stays unset and its node fails. An optional input holding a placeholder is dropped, so
 the process default applies. Every result records what was answered (`asked`) and dropped (`defaulted`).
 
-A graph's signature covers its process types, static inputs (after the answers) and edges by port, not
-node ids or positions, so the many results that built the same graph run once. Each node's output is
+A graph's signature covers its process types, static inputs (after the answers) and edges by input/output,
+not node ids or positions, so the many results that built the same graph run once. Each node's output is
 cached by process and inputs under `<run_dir>/executions/nodes/<sha1>.json`, so a node shared by many
 graphs (the city boundary, the OSM download) runs once per run folder, for every variant.
 
@@ -115,7 +115,7 @@ async def answer_unset(
 
 
 def signature(graph: dict) -> str:
-    """Process types, static inputs and edges by port; independent of node ids and positions."""
+    """Process types, static inputs and edges by input/output; independent of node ids and positions."""
     desc = {
         n["id"]: json.dumps(
             [n["type"], {k: v for k, v in n["config"].items() if k not in CONFIG_KEYS}],

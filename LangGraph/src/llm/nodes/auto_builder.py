@@ -5,7 +5,8 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
 
 from src.llm.state.state import WorkflowState
-from src.llm.nodes._helpers import _log, _unmet
+from src.llm.variants import DEFAULT_VARIANT, VARIANTS, Variant
+from src.llm.nodes._helpers import _log, _unmet, examples_block
 from src.llm.nodes.builder import apply_build_op
 from src.llm.nodes.validator import validate_graph
 
@@ -62,35 +63,30 @@ SIMILARITY_HINT- When performs_capability=false nothing is added to the graph. T
   Leave them null only when the graph is empty or no existing node can feed this one.
 - Node ids in the graph look like "<process_id>_<n>"; connect_from_node must be one of
   the ids actually present in the current graph.
-- Port names are NOT free text. connect_from_output must be one of the source node's
-  declared "outputs" keys, and connect_to_input one of this candidate's declared
-  "inputs" keys, spelled exactly as given. Never reuse the input's name for the output
-  or invent a port: a graph wired to a port that does not exist cannot be executed.
+- Input and output names are NOT free text. connect_from_output must be one of the
+  source node's declared "outputs" keys, and connect_to_input one of this candidate's
+  declared "inputs" keys, spelled exactly as given. Never reuse the input's name for the
+  output or invent a name: a graph wired to an input or output that does not exist cannot
+  be executed.
 - Do not invent process ids, servers, or node ids that are not present in the given
   candidates or graph.
 """
 
-# Where the candidates come from is the only part of this prompt that differs between the
-# workflow variants (WORKFLOW_VARIANT); the pick format and every other rule are shared.
-AUTO_BUILD_SYSTEM = {
-    "pgvector": AUTO_BUILD_TEMPLATE.replace(
-        "CANDIDATE_SOURCE ",
-        """The candidates are the nearest
-  vector matches, NOT a guarantee of fitness: the search always returns something, even
-  when nothing in the catalog performs the requested operation. """,
-    ).replace(
-        "SIMILARITY_HINT",
-        """- A `similarity` at or below ~0.55 is a hint that the capability may be absent
+SIMILARITY_HINT = """- A `similarity` at or below ~0.55 is a hint that the capability may be absent
   altogether; a genuine match usually scores well above that. The description decides,
   though - the score is only evidence.
-""",
-    ),
-    "mcp": AUTO_BUILD_TEMPLATE.replace(
-        "CANDIDATE_SOURCE ",
-        """The candidates are every process
-  tool the MCP server exposes, most of them unrelated to the capability. """,
-    ).replace("SIMILARITY_HINT", ""),
-}
+"""
+
+
+def auto_build_system(variant: Variant) -> str:
+    """The system prompt for a variant.
+
+    Where the candidates come from is the only part of this prompt that differs between the
+    workflow variants (src.llm.variants); the pick format and every other rule are shared.
+    """
+    return AUTO_BUILD_TEMPLATE.replace("CANDIDATE_SOURCE ", variant.candidate_source).replace(
+        "SIMILARITY_HINT", SIMILARITY_HINT if variant.similarity_hint else "",
+    )
 
 
 def _graph_processes(graph: dict) -> set[tuple[str | None, str | None]]:
@@ -105,7 +101,7 @@ def _graph_processes(graph: dict) -> set[tuple[str | None, str | None]]:
     }
 
 
-async def auto_build_node(state: WorkflowState, llm, variant: str = "pgvector") -> dict:
+async def auto_build_node(state: WorkflowState, llm, variant: Variant = VARIANTS[DEFAULT_VARIANT]) -> dict:
     """Turn the newest search result into a wired graph node, then validate the graph.
 
     Control returns to the manager afterwards, so this runs once per search and the
@@ -140,13 +136,16 @@ async def auto_build_node(state: WorkflowState, llm, variant: str = "pgvector") 
             latest_user = m.content
             break
 
+    examples = state.get("examples") if variant.examples else None
+    examples_section = f"\n\n{examples_block(examples)}" if examples else ""
+
     prompt = [
-        SystemMessage(content=AUTO_BUILD_SYSTEM[variant]),
+        SystemMessage(content=auto_build_system(variant)),
         HumanMessage(content=f"""CAPABILITY SEARCHED FOR (judge the candidates against THIS):
 {capability or "(unknown)"}
 
 USER GOAL (context for wiring, input values and choosing between matching candidates - the graph is built one capability per turn):
-{latest_user or "(unknown)"}
+{latest_user or "(unknown)"}{examples_section}
 
 CANDIDATE PROCESSES:
 {candidates}
@@ -211,8 +210,8 @@ Decide whether a candidate performs the searched capability, and if so how to wi
             "process_id": decision.process_id,
             "server_url": decision.server_url,
             "inputs": decision.inputs,
-            "input_ports": list((chosen.get("inputs") or {}).keys()),
-            "output_ports": list((chosen.get("outputs") or {}).keys()),
+            "input_names": list((chosen.get("inputs") or {}).keys()),
+            "output_names": list((chosen.get("outputs") or {}).keys()),
         })
         new_node_id = new_graph["nodes"][-1]["id"]
     except (ValueError, TypeError) as exc:
