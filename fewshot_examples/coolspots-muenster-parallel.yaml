@@ -1,0 +1,64 @@
+# ORACLE example: this is the "CoolSpots parallel" evaluation task itself (prompts.jsonl).
+# Loaded on purpose to measure an upper bound of the fewshot variant; scores of runs with this
+# file loaded are not a fair measurement. Rename to _coolspots-muenster-parallel.yaml to leave it
+# out (see README.md, "Oracle examples"). Parameters as in metrics/grading/cool_spots.py.
+
+id: coolspots-muenster-parallel
+
+request: "In Muenster I want to know which parts of the city have nothing nearby to escape the summer heat in. Gather two things independently of each other: the shady green areas, and the lakes, ponds and rivers, since open water cools the air just as much. Only count green patches big enough to actually sit in. For those patches also tell me how much genuinely sheltered interior each one has rather than just a thin edge, and work that out alongside the distance analysis rather than after it. Then combine the green and the blue into one set of refuges, treat anything more than a 300 metre walk from any of them as too far, and show me the leftover areas plus how the distance builds up in steps."
+
+solution:
+  workflow_graph:
+    nodes:
+      - id: city-boundary_1
+        type: city-boundary
+        config: {server_url: "http://pygeoapi:80/", place: "Muenster"}
+        inputs: [place, bbox]
+        outputs: [boundary, bbox, utmCrs, areaSqm]
+      - id: osm-green-areas_2
+        type: osm-green-areas
+        config: {server_url: "http://pygeoapi:80/"}
+        inputs: [area, tags]
+        outputs: [features, count]
+      - id: osm-water-bodies_3
+        type: osm-water-bodies
+        config: {server_url: "http://pygeoapi:80/"}
+        inputs: [area, tags]
+        outputs: [features, count]
+      - id: min-area-filter_4
+        type: min-area-filter
+        config: {server_url: "http://pygeoapi:80/", minArea: 4000}
+        inputs: [features, minArea]
+        outputs: [features, count, removed]
+      - id: core-area-metrics_5
+        type: core-area-metrics
+        config: {server_url: "http://pygeoapi:80/", edgeWidth: 20}
+        inputs: [features, edgeWidth]
+        outputs: [cores, features, coreAreaSqm, withCore]
+      - id: feature-merge_6
+        type: feature-merge
+        config: {server_url: "http://pygeoapi:80/", dissolve: true}
+        inputs: [features, otherFeatures, dissolve]
+        outputs: [features, count]
+      - id: multi-ring-buffer_7
+        type: multi-ring-buffer
+        config: {server_url: "http://pygeoapi:80/", distances: [75, 150, 225, 300]}
+        inputs: [features, distances]
+        outputs: [rings, coverage, maxDistance]
+      - id: geometry-difference_8
+        type: geometry-difference
+        config: {server_url: "http://pygeoapi:80/"}
+        inputs: [subject, subtrahend]
+        outputs: [result, areaSqm, shareOfSubject]
+    edges:
+      - {source: city-boundary_1, source_output: boundary, target: osm-green-areas_2, target_input: area}
+      - {source: city-boundary_1, source_output: boundary, target: osm-water-bodies_3, target_input: area}
+      - {source: osm-green-areas_2, source_output: features, target: min-area-filter_4, target_input: features}
+      - {source: min-area-filter_4, source_output: features, target: core-area-metrics_5, target_input: features}
+      - {source: min-area-filter_4, source_output: features, target: feature-merge_6, target_input: features}
+      - {source: osm-water-bodies_3, source_output: features, target: feature-merge_6, target_input: otherFeatures}
+      - {source: feature-merge_6, source_output: features, target: multi-ring-buffer_7, target_input: features}
+      - {source: city-boundary_1, source_output: boundary, target: geometry-difference_8, target_input: subject}
+      - {source: multi-ring-buffer_7, source_output: coverage, target: geometry-difference_8, target_input: subtrahend}
+
+notes: "Green and water are extracted in two independent branches from the same boundary. Only the green branch is filtered by size. core-area-metrics is a leaf beside the distance analysis, not a step before it. The merge dissolves overlaps (a pond in a park), the rings give the steps up to 300 m, and their coverage is subtracted from the city."

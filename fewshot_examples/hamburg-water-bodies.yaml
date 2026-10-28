@@ -1,7 +1,3 @@
-# DUMMY example to start from: it is loaded like any other example and shown to the agent in the
-# fewshot variant. Replace or delete it before measuring. Comments are not loaded; `notes` is
-# shown to the agent, so keep remarks for the team in comments like this one.
-
 id: hamburg-water-bodies
 
 request: "Show me the lakes and rivers inside the city of Hamburg."

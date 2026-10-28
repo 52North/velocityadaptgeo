@@ -1,0 +1,21 @@
+id: berlin-kreuzberg-buffer-1km
+
+request: "Draw a 1 km zone around the Berlin district of Friedrichshain-Kreuzberg."
+
+solution:
+  workflow_graph:
+    nodes:
+      - id: city-boundary_1
+        type: city-boundary
+        config: {server_url: "http://pygeoapi:80/", place: "Friedrichshain-Kreuzberg, Berlin"}
+        inputs: [place, bbox]
+        outputs: [boundary, bbox, utmCrs, areaSqm]
+      - id: buffer_2
+        type: buffer
+        config: {server_url: "http://pygeoapi:80/", distance: 1000}
+        inputs: [geometry, distance]
+        outputs: [result]
+    edges:
+      - {source: city-boundary_1, source_output: boundary, target: buffer_2, target_input: geometry}
+
+notes: "A district is geocoded like a city; naming the city as well avoids a wrong match. The buffer distance is always in metres, so 1 km becomes 1000."

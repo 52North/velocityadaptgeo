@@ -1,0 +1,34 @@
+id: nuremberg-pitches-and-playgrounds
+
+request: "Combine all sports pitches and playgrounds in Nuremberg into one layer, without counting places twice where they overlap."
+
+solution:
+  workflow_graph:
+    nodes:
+      - id: city-boundary_1
+        type: city-boundary
+        config: {server_url: "http://pygeoapi:80/", place: "Nuremberg"}
+        inputs: [place, bbox]
+        outputs: [boundary, bbox, utmCrs, areaSqm]
+      - id: osm-green-areas_2
+        type: osm-green-areas
+        config: {server_url: "http://pygeoapi:80/", tags: {leisure: pitch}}
+        inputs: [area, tags]
+        outputs: [features, count]
+      - id: osm-green-areas_3
+        type: osm-green-areas
+        config: {server_url: "http://pygeoapi:80/", tags: {leisure: playground}}
+        inputs: [area, tags]
+        outputs: [features, count]
+      - id: feature-merge_4
+        type: feature-merge
+        config: {server_url: "http://pygeoapi:80/", dissolve: true}
+        inputs: [features, otherFeatures, dissolve]
+        outputs: [features, count]
+    edges:
+      - {source: city-boundary_1, source_output: boundary, target: osm-green-areas_2, target_input: area}
+      - {source: city-boundary_1, source_output: boundary, target: osm-green-areas_3, target_input: area}
+      - {source: osm-green-areas_2, source_output: features, target: feature-merge_4, target_input: features}
+      - {source: osm-green-areas_3, source_output: features, target: feature-merge_4, target_input: otherFeatures}
+
+notes: "The same process appears twice with different tags, as two independent branches. feature-merge joins them; dissolve: true unites overlapping polygons so nothing is counted twice."

@@ -1,0 +1,45 @@
+# ORACLE example: this is the CoolSpots evaluation task itself (prompts.jsonl, label "CoolSpots").
+# Loaded on purpose to measure an upper bound of the fewshot variant; scores of runs with this
+# file loaded are not a fair measurement. Rename to _coolspots-muenster.yaml to leave it out
+# (see README.md, "Oracle examples"). Parameters as in metrics/grading/cool_spots.py.
+
+id: coolspots-muenster
+
+request: "In Muenster I want to find out which parts of the city are too far from any decent shady green area to escape the summer heat. Only count parks or woods that are big enough to actually sit in, and treat anything more than a 300 metre walk as too far. Show me the leftover areas and how the distance builds up in steps."
+
+solution:
+  workflow_graph:
+    nodes:
+      - id: city-boundary_1
+        type: city-boundary
+        config: {server_url: "http://pygeoapi:80/", place: "Muenster"}
+        inputs: [place, bbox]
+        outputs: [boundary, bbox, utmCrs, areaSqm]
+      - id: osm-green-areas_2
+        type: osm-green-areas
+        config: {server_url: "http://pygeoapi:80/"}
+        inputs: [area, tags]
+        outputs: [features, count]
+      - id: min-area-filter_3
+        type: min-area-filter
+        config: {server_url: "http://pygeoapi:80/", minArea: 4000}
+        inputs: [features, minArea]
+        outputs: [features, count, removed]
+      - id: multi-ring-buffer_4
+        type: multi-ring-buffer
+        config: {server_url: "http://pygeoapi:80/", distances: [75, 150, 225, 300]}
+        inputs: [features, distances]
+        outputs: [rings, coverage, maxDistance]
+      - id: geometry-difference_5
+        type: geometry-difference
+        config: {server_url: "http://pygeoapi:80/"}
+        inputs: [subject, subtrahend]
+        outputs: [result, areaSqm, shareOfSubject]
+    edges:
+      - {source: city-boundary_1, source_output: boundary, target: osm-green-areas_2, target_input: area}
+      - {source: osm-green-areas_2, source_output: features, target: min-area-filter_3, target_input: features}
+      - {source: min-area-filter_3, source_output: features, target: multi-ring-buffer_4, target_input: features}
+      - {source: city-boundary_1, source_output: boundary, target: geometry-difference_5, target_input: subject}
+      - {source: multi-ring-buffer_4, source_output: coverage, target: geometry-difference_5, target_input: subtrahend}
+
+notes: "The default tags of osm-green-areas already mean parks and woods. 'Big enough to sit in' becomes a minimum area of 4000 m². The rings show the distance in steps up to 300 m; their coverage is subtracted from the city boundary to leave the areas that are too far."

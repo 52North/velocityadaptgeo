@@ -1,0 +1,27 @@
+id: leipzig-forests-over-10ha
+
+request: "Which forests and woods in Leipzig are bigger than 10 hectares?"
+
+solution:
+  workflow_graph:
+    nodes:
+      - id: city-boundary_1
+        type: city-boundary
+        config: {server_url: "http://pygeoapi:80/", place: "Leipzig"}
+        inputs: [place, bbox]
+        outputs: [boundary, bbox, utmCrs, areaSqm]
+      - id: osm-green-areas_2
+        type: osm-green-areas
+        config: {server_url: "http://pygeoapi:80/", tags: {landuse: forest, natural: wood}}
+        inputs: [area, tags]
+        outputs: [features, count]
+      - id: min-area-filter_3
+        type: min-area-filter
+        config: {server_url: "http://pygeoapi:80/", minArea: 100000}
+        inputs: [features, minArea]
+        outputs: [features, count, removed]
+    edges:
+      - {source: city-boundary_1, source_output: boundary, target: osm-green-areas_2, target_input: area}
+      - {source: osm-green-areas_2, source_output: features, target: min-area-filter_3, target_input: features}
+
+notes: "The tags are narrowed to forest and wood, so parks are left out. minArea is in square metres: 10 ha = 100000 m²."

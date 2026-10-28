@@ -1,0 +1,33 @@
+id: hanover-large-parks-interior
+
+request: "Which parks in Hanover larger than 2 hectares still have a sheltered interior beyond a 30 metre edge?"
+
+solution:
+  workflow_graph:
+    nodes:
+      - id: city-boundary_1
+        type: city-boundary
+        config: {server_url: "http://pygeoapi:80/", place: "Hanover"}
+        inputs: [place, bbox]
+        outputs: [boundary, bbox, utmCrs, areaSqm]
+      - id: osm-green-areas_2
+        type: osm-green-areas
+        config: {server_url: "http://pygeoapi:80/", tags: {leisure: park}}
+        inputs: [area, tags]
+        outputs: [features, count]
+      - id: min-area-filter_3
+        type: min-area-filter
+        config: {server_url: "http://pygeoapi:80/", minArea: 20000}
+        inputs: [features, minArea]
+        outputs: [features, count, removed]
+      - id: core-area-metrics_4
+        type: core-area-metrics
+        config: {server_url: "http://pygeoapi:80/", edgeWidth: 30}
+        inputs: [features, edgeWidth]
+        outputs: [cores, features, coreAreaSqm, withCore]
+    edges:
+      - {source: city-boundary_1, source_output: boundary, target: osm-green-areas_2, target_input: area}
+      - {source: osm-green-areas_2, source_output: features, target: min-area-filter_3, target_input: features}
+      - {source: min-area-filter_3, source_output: features, target: core-area-metrics_4, target_input: features}
+
+notes: "Only parks, so the tags are leisure=park. The size filter comes first (2 ha = 20000 m²); core-area-metrics then shows which of the remaining parks keep an interior (withCore, cores)."

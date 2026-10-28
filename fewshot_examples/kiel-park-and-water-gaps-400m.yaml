@@ -1,0 +1,47 @@
+id: kiel-park-and-water-gaps-400m
+
+request: "How much of Kiel lies more than 400 metres from any park or open water?"
+
+solution:
+  workflow_graph:
+    nodes:
+      - id: city-boundary_1
+        type: city-boundary
+        config: {server_url: "http://pygeoapi:80/", place: "Kiel"}
+        inputs: [place, bbox]
+        outputs: [boundary, bbox, utmCrs, areaSqm]
+      - id: osm-green-areas_2
+        type: osm-green-areas
+        config: {server_url: "http://pygeoapi:80/", tags: {leisure: park}}
+        inputs: [area, tags]
+        outputs: [features, count]
+      - id: osm-water-bodies_3
+        type: osm-water-bodies
+        config: {server_url: "http://pygeoapi:80/"}
+        inputs: [area, tags]
+        outputs: [features, count]
+      - id: feature-merge_4
+        type: feature-merge
+        config: {server_url: "http://pygeoapi:80/", dissolve: true}
+        inputs: [features, otherFeatures, dissolve]
+        outputs: [features, count]
+      - id: buffer_5
+        type: buffer
+        config: {server_url: "http://pygeoapi:80/", distance: 400}
+        inputs: [geometry, distance]
+        outputs: [result]
+      - id: geometry-difference_6
+        type: geometry-difference
+        config: {server_url: "http://pygeoapi:80/"}
+        inputs: [subject, subtrahend]
+        outputs: [result, areaSqm, shareOfSubject]
+    edges:
+      - {source: city-boundary_1, source_output: boundary, target: osm-green-areas_2, target_input: area}
+      - {source: city-boundary_1, source_output: boundary, target: osm-water-bodies_3, target_input: area}
+      - {source: osm-green-areas_2, source_output: features, target: feature-merge_4, target_input: features}
+      - {source: osm-water-bodies_3, source_output: features, target: feature-merge_4, target_input: otherFeatures}
+      - {source: feature-merge_4, source_output: features, target: buffer_5, target_input: geometry}
+      - {source: city-boundary_1, source_output: boundary, target: geometry-difference_6, target_input: subject}
+      - {source: buffer_5, source_output: result, target: geometry-difference_6, target_input: subtrahend}
+
+notes: "'Park or water' means one combined set of destinations, so the two extractions are merged before the single buffer. areaSqm and shareOfSubject of the difference answer 'how much'."

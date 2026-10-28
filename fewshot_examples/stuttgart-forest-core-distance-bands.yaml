@@ -1,0 +1,39 @@
+id: stuttgart-forest-core-distance-bands
+
+request: "In Stuttgart, take the forests larger than 5 hectares, keep only their sheltered interior beyond a 50 metre edge, and show distance bands of 100, 200 and 400 metres around that interior."
+
+solution:
+  workflow_graph:
+    nodes:
+      - id: city-boundary_1
+        type: city-boundary
+        config: {server_url: "http://pygeoapi:80/", place: "Stuttgart"}
+        inputs: [place, bbox]
+        outputs: [boundary, bbox, utmCrs, areaSqm]
+      - id: osm-green-areas_2
+        type: osm-green-areas
+        config: {server_url: "http://pygeoapi:80/", tags: {landuse: forest, natural: wood}}
+        inputs: [area, tags]
+        outputs: [features, count]
+      - id: min-area-filter_3
+        type: min-area-filter
+        config: {server_url: "http://pygeoapi:80/", minArea: 50000}
+        inputs: [features, minArea]
+        outputs: [features, count, removed]
+      - id: core-area-metrics_4
+        type: core-area-metrics
+        config: {server_url: "http://pygeoapi:80/", edgeWidth: 50}
+        inputs: [features, edgeWidth]
+        outputs: [cores, features, coreAreaSqm, withCore]
+      - id: multi-ring-buffer_5
+        type: multi-ring-buffer
+        config: {server_url: "http://pygeoapi:80/", distances: [100, 200, 400]}
+        inputs: [features, distances]
+        outputs: [rings, coverage, maxDistance]
+    edges:
+      - {source: city-boundary_1, source_output: boundary, target: osm-green-areas_2, target_input: area}
+      - {source: osm-green-areas_2, source_output: features, target: min-area-filter_3, target_input: features}
+      - {source: min-area-filter_3, source_output: features, target: core-area-metrics_4, target_input: features}
+      - {source: core-area-metrics_4, source_output: cores, target: multi-ring-buffer_5, target_input: features}
+
+notes: "A linear chain of four steps. The rings are drawn around the interior, so core-area-metrics passes its cores output on, not its annotated features."

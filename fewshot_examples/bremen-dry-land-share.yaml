@@ -1,0 +1,28 @@
+id: bremen-dry-land-share
+
+request: "How much of Bremen's area is dry land, i.e. not covered by lakes, rivers or other open water?"
+
+solution:
+  workflow_graph:
+    nodes:
+      - id: city-boundary_1
+        type: city-boundary
+        config: {server_url: "http://pygeoapi:80/", place: "Bremen"}
+        inputs: [place, bbox]
+        outputs: [boundary, bbox, utmCrs, areaSqm]
+      - id: osm-water-bodies_2
+        type: osm-water-bodies
+        config: {server_url: "http://pygeoapi:80/"}
+        inputs: [area, tags]
+        outputs: [features, count]
+      - id: geometry-difference_3
+        type: geometry-difference
+        config: {server_url: "http://pygeoapi:80/"}
+        inputs: [subject, subtrahend]
+        outputs: [result, areaSqm, shareOfSubject]
+    edges:
+      - {source: city-boundary_1, source_output: boundary, target: osm-water-bodies_2, target_input: area}
+      - {source: city-boundary_1, source_output: boundary, target: geometry-difference_3, target_input: subject}
+      - {source: osm-water-bodies_2, source_output: features, target: geometry-difference_3, target_input: subtrahend}
+
+notes: "The boundary feeds two nodes: the water extraction and the difference. geometry-difference returns the remaining area in m² and its share of the city, which answers 'how much'."

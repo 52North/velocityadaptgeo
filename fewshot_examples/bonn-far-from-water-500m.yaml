@@ -1,0 +1,34 @@
+id: bonn-far-from-water-500m
+
+request: "Which parts of Bonn are more than 500 metres away from any lake or river?"
+
+solution:
+  workflow_graph:
+    nodes:
+      - id: city-boundary_1
+        type: city-boundary
+        config: {server_url: "http://pygeoapi:80/", place: "Bonn"}
+        inputs: [place, bbox]
+        outputs: [boundary, bbox, utmCrs, areaSqm]
+      - id: osm-water-bodies_2
+        type: osm-water-bodies
+        config: {server_url: "http://pygeoapi:80/"}
+        inputs: [area, tags]
+        outputs: [features, count]
+      - id: buffer_3
+        type: buffer
+        config: {server_url: "http://pygeoapi:80/", distance: 500}
+        inputs: [geometry, distance]
+        outputs: [result]
+      - id: geometry-difference_4
+        type: geometry-difference
+        config: {server_url: "http://pygeoapi:80/"}
+        inputs: [subject, subtrahend]
+        outputs: [result, areaSqm, shareOfSubject]
+    edges:
+      - {source: city-boundary_1, source_output: boundary, target: osm-water-bodies_2, target_input: area}
+      - {source: osm-water-bodies_2, source_output: features, target: buffer_3, target_input: geometry}
+      - {source: city-boundary_1, source_output: boundary, target: geometry-difference_4, target_input: subject}
+      - {source: buffer_3, source_output: result, target: geometry-difference_4, target_input: subtrahend}
+
+notes: "'More than X away' is a gap analysis: buffer the features by X, then subtract the buffer from the study area. Without distance steps a single buffer is enough."

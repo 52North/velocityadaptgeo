@@ -203,10 +203,12 @@ Approved: unit tests and Docker, **no LLM calls** (no Anthropic requests). Done 
 ## 10. Open points for the team
 
 - **Measure again**: step 6 changed every variant's prompts; `pgvector`/`mcp` numbers from before
-  are not strictly comparable. Measure `fewshot` once examples exist.
-- **Add examples** to `fewshot_examples/` — never seed or paraphrase tasks (CoolSpots). The one
-  file there, `hamburg-water-bodies.yaml`, is a dummy to start from; replace or delete it before
-  measuring.
+  are not strictly comparable. A first run of all variants on the same 58 prompts, with
+  paraphrases not reviewed by hand, is in `docs/variant-evaluation-2026-10-28.md`.
+- **Examples**: 16 examples on other cities and tasks plus two oracle examples, the CoolSpots
+  tasks themselves (`coolspots-*.yaml`). With the oracle files loaded, `fewshot` scores are an
+  upper bound; rename them to `_coolspots-*.yaml` for the fair measurement and report which one a
+  number is (`fewshot_examples/README.md`, "Oracle examples").
 - **Calibrate `FEWSHOT_MIN_SIMILARITY`**: in the check above an unrelated request ("viewshed from a
   tower in the Alps") still got the only example, at 0.512 vs. 0.744 for a related one.
 - Example graphs come back from JSONB with their keys reordered (e.g. `edges` before `nodes`);

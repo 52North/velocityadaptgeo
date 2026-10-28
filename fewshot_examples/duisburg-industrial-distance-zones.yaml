@@ -1,0 +1,27 @@
+id: duisburg-industrial-distance-zones
+
+request: "Show distance zones of 100, 250 and 500 metres around the industrial areas in Duisburg."
+
+solution:
+  workflow_graph:
+    nodes:
+      - id: city-boundary_1
+        type: city-boundary
+        config: {server_url: "http://pygeoapi:80/", place: "Duisburg"}
+        inputs: [place, bbox]
+        outputs: [boundary, bbox, utmCrs, areaSqm]
+      - id: osm-green-areas_2
+        type: osm-green-areas
+        config: {server_url: "http://pygeoapi:80/", tags: {landuse: industrial}}
+        inputs: [area, tags]
+        outputs: [features, count]
+      - id: multi-ring-buffer_3
+        type: multi-ring-buffer
+        config: {server_url: "http://pygeoapi:80/", distances: [100, 250, 500]}
+        inputs: [features, distances]
+        outputs: [rings, coverage, maxDistance]
+    edges:
+      - {source: city-boundary_1, source_output: boundary, target: osm-green-areas_2, target_input: area}
+      - {source: osm-green-areas_2, source_output: features, target: multi-ring-buffer_3, target_input: features}
+
+notes: "Industrial land is fetched with osm-green-areas and the tag landuse=industrial. Several distances in one request are the ring boundaries of multi-ring-buffer, in ascending order."

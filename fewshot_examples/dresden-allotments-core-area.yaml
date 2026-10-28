@@ -1,0 +1,27 @@
+id: dresden-allotments-core-area
+
+request: "How much real interior do the allotment gardens in Dresden have once a 10 m edge is ignored, and how compact are they?"
+
+solution:
+  workflow_graph:
+    nodes:
+      - id: city-boundary_1
+        type: city-boundary
+        config: {server_url: "http://pygeoapi:80/", place: "Dresden"}
+        inputs: [place, bbox]
+        outputs: [boundary, bbox, utmCrs, areaSqm]
+      - id: osm-green-areas_2
+        type: osm-green-areas
+        config: {server_url: "http://pygeoapi:80/", tags: {landuse: allotments}}
+        inputs: [area, tags]
+        outputs: [features, count]
+      - id: core-area-metrics_3
+        type: core-area-metrics
+        config: {server_url: "http://pygeoapi:80/", edgeWidth: 10}
+        inputs: [features, edgeWidth]
+        outputs: [cores, features, coreAreaSqm, withCore]
+    edges:
+      - {source: city-boundary_1, source_output: boundary, target: osm-green-areas_2, target_input: area}
+      - {source: osm-green-areas_2, source_output: features, target: core-area-metrics_3, target_input: features}
+
+notes: "osm-green-areas extracts any tagged OSM polygons, not only green space: the tags input decides what is fetched. core-area-metrics reports the interior beyond the edge width and the compactness of each polygon."

@@ -48,7 +48,9 @@ Independent of the variant, `VALIDATE_IO_TYPES` adds a check of the data kinds a
 2. Load: `docker compose run --rm ogc-database` (also runs on every `docker compose up`).
 3. Use: `WORKFLOW_VARIANT=fewshot`; `FEWSHOT_K` examples per turn, `FEWSHOT_MIN_SIMILARITY` as cutoff.
 
-Never use seed/paraphrase tasks (CoolSpots) as examples. Details: `fewshot_examples/README.md`.
+Seed/paraphrase tasks (CoolSpots) leak the answer into the evaluation. The two `coolspots-*`
+files are such oracle examples on purpose; rename them to `_coolspots-*.yaml` for a fair run.
+Details: `fewshot_examples/README.md`.
 
 ## Evaluation
 

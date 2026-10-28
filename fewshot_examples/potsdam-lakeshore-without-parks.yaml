@@ -1,0 +1,47 @@
+id: potsdam-lakeshore-without-parks
+
+request: "Find the 100 metre shore strip along Potsdam's lakes and rivers that is not park yet, as candidates for new lakeside green space."
+
+solution:
+  workflow_graph:
+    nodes:
+      - id: city-boundary_1
+        type: city-boundary
+        config: {server_url: "http://pygeoapi:80/", place: "Potsdam"}
+        inputs: [place, bbox]
+        outputs: [boundary, bbox, utmCrs, areaSqm]
+      - id: osm-water-bodies_2
+        type: osm-water-bodies
+        config: {server_url: "http://pygeoapi:80/"}
+        inputs: [area, tags]
+        outputs: [features, count]
+      - id: buffer_3
+        type: buffer
+        config: {server_url: "http://pygeoapi:80/", distance: 100}
+        inputs: [geometry, distance]
+        outputs: [result]
+      - id: osm-green-areas_4
+        type: osm-green-areas
+        config: {server_url: "http://pygeoapi:80/", tags: {leisure: park}}
+        inputs: [area, tags]
+        outputs: [features, count]
+      - id: feature-merge_5
+        type: feature-merge
+        config: {server_url: "http://pygeoapi:80/", dissolve: true}
+        inputs: [features, otherFeatures, dissolve]
+        outputs: [features, count]
+      - id: geometry-difference_6
+        type: geometry-difference
+        config: {server_url: "http://pygeoapi:80/"}
+        inputs: [subject, subtrahend]
+        outputs: [result, areaSqm, shareOfSubject]
+    edges:
+      - {source: city-boundary_1, source_output: boundary, target: osm-water-bodies_2, target_input: area}
+      - {source: osm-water-bodies_2, source_output: features, target: buffer_3, target_input: geometry}
+      - {source: city-boundary_1, source_output: boundary, target: osm-green-areas_4, target_input: area}
+      - {source: osm-green-areas_4, source_output: features, target: feature-merge_5, target_input: features}
+      - {source: osm-water-bodies_2, source_output: features, target: feature-merge_5, target_input: otherFeatures}
+      - {source: buffer_3, source_output: result, target: geometry-difference_6, target_input: subject}
+      - {source: feature-merge_5, source_output: features, target: geometry-difference_6, target_input: subtrahend}
+
+notes: "The water buffered by 100 m also covers the water itself. Parks and water are therefore merged and subtracted together, so one difference leaves only the land strip that is not park. The water features feed two nodes: the buffer and the merge."

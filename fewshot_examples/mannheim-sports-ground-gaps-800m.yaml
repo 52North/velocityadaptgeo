@@ -1,0 +1,40 @@
+id: mannheim-sports-ground-gaps-800m
+
+request: "Which parts of Mannheim have no sports ground of at least half a hectare within 800 metres?"
+
+solution:
+  workflow_graph:
+    nodes:
+      - id: city-boundary_1
+        type: city-boundary
+        config: {server_url: "http://pygeoapi:80/", place: "Mannheim"}
+        inputs: [place, bbox]
+        outputs: [boundary, bbox, utmCrs, areaSqm]
+      - id: osm-green-areas_2
+        type: osm-green-areas
+        config: {server_url: "http://pygeoapi:80/", tags: {leisure: pitch}}
+        inputs: [area, tags]
+        outputs: [features, count]
+      - id: min-area-filter_3
+        type: min-area-filter
+        config: {server_url: "http://pygeoapi:80/", minArea: 5000}
+        inputs: [features, minArea]
+        outputs: [features, count, removed]
+      - id: buffer_4
+        type: buffer
+        config: {server_url: "http://pygeoapi:80/", distance: 800}
+        inputs: [geometry, distance]
+        outputs: [result]
+      - id: geometry-difference_5
+        type: geometry-difference
+        config: {server_url: "http://pygeoapi:80/"}
+        inputs: [subject, subtrahend]
+        outputs: [result, areaSqm, shareOfSubject]
+    edges:
+      - {source: city-boundary_1, source_output: boundary, target: osm-green-areas_2, target_input: area}
+      - {source: osm-green-areas_2, source_output: features, target: min-area-filter_3, target_input: features}
+      - {source: min-area-filter_3, source_output: features, target: buffer_4, target_input: geometry}
+      - {source: city-boundary_1, source_output: boundary, target: geometry-difference_5, target_input: subject}
+      - {source: buffer_4, source_output: result, target: geometry-difference_5, target_input: subtrahend}
+
+notes: "Filter before buffering: only grounds of at least 0.5 ha = 5000 m² count. The 800 m reach is subtracted from the city boundary to leave the underserved parts."
