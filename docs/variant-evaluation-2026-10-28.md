@@ -91,10 +91,10 @@ Only the strict gap between `pgvector` and `mcp` is significant.
 - Few-shot examples: the 18 files in `fewshot_examples/`. For the run without CoolSpots, the two
   `coolspots-*.yaml` files were renamed to `_coolspots-*.yaml` and the crawler was re-run (16
   examples in the database).
-- Run folders (git-ignored, on the machine that ran them):
-  `metrics/prompt_gen/out/20261028-claude_muenster_green_300m/` (pgvector, mcp, fewshot with
-  CoolSpots) and `…_no-coolspots/` (fewshot without CoolSpots; same `config.json`,
-  `candidates.jsonl` and `reviewed.jsonl`).
+- Run folders, committed without `executions/` (730 MB of GeoJSON outputs, git-ignored; re-create
+  them with `--execute`): `metrics/prompt_gen/out/20261028-claude_muenster_green_300m/` (pgvector,
+  mcp, fewshot with CoolSpots) and `…_no-coolspots/` (fewshot without CoolSpots; same
+  `config.json`, `candidates.jsonl` and `reviewed.jsonl`).
 - Per variant: `python -m src.batch <run_dir> --variant V --seed-runs 5 --concurrency 4`, then
   `--execute`, then `metrics/grading/grade.py <run_dir> --variant V` (target `within`), then
   `--summary --expect city-boundary,osm-green-areas,min-area-filter,multi-ring-buffer`.

@@ -20,3 +20,6 @@ wheels/
 metrics/runs.jsonl
 # osmnx download cache of the grading reference
 metrics/grading/cache/
+# paraphrase generator: embedding models, and the executed outputs of a run (re-created by src.batch --execute)
+metrics/prompt_gen/models/
+metrics/prompt_gen/out/*/executions/

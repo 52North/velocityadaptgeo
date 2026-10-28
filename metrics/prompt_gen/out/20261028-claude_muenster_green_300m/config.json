@@ -1,0 +1,54 @@
+{
+  "seed": {
+    "id": "muenster_green_300m",
+    "text": "Identify all areas in Münster that are within a 300-meter walking distance of a public park or forest large enough for recreation. Output a visualization that highlights these well-served areas and displays the walking distances from the green spaces in incremental intervals up to the 300-meter limit."
+  },
+  "n_per_category": 10,
+  "typology": [
+    {
+      "key": "morphological",
+      "name": "Morphological"
+    },
+    {
+      "key": "lexical",
+      "name": "Lexical"
+    },
+    {
+      "key": "lexico_syntactic",
+      "name": "Lexico-syntactic"
+    },
+    {
+      "key": "syntactic",
+      "name": "Syntactical"
+    },
+    {
+      "key": "discourse",
+      "name": "Discourse-based"
+    },
+    {
+      "key": "other",
+      "name": "Other"
+    }
+  ],
+  "categories": [
+    "morphological",
+    "lexical",
+    "lexico_syntactic",
+    "syntactic",
+    "discourse",
+    "other"
+  ],
+  "config": {
+    "thresholds": {
+      "near_duplicate_sem": 0.97,
+      "strict": true
+    },
+    "embeddings": {
+      "semantic": "sentence-transformers/all-mpnet-base-v2",
+      "pragmatic": "intfloat/multilingual-e5-large-instruct",
+      "pragmatic_instruction": "Given a geospatial analysis request, retrieve requests that ask for the same analysis and the same output"
+    }
+  },
+  "generated_by": "Claude Code subagents: haiku generator (two rounds, the second with feedback on near-duplicates), sonnet judge (constraints.yaml, strict); stem check and embeddings from prompt_gen. No qwen.",
+  "created": "2026-10-28T11:19:53"
+}
