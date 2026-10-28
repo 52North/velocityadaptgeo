@@ -31,3 +31,15 @@ def test_catalog_failure_is_logged_not_raised(monkeypatch):
 
     assert result["candidate_processes"] == []
     assert result["decision_history"][-1]["error"] == "no database"
+
+
+def test_catalog_text_loses_hidden_characters_but_not_names():
+    from src.llm.tools.ogc_client import _candidate
+
+    hidden = "Buffers\u200b a geometry.\u202e\U000e0041\x07\nSecond line."
+    row = (*ROW[:3], hidden, {"inputs": {"geo\u200bmetry": {"description": "in\u2066put"}}, "outputs": {}})
+    candidate = _candidate(row)
+
+    assert candidate["description"] == "Buffers a geometry.\nSecond line."
+    # Names stay exact: an edge must match the server's spelling.
+    assert candidate["inputs"] == {"geo\u200bmetry": {"description": "input"}}

@@ -7,7 +7,7 @@ from src.llm.state.state import WorkflowState
 from src.llm.nodes._helpers import _log
 
 from src.llm.tools.mcp_client import load_mcp_tools
-from src.llm.tools.ogc_client import list_ogc_processes, search_ogc_processes
+from src.llm.tools.ogc_client import clean_catalog_text, list_ogc_processes, search_ogc_processes
 
 
 logger = logging.getLogger(__name__)
@@ -87,10 +87,10 @@ async def mcp_retriever_node(state: WorkflowState, llm) -> dict:
             "tool": t.name,
             "process_id": ogc["process_id"],
             "server_url": ogc["server_url"],
-            "title": ogc.get("title") or "",
-            "description": t.description or "",
-            "inputs": (t.args_schema or {}).get("properties", {}),
-            "outputs": ogc.get("outputs") or {},
+            "title": clean_catalog_text(ogc.get("title") or ""),
+            "description": clean_catalog_text(t.description or ""),
+            "inputs": clean_catalog_text((t.args_schema or {}).get("properties", {})),
+            "outputs": clean_catalog_text(ogc.get("outputs") or {}),
         }
         for t in tools
         if (ogc := ((t.metadata or {}).get("_meta") or {}).get("ogc"))

@@ -20,23 +20,12 @@ from urllib.parse import quote
 import httpx
 
 from src.llm.state.graph import CONFIG_KEYS
+# The only servers a node may be executed against (src/ogc_servers.py).
+from src.ogc_servers import LOCAL_PYGEOAPI_HOST, LOCAL_PYGEOAPI_INTERNAL, OGC_SERVERS
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_TIMEOUT_SECONDS = 300.0
-LOCAL_PYGEOAPI_HOST = os.environ.get("LOCAL_PYGEOAPI_HOST", "localhost:5000")
-LOCAL_PYGEOAPI_INTERNAL = os.environ.get("LOCAL_PYGEOAPI_INTERNAL", "pygeoapi:80")
-# The only servers a node may be executed against: the ones the catalog crawler and the MCP server
-# read (same compose setting and default), plus the local pygeoapi under either address. A graph can
-# come from a client (POST /api/execute, /api/graph/op), so its server_url is not trusted as given.
-OGC_SERVERS = frozenset(
-    url.strip().rstrip("/")
-    for url in os.environ.get(
-        "OGC_SERVERS", "https://demo.pygeoapi.io/master/,https://maps.ecere.com/ogcapi/"
-    ).split(",")
-    + [os.environ.get("LOCAL_PYGEOAPI_URL", ""), f"http://{LOCAL_PYGEOAPI_HOST}", f"http://{LOCAL_PYGEOAPI_INTERNAL}"]
-    if url.strip()
-)
 
 GEOJSON_TYPES = frozenset({
     "Feature", "FeatureCollection", "Point", "MultiPoint", "LineString",

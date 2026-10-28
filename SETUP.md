@@ -5,6 +5,12 @@ paste the LLM key - the only value not in `docker-compose.yml`
 cp LangGraph/.env.sample LangGraph/.env
 ```
 
+the `langgraph` container runs as uid/gid 1000 and writes to `metrics/`. If your user has
+other ids (`id -u`, `id -g`), tell compose, or turns and batch runs cannot write their metrics
+```bash
+printf 'LANGGRAPH_UID=%s\nLANGGRAPH_GID=%s\n' "$(id -u)" "$(id -g)" > .env
+```
+
 ## usage
 ```bash
 docker compose up
@@ -12,8 +18,10 @@ docker compose up
 then open `http://localhost:8000/` - the API starts only after pygeoapi answers and the
 catalog crawl has finished, so the first start takes a while
 
-every port is published on the host's loopback only: the API has no auth and each chat turn
-spends the Anthropic key. From another machine, tunnel in and open the same address
+every port is published on the host's loopback only: the API has no auth unless
+`LANGGRAPH_API_TOKEN` is set, and each chat turn spends the Anthropic key. Running it for
+another service (`APP_ENV=production`, limits): `LangGraph/README.md`. From another machine,
+tunnel in and open the same address
 ```bash
 ssh -L 8000:localhost:8000 <user>@<host>
 ```

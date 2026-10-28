@@ -1,0 +1,638 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "FastAPI",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "summary": "Health",
+        "description": "Liveness only: the process answers. Dependencies (postgres, ollama) are not probed.",
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/chat": {
+      "post": {
+        "summary": "Chat",
+        "description": "Run the workflow to completion and return the final reply and graph, without streaming.\n\nOmitting `thread_id` starts a fresh conversation; pass the returned one back to\ncontinue it. A caller that keeps the graph itself can instead send it as `graph`\non every turn and leave `thread_id` out.",
+        "operationId": "chat_api_chat_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/stream": {
+      "get": {
+        "summary": "Stream",
+        "operationId": "stream_api_stream_get",
+        "parameters": [
+          {
+            "name": "prompt",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4000,
+              "title": "Prompt"
+            }
+          },
+          {
+            "name": "thread_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{8,64}$",
+              "title": "Thread Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/execute": {
+      "get": {
+        "summary": "Execute",
+        "description": "Stream the execution of a thread's graph as server-sent events.\n\nNode payloads are summarised rather than forwarded: a single OSM step can return\nmegabytes of geometry, which belongs in the process response, not in the browser.\nUse POST /api/execute when the full result is wanted.",
+        "operationId": "execute_api_execute_get",
+        "parameters": [
+          {
+            "name": "thread_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{8,64}$",
+              "title": "Thread Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Execute Sync",
+        "description": "Run a graph to completion and return the full results.\n\nTakes either a `thread_id`, to run what the assistant built, or a `graph` posted\ndirectly - so the executor is usable from a script or another service without going\nthrough the chat at all.",
+        "operationId": "execute_sync_api_execute_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExecuteRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/result": {
+      "get": {
+        "summary": "Result Layer",
+        "description": "Return one execution output as a FeatureCollection for the results map.\n\nOnly fetched when a layer is actually switched on, and capped so a run that produced\nthousands of polygons cannot lock up the browser. Truncation is reported rather than\nhidden, so a partial layer is never mistaken for the whole result. A `limit` above\nMAX_MAP_FEATURES is lowered to it: the cap protects the server's memory too.",
+        "operationId": "result_layer_api_result_get",
+        "parameters": [
+          {
+            "name": "thread_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{8,64}$",
+              "title": "Thread Id"
+            }
+          },
+          {
+            "name": "node",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Node"
+            }
+          },
+          {
+            "name": "output",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Output"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 3000,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/graph/op": {
+      "post": {
+        "summary": "Graph Op",
+        "description": "Apply one hand edit to a thread's graph, through the same ops the assistant uses.\n\nWriting back into the conversation checkpoint - rather than into a copy owned by the\nbrowser - is what makes a manual edit real: the next chat turn plans from the edited\ngraph, so the user and the assistant never end up describing different graphs. The\nvalidation report is returned but not enforced, since a graph is legitimately\nincomplete while it is being wired by hand.",
+        "operationId": "graph_op_api_graph_op_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GraphOpRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/test-prompts": {
+      "get": {
+        "summary": "Test Prompts",
+        "description": "Canned prompts from `prompts.jsonl`, offered as one-click buttons in the UI.\n\nOne `{\"label\": ..., \"prompt\": ...}` object per line. Read per request rather than at\nimport, so editing the file updates the buttons on the next page load without a rebuild.",
+        "operationId": "test_prompts_api_test_prompts_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/": {
+      "get": {
+        "summary": "Index",
+        "operationId": "index__get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ChatRequest": {
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Prompt"
+          },
+          "thread_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]{8,64}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thread Id"
+          },
+          "graph": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WorkflowGraph"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "prompt"
+        ],
+        "title": "ChatRequest"
+      },
+      "ChatResponse": {
+        "properties": {
+          "response": {
+            "type": "string",
+            "title": "Response"
+          },
+          "thread_id": {
+            "type": "string",
+            "title": "Thread Id"
+          },
+          "graph": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Graph"
+          },
+          "validation": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Validation"
+          },
+          "unmet_capabilities": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Unmet Capabilities"
+          }
+        },
+        "type": "object",
+        "required": [
+          "response",
+          "thread_id"
+        ],
+        "title": "ChatResponse"
+      },
+      "EdgeDefinition": {
+        "properties": {
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "target": {
+            "type": "string",
+            "title": "Target"
+          },
+          "source_output": {
+            "type": "string",
+            "title": "Source Output",
+            "default": "default"
+          },
+          "target_input": {
+            "type": "string",
+            "title": "Target Input",
+            "default": "default"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "source",
+          "target"
+        ],
+        "title": "EdgeDefinition",
+        "description": "A directed edge from a named output to a named input. `source`/`target` reference node ids."
+      },
+      "ExecuteRequest": {
+        "properties": {
+          "thread_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]{8,64}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thread Id"
+          },
+          "graph": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WorkflowGraph"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ExecuteRequest"
+      },
+      "GraphOpRequest": {
+        "properties": {
+          "thread_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{8,64}$",
+            "title": "Thread Id"
+          },
+          "op": {
+            "type": "string",
+            "title": "Op"
+          },
+          "args": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Args",
+            "default": {}
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "thread_id",
+          "op"
+        ],
+        "title": "GraphOpRequest"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "NodeDefinition": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[a-zA-Z0-9_\\-]+$",
+            "title": "Id"
+          },
+          "type": {
+            "type": "string",
+            "title": "Type"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label",
+            "default": ""
+          },
+          "position": {
+            "$ref": "#/components/schemas/NodePosition"
+          },
+          "config": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Config"
+          },
+          "inputs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Inputs"
+          },
+          "outputs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Outputs"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "type"
+        ],
+        "title": "NodeDefinition",
+        "description": "A node in the workflow DAG."
+      },
+      "NodePosition": {
+        "properties": {
+          "x": {
+            "type": "number",
+            "title": "X",
+            "default": 0
+          },
+          "y": {
+            "type": "number",
+            "title": "Y",
+            "default": 0
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "NodePosition",
+        "description": "Canvas position for the frontend; auto-laid-out (per category column) when omitted."
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "WorkflowGraph": {
+        "properties": {
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/NodeDefinition"
+            },
+            "type": "array",
+            "title": "Nodes"
+          },
+          "edges": {
+            "items": {
+              "$ref": "#/components/schemas/EdgeDefinition"
+            },
+            "type": "array",
+            "title": "Edges"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "WorkflowGraph",
+        "description": "The full DAG, i.e. the `NodeGraph` per the schema linked above."
+      }
+    }
+  }
+}

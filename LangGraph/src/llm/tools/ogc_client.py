@@ -4,6 +4,7 @@ from functools import lru_cache
 import os
 import time
 import logging
+import unicodedata
 
 import psycopg
 from langchain_core.tools import tool
@@ -54,15 +55,32 @@ def _get_embedding_dim(conn: psycopg.Connection) -> int | None:
 
 
 
+def clean_catalog_text(value):
+    """`value` with control and invisible formatting characters removed from every string in it.
+
+    Titles, descriptions and schemas come verbatim from remote OGC servers and go into the LLM
+    prompts. Zero-width characters, bidi overrides and Unicode tag characters (categories Cc, Cf)
+    hide text from a reviewer that the model still reads. Dict keys are left as they are: they
+    are input/output names that edges must match exactly.
+    """
+    if isinstance(value, str):
+        return "".join(ch for ch in value if ch in "\n\t" or unicodedata.category(ch) not in ("Cc", "Cf"))
+    if isinstance(value, dict):
+        return {k: clean_catalog_text(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [clean_catalog_text(v) for v in value]
+    return value
+
+
 def _candidate(row: tuple) -> dict:
     """A catalog row (server_url, process_id, title, description, metadata, ...) as a candidate process."""
     return {
         "server_url": row[0],
         "process_id": row[1],
-        "title": row[2] or "",
-        "description": (row[3] or "")[:500],
-        "inputs": (row[4] or {}).get("inputs", {}),
-        "outputs": (row[4] or {}).get("outputs", {}),
+        "title": clean_catalog_text(row[2] or ""),
+        "description": clean_catalog_text(row[3] or "")[:500],
+        "inputs": clean_catalog_text((row[4] or {}).get("inputs", {})),
+        "outputs": clean_catalog_text((row[4] or {}).get("outputs", {})),
     }
 
 

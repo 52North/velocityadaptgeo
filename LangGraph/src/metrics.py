@@ -3,7 +3,8 @@
 `RunTracker` is a LangChain callback attached to one turn's run config. It only reads what every
 variant shares - the prompts the LLM receives, the usage it reports, and the `candidate_processes`
 a node returns - so the same file works on every branch. Each turn appends one JSON line to
-METRICS_FILE, labelled with WORKFLOW_VARIANT.
+METRICS_FILE, labelled with WORKFLOW_VARIANT. The line holds the user's prompt, so an empty
+METRICS_FILE turns the log off, and it is off unless set with APP_ENV=production.
 """
 
 import asyncio
@@ -19,7 +20,8 @@ from langchain_core.callbacks import BaseCallbackHandler
 
 from src.llm.variants import DEFAULT_VARIANT
 
-METRICS_FILE = os.getenv("METRICS_FILE", "metrics/runs.jsonl")
+_PRODUCTION = os.getenv("APP_ENV", "").strip().lower() == "production"
+METRICS_FILE = os.getenv("METRICS_FILE", "" if _PRODUCTION else "metrics/runs.jsonl")
 VARIANT = os.getenv("WORKFLOW_VARIANT") or DEFAULT_VARIANT
 # "<model>=<input>,<output>;..." in USD per million tokens; models absent here report cost_usd=None.
 PRICES_PER_MTOK = {
@@ -118,6 +120,8 @@ class RunTracker(BaseCallbackHandler):
         })
 
     def _write(self, state: dict, error: str | None = None):
+        if not self.path:
+            return
         wall_ms = round((time.time() - self.started) * 1000)
         for c in self.calls:
             c["tool_def_tokens"], c["tool_name_tokens"] = _tokens(c["model"], c.pop("defs")), _tokens(c["model"], c.pop("names"))

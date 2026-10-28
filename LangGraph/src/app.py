@@ -1,10 +1,12 @@
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field
 from langchain_core.messages import HumanMessage
 from pathlib import Path
+from typing import Annotated
 from uuid import uuid4
+import asyncio
 import hmac
 import json
 import logging
@@ -26,7 +28,11 @@ from src.execution.runner import (
 from src.helper.helper import pretty_print_messages
 from src.metrics import RunTracker
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
+logging.basicConfig(
+    level=os.environ.get("LOG_LEVEL", "INFO").upper(),
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+)
+logger = logging.getLogger(__name__)
 
 BASE_DIR = Path(__file__).resolve().parent
 FRONTEND_DIR = BASE_DIR / "frontend"
@@ -36,7 +42,35 @@ PROMPTS_FILE = BASE_DIR.parent / "prompts.jsonl"
 # a local run and the demo frontend need it: EventSource cannot send an Authorization header.
 API_TOKEN = os.environ.get("LANGGRAPH_API_TOKEN", "")
 
-app = FastAPI()
+# APP_ENV=production fails closed: it refuses to start without a token and serves neither the
+# demo frontend nor the interactive API docs. Anything else is a development run, as before.
+PRODUCTION = os.environ.get("APP_ENV", "").strip().lower() == "production"
+if PRODUCTION and not API_TOKEN:
+    raise RuntimeError(
+        "APP_ENV=production needs LANGGRAPH_API_TOKEN: every turn spends the Anthropic key "
+        "and a graph runs processes on external servers."
+    )
+
+# A prompt costs tokens and is checkpointed, a thread id keys the checkpointer and the result
+# store, and a posted graph fans out to external servers once it is executed.
+MAX_PROMPT_CHARS = int(os.environ.get("MAX_PROMPT_CHARS", "4000"))
+MAX_GRAPH_NODES = int(os.environ.get("MAX_GRAPH_NODES", "50"))
+MAX_GRAPH_EDGES = 4 * MAX_GRAPH_NODES
+THREAD_ID_PATTERN = r"^[A-Za-z0-9_-]{8,64}$"
+
+# Turns running at once, and how long one may take: MAX_WORKFLOW_ITERATIONS bounds the
+# planning steps, not the time a slow model or catalog adds to them.
+MAX_CONCURRENT_TURNS = int(os.environ.get("MAX_CONCURRENT_TURNS", "4"))
+TURN_TIMEOUT_SECONDS = float(os.environ.get("TURN_TIMEOUT_SECONDS", "300"))
+_turns = asyncio.Semaphore(MAX_CONCURRENT_TURNS)
+
+# The OpenAPI spec is exported as LangGraph/openapi.json (`python -m src.openapi`) rather than
+# served in production.
+app = FastAPI(
+    docs_url=None if PRODUCTION else "/docs",
+    redoc_url=None if PRODUCTION else "/redoc",
+    openapi_url=None if PRODUCTION else "/openapi.json",
+)
 
 
 @app.middleware("http")
@@ -74,15 +108,33 @@ class RevalidatingStaticFiles(StaticFiles):
         return response
 
 
-app.mount("/static", RevalidatingStaticFiles(directory=FRONTEND_DIR), name="static")
+if not PRODUCTION:
+    app.mount("/static", RevalidatingStaticFiles(directory=FRONTEND_DIR), name="static")
+
+
+def _bounded(graph: WorkflowGraph) -> WorkflowGraph:
+    if len(graph.nodes) > MAX_GRAPH_NODES:
+        raise ValueError(f"a graph may have at most {MAX_GRAPH_NODES} nodes")
+    if len(graph.edges) > MAX_GRAPH_EDGES:
+        raise ValueError(f"a graph may have at most {MAX_GRAPH_EDGES} edges")
+    return graph
+
+
+Prompt = Annotated[str, Field(min_length=1, max_length=MAX_PROMPT_CHARS)]
+ThreadId = Annotated[str, Field(pattern=THREAD_ID_PATTERN)]
+# A graph from a client: the graph format (unknown fields rejected) within the size limits.
+PostedGraph = Annotated[WorkflowGraph, AfterValidator(_bounded)]
+
 
 class ChatRequest(BaseModel):
-    prompt: str
-    thread_id: str | None = None
+    model_config = ConfigDict(extra="forbid")
+
+    prompt: Prompt
+    thread_id: ThreadId | None = None
     # The caller's current graph, when the caller rather than this service owns it. It
     # replaces the thread's graph for this turn; omitted, the turn continues from the
     # thread's own graph (empty for a new thread).
-    graph: WorkflowGraph | None = None
+    graph: PostedGraph | None = None
 
 class ChatResponse(BaseModel):
     response: str
@@ -129,6 +181,39 @@ def turn_config(thread_id: str) -> dict:
     return config
 
 
+def reject_if_busy() -> None:
+    """Answer 429 rather than queue when MAX_CONCURRENT_TURNS turns already run.
+
+    Checked before a turn takes its slot, so two requests can pass together; the semaphore
+    still holds the cap, the later one just waits instead of being refused.
+    """
+    if _turns.locked():
+        raise HTTPException(status_code=429, detail="too many turns in progress, retry later", headers={"Retry-After": "10"})
+
+
+def timeout_message() -> str:
+    return f"The turn took longer than {TURN_TIMEOUT_SECONDS:g} s and was stopped."
+
+
+async def within_turn_timeout(stream):
+    """Yield from `stream` until it ends, raising TimeoutError once TURN_TIMEOUT_SECONDS have passed.
+
+    The deadline only wraps the wait for the next item, never a `yield`: a timeout that spans
+    the consumer's code would cancel that instead of the turn.
+    """
+    deadline = asyncio.get_running_loop().time() + TURN_TIMEOUT_SECONDS
+    try:
+        while True:
+            try:
+                async with asyncio.timeout_at(deadline):
+                    item = await anext(stream)
+            except StopAsyncIteration:
+                return
+            yield item
+    finally:
+        await stream.aclose()
+
+
 @app.post("/api/chat", response_model=ChatResponse)
 async def chat(req: ChatRequest):
     """Run the workflow to completion and return the final reply and graph, without streaming.
@@ -140,12 +225,21 @@ async def chat(req: ChatRequest):
     thread_id = req.thread_id or str(uuid4())
     graph = req.graph.model_dump() if req.graph is not None else None
 
-    result = await compiled_graph.ainvoke(turn_input(req.prompt, graph), config={**turn_config(thread_id), "callbacks": [RunTracker(thread_id)]})
+    reject_if_busy()
+    async with _turns:
+        try:
+            async with asyncio.timeout(TURN_TIMEOUT_SECONDS):
+                result = await compiled_graph.ainvoke(turn_input(req.prompt, graph), config={**turn_config(thread_id), "callbacks": [RunTracker(thread_id)]})
+        except TimeoutError:
+            logger.warning("Turn of thread %s stopped after %g s", thread_id, TURN_TIMEOUT_SECONDS)
+            raise HTTPException(status_code=504, detail=timeout_message())
 
     # Last message is the assistant reply
     assistant_message = result["messages"][-1].text
 
-    pretty_print_messages(result["messages"])
+    # The whole conversation, user prompts included: not for a production log.
+    if logger.isEnabledFor(logging.DEBUG):
+        pretty_print_messages(result["messages"])
 
     return ChatResponse(
         response=assistant_message,
@@ -156,7 +250,12 @@ async def chat(req: ChatRequest):
     )
 
 @app.get("/api/stream")
-async def stream(prompt: str, thread_id: str):
+async def stream(
+    prompt: Annotated[str, Query(min_length=1, max_length=MAX_PROMPT_CHARS)],
+    thread_id: Annotated[str, Query(pattern=THREAD_ID_PATTERN)],
+):
+    reject_if_busy()
+
     async def gen():
         """Forward LangGraph message chunks and graph updates as server-sent events.
 
@@ -165,13 +264,19 @@ async def stream(prompt: str, thread_id: str):
         while it is being built. Every event names its kind in `event`. The stream always
         ends with a `done` event, after an `error` event if the turn failed.
         """
+        async with _turns:
+            async for event in turn_events():
+                yield event
+        yield f"data: {json.dumps({'event': 'done'})}\n\n"
+
+    async def turn_events():
         try:
-            async for path, mode, chunk in compiled_graph.astream(
+            async for path, mode, chunk in within_turn_timeout(compiled_graph.astream(
                 turn_input(prompt),
                 config={**turn_config(thread_id), "callbacks": [RunTracker(thread_id)]},
                 stream_mode=["messages", "updates"],
                 subgraphs=True
-            ):
+            )):
                 if mode == "updates":
                     for node_name, update in (chunk or {}).items():
                         if not isinstance(update, dict):
@@ -200,7 +305,7 @@ async def stream(prompt: str, thread_id: str):
                 # Stream artifact if present to render geometry on frontend map
                 if getattr(message_chunk, "artifact", None):
                     payload["artifact"] = message_chunk.artifact
-                    logging.getLogger(__name__).info("Streaming artifact: %s", message_chunk.artifact)
+                    logger.debug("Streaming artifact: %s", message_chunk.artifact)
 
                 # Normal textual streaming
                 if isinstance(content, str):
@@ -212,11 +317,15 @@ async def stream(prompt: str, thread_id: str):
                         if block.get("type") == "text":
                             payload["content"] = block["text"]
                             yield f"data: {json.dumps(payload)}\n\n"
-        except Exception as exc:
-            # Sent as an event: to EventSource a dropped connection looks like a finished reply.
-            logging.getLogger(__name__).exception("Stream of thread %s failed", thread_id)
-            yield f"data: {json.dumps({'event': 'error', 'error': (str(exc) or type(exc).__name__)[:300]})}\n\n"
-        yield f"data: {json.dumps({'event': 'done'})}\n\n"
+        # Sent as an event: to EventSource a dropped connection looks like a finished reply.
+        except TimeoutError:
+            logger.warning("Stream of thread %s stopped after %g s", thread_id, TURN_TIMEOUT_SECONDS)
+            yield f"data: {json.dumps({'event': 'error', 'error': timeout_message()})}\n\n"
+        except Exception:
+            # The details stay in the log; the id ties a report from the client to them.
+            error_id = uuid4().hex[:8]
+            logger.exception("Stream of thread %s failed (error id %s)", thread_id, error_id)
+            yield f"data: {json.dumps({'event': 'error', 'error': f'The turn failed (error id {error_id}).'})}\n\n"
 
     return StreamingResponse(gen(), media_type="text/event-stream")
 
@@ -227,7 +336,7 @@ def graph_for_thread(thread_id: str) -> dict:
 
 
 @app.get("/api/execute")
-async def execute(thread_id: str):
+async def execute(thread_id: Annotated[str, Query(pattern=THREAD_ID_PATTERN)]):
     """Stream the execution of a thread's graph as server-sent events.
 
     Node payloads are summarised rather than forwarded: a single OSM step can return
@@ -261,13 +370,20 @@ MAX_MAP_FEATURES = int(os.environ.get("MAX_MAP_FEATURES", "3000"))
 
 
 @app.get("/api/result")
-async def result_layer(thread_id: str, node: str, output: str, limit: int = MAX_MAP_FEATURES):
+async def result_layer(
+    thread_id: Annotated[str, Query(pattern=THREAD_ID_PATTERN)],
+    node: str,
+    output: str,
+    limit: Annotated[int, Query(ge=0)] = MAX_MAP_FEATURES,
+):
     """Return one execution output as a FeatureCollection for the results map.
 
     Only fetched when a layer is actually switched on, and capped so a run that produced
     thousands of polygons cannot lock up the browser. Truncation is reported rather than
-    hidden, so a partial layer is never mistaken for the whole result.
+    hidden, so a partial layer is never mistaken for the whole result. A `limit` above
+    MAX_MAP_FEATURES is lowered to it: the cap protects the server's memory too.
     """
+    limit = min(limit, MAX_MAP_FEATURES)
     value = store.get_node_output(thread_id, node, output)
     if value is None:
         raise HTTPException(status_code=404, detail=f"no result for {node}.{output}")
@@ -288,8 +404,10 @@ async def result_layer(thread_id: str, node: str, output: str, limit: int = MAX_
 
 
 class ExecuteRequest(BaseModel):
-    thread_id: str | None = None
-    graph: dict | None = None
+    model_config = ConfigDict(extra="forbid")
+
+    thread_id: ThreadId | None = None
+    graph: PostedGraph | None = None
 
 
 @app.post("/api/execute")
@@ -300,15 +418,18 @@ async def execute_sync(req: ExecuteRequest):
     directly - so the executor is usable from a script or another service without going
     through the chat at all.
     """
-    graph = req.graph if req.graph is not None else graph_for_thread(req.thread_id or "")
+    graph = req.graph.model_dump() if req.graph is not None else graph_for_thread(req.thread_id or "")
     try:
         return await execute_graph(graph)
     except ExecutionError as exc:
+        # The runner's own messages, written for the user.
         return {"ok": False, "error": str(exc)}
 
 
 class GraphOpRequest(BaseModel):
-    thread_id: str
+    model_config = ConfigDict(extra="forbid")
+
+    thread_id: ThreadId
     op: str
     args: dict = {}
 
@@ -329,8 +450,15 @@ async def graph_op(req: GraphOpRequest):
 
     try:
         graph = apply_build_op(graph, req.op, req.args)
-    except (ValueError, TypeError) as exc:
+    except ValueError as exc:
+        # The ops' own messages, written for the user ("Cannot set input: ...").
         raise HTTPException(status_code=400, detail=str(exc))
+    except TypeError:
+        # Python's message names internal functions; the args were wrong for the op.
+        logger.info("Bad arguments for op %r: %s", req.op, sorted(req.args))
+        raise HTTPException(status_code=400, detail=f"invalid arguments for op '{req.op}'")
+    if len(graph["nodes"]) > MAX_GRAPH_NODES:
+        raise HTTPException(status_code=400, detail=f"a graph may have at most {MAX_GRAPH_NODES} nodes")
 
     validation = validate_graph(graph)
     compiled_graph.update_state(config, {
@@ -348,18 +476,19 @@ async def graph_op(req: GraphOpRequest):
     return {"graph": graph, "validation": validation}
 
 
-@app.get("/api/test-prompts")
-async def test_prompts():
-    """Canned prompts from `prompts.jsonl`, offered as one-click buttons in the UI.
+# The demo frontend, in a development run only (see PRODUCTION).
+if not PRODUCTION:
+    @app.get("/api/test-prompts")
+    async def test_prompts():
+        """Canned prompts from `prompts.jsonl`, offered as one-click buttons in the UI.
 
-    One `{"label": ..., "prompt": ...}` object per line. Read per request rather than at
-    import, so editing the file updates the buttons on the next page load without a rebuild.
-    """
-    if not PROMPTS_FILE.exists():
-        return []
-    return [json.loads(line) for line in PROMPTS_FILE.read_text(encoding="utf-8").splitlines() if line.strip()]
+        One `{"label": ..., "prompt": ...}` object per line. Read per request rather than at
+        import, so editing the file updates the buttons on the next page load without a rebuild.
+        """
+        if not PROMPTS_FILE.exists():
+            return []
+        return [json.loads(line) for line in PROMPTS_FILE.read_text(encoding="utf-8").splitlines() if line.strip()]
 
-
-@app.get("/")
-async def index():
-    return FileResponse(FRONTEND_DIR / "index.html", headers={"Cache-Control": "no-cache"})
+    @app.get("/")
+    async def index():
+        return FileResponse(FRONTEND_DIR / "index.html", headers={"Cache-Control": "no-cache"})

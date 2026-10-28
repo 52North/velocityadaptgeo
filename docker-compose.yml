@@ -58,10 +58,20 @@ services:
     build:
       context: ./LangGraph
       dockerfile: Dockerfile
-    # No auth, and every chat turn spends the Anthropic key: host loopback only. From another
-    # machine, tunnel in: ssh -L 8000:localhost:8000 <user>@<host>
+    # No auth unless LANGGRAPH_API_TOKEN is set, and every chat turn spends the Anthropic key: host
+    # loopback only. From another machine, tunnel in: ssh -L 8000:localhost:8000 <user>@<host>
     ports:
       - "127.0.0.1:8000:8000"
+    # Unprivileged and read-only: it writes only to the metrics/ volume and /tmp. The ids must be
+    # allowed to write metrics/; set LANGGRAPH_UID/LANGGRAPH_GID in ./.env when they differ (SETUP.md).
+    user: "${LANGGRAPH_UID:-1000}:${LANGGRAPH_GID:-1000}"
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     dns:
       - 8.8.8.8
     env_file:
@@ -75,6 +85,14 @@ services:
       MODEL_PRICES_PER_MTOK: claude-haiku-5-5=0.10,0.50
       MAX_WORKFLOW_ITERATIONS: "16"
       MAX_MAP_FEATURES: "3000"
+      # development serves the demo frontend and the API docs; production serves neither and
+      # refuses to start without LANGGRAPH_API_TOKEN (LangGraph/README.md).
+      APP_ENV: development
+      # Turns running at once (more get 429) and the time one may take (then 504 or an error event).
+      MAX_CONCURRENT_TURNS: "4"
+      TURN_TIMEOUT_SECONDS: "300"
+      # DEBUG also logs whole conversations and streamed geometry; not for production.
+      LOG_LEVEL: INFO
       # One of LangGraph/src/llm/variants.py: pgvector (catalog search), mcp (every tool of the mcp
       # service) or fewshot (whole catalog + few-shot examples). src.batch --variant overrides it.
       WORKFLOW_VARIANT: pgvector
@@ -85,6 +103,7 @@ services:
       # Independent of the variant: also check the data kinds an edge carries (validator.py). Off by
       # default, as the variants were measured; on, the validator looks the processes up in the catalog.
       VALIDATE_IO_TYPES: "false"
+      # One line per turn, with the user's prompt; empty turns it off (the default with APP_ENV=production).
       METRICS_FILE: metrics/runs.jsonl
       # Unset: Haiku decides alone. laya-shadow: the laya service also picks the manager's next
       # action, logged next to Haiku's in decision_history; Haiku still routes. Needs --profile laya.

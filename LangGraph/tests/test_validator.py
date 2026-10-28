@@ -85,3 +85,15 @@ def test_default_follows_the_switch(monkeypatch):
     assert validate_graph(mismatch)["valid"]
     monkeypatch.setattr(validator, "VALIDATE_IO_TYPES", True)
     assert not validate_graph(mismatch)["valid"]
+
+
+@pytest.mark.parametrize("server_url, error", [
+    ("http://pygeoapi:80", None),  # the trailing slash does not matter
+    ("http://evil.example/", "Node 'a': server 'http://evil.example/' is not one of the allowed OGC servers."),
+    ("", "Node 'a' has no server_url."),
+])
+def test_server_allowlist_is_always_checked(server_url, error):
+    one = {"nodes": [{**node("a", "areas"), "config": {"server_url": server_url}}], "edges": []}
+    for check_types in (False, True):
+        report = validate_graph(one, io_specs={}, check_types=check_types)
+        assert report["errors"] == ([error] if error else [])

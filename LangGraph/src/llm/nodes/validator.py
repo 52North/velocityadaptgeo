@@ -16,6 +16,7 @@ from src.llm.state.graph import WorkflowGraph, find_cycle
 from src.llm.state.state import WorkflowState
 from src.llm.nodes._helpers import _log
 from src.llm.tools.ogc_client import fetch_io_specs
+from src.ogc_servers import is_allowed_server
 
 VALIDATE_IO_TYPES = os.environ.get("VALIDATE_IO_TYPES", "").strip().lower() in ("1", "true", "yes", "on")
 
@@ -116,6 +117,15 @@ def validate_graph(graph: dict, io_specs: dict | None = None, check_types: bool 
     }
     if not io_names:
         errors.append("Graph has no nodes.")
+
+    # Always checked, unlike types: a graph a host stores is then already known to run only
+    # against allowed servers, whoever produced it (the LLM or a client).
+    for node in parsed.nodes:
+        server_url = node.config.get("server_url")
+        if not server_url:
+            errors.append(f"Node '{node.id}' has no server_url.")
+        elif not is_allowed_server(server_url):
+            errors.append(f"Node '{node.id}': server '{server_url}' is not one of the allowed OGC servers.")
 
     for i, edge in enumerate(parsed.edges):
         wired = True
