@@ -111,7 +111,7 @@ column names (e.g. "Lenient seed", "Lenient paraphrases", ...) or two tables.
 | Page | Left | Right | LaTeX |
 |---|---|---|---|
 | First page | - | page number | `\thispagestyle{firstpage}` |
-| Even (left page) | page number | "3. Forum GEO.KI" (volume title, do not change) | `\fancyhead[LE]{\thepage}`, `\fancyhead[RE]{3. Forum GEO.KI}` |
+| Even (left page) | page number | "3. Forum GEO.KI" (volume title from the sample - confirm for our conference) | `\fancyhead[LE]{\thepage}`, `\fancyhead[RE]{3. Forum GEO.KI}` |
 | Odd (right page) | "R. Flores & B. Gräler: <short title>" | page number | `\fancyhead[LO]{...}`, `\fancyhead[RO]{\thepage}` |
 
 - Size 9 pt, regular, with a 0.75 pt rule below the header text on every page, page 1
@@ -129,13 +129,5 @@ column names (e.g. "Lenient seed", "Lenient paraphrases", ...) or two tables.
    each starts with a superscript number; e-mail only for the lead author, separated by " · ".
 4. Optional "Zusammenfassung"/"Abstract" (`ÜSZusammenfassung`) + `Standard` paragraph(s).
 5. Section 1 starts.
-6. Publisher box at the **bottom of page 1** (in Word a floating table anchored there;
-   LibreOffice's render wrongly moves it to page 2): 8 pt, one rule above (top border only),
-   full text width, no cell padding. Text from the sample:
-   "Klingner, S., Wagenseil, H., Merita, P., Pauly, P. & Schymik, C. (Hrsg.) (2027): 3. Forum
-   GEO.KI. Modelle, Methoden, Mehrwert – KI-gestützte Geodatenanalyse von der Infrastruktur bis
-   zur Anwendung. © Wichmann Verlag, VDE VERLAG GMBH · Berlin · Offenbach.
-   ISBN 978-3-87907-7xx-x, doi:10.14627/537xxxxxx."
-   LaTeX: a box placed absolutely just above the bottom margin of page 1 (e.g.
-   `\AddToHookNext{shipout/foreground}` with `\put`), containing `\rule{\textwidth}{0.5pt}` and
-   the 8 pt text; reserve its height on page 1 so body text does not run into it.
+6. No publisher box: the citation table on page 1 of the sample is the publisher's example
+   content, like the sample text itself - it is not part of our document.

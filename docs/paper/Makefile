@@ -12,7 +12,7 @@ all: main.pdf
 main.pdf: $(BUILD)/main.pdf
 	cp $(BUILD)/main.pdf main.pdf
 
-$(BUILD)/main.pdf: main.tex wichmann.cls paper-style.sty wichmann.bst references.bib chapters/*.tex tables/*
+$(BUILD)/main.pdf: main.tex paper.cls paper-style.sty paper.bst references.bib chapters/*.tex tables/*
 	mkdir -p $(BUILD)
 	$(LATEX) main.tex
 	cd $(BUILD) && BIBINPUTS=..: BSTINPUTS=..: bibtex main

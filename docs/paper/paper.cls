@@ -1,12 +1,12 @@
-% wichmann.cls - document class for the Wichmann Tagungsband (3. Forum GEO.KI)
+% paper.cls - document class for the Tagungsband layout (template/Mustertext_Tagungsband.docx)
 % Sets the font (Times New Roman / Liberation Serif) and makes article.cls load without
 % Latin Modern, fixes 10 pt + two-sided layout and loads paper-style.sty with all formatting.
-% Usage: \documentclass{wichmann} or \documentclass[ngerman]{wichmann}
+% Usage: \documentclass{paper} or \documentclass[ngerman]{paper}
 \NeedsTeXFormat{LaTeX2e}
-\ProvidesClass{wichmann}[2026/10/29 Wichmann Tagungsband (3. Forum GEO.KI)]
+\ProvidesClass{paper}[2026/10/29 Tagungsband layout]
 
 \DeclareOption{ngerman}{\PassOptionsToPackage{ngerman}{paper-style}}
-\DeclareOption*{\ClassWarning{wichmann}{Unknown option '\CurrentOption'}}
+\DeclareOption*{\ClassWarning{paper}{Unknown option '\CurrentOption'}}
 \ProcessOptions\relax
 
 % article.cls selects Latin Modern (TU/lmr) while it loads. Where Latin Modern is not

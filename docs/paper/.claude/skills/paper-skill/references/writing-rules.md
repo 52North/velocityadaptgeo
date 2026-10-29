@@ -48,7 +48,7 @@ Author surnames only, author-year, **no comma between name and year**, page afte
 | Several with pages | (Name1 2020, 144; Name2 2020, 67; Name3 et al. 2020, 189) - separated by **semicolon** | write the parenthesis by hand with `\citealp[144]{a}; ...` |
 
 natbib setup that yields this: `\setcitestyle{authoryear,round,citesep={,},aysep={},notesep={, }}`,
-"&" instead of "and" and "et al." from three authors on come from `docs/paper/wichmann.bst`.
+"&" instead of "and" and "et al." from three authors on come from `docs/paper/paper.bst`.
 The Google Doc uses APA ("Vila et al., 2014") - every citation in LaTeX uses `\citep`/`\citet`.
 
 ## Bibliography (guidelines 2.11, sample "Literatur")
@@ -80,9 +80,9 @@ Details:
 - DOI: give as `https://doi.org/...` like a web source but without access date (the guidelines
   are silent on DOIs; keep it short and consistent).
 
-### Implementation: `wichmann.bst` + `references.bib`
+### Implementation: `paper.bst` + `references.bib`
 
-`docs/paper/wichmann.bst` produces exactly these patterns from BibTeX entries (`@article`,
+`docs/paper/paper.bst` produces exactly these patterns from BibTeX entries (`@article`,
 `@inproceedings`/`@incollection`, `@book`, `@misc`/`@online`). Conventions for `references.bib`:
 
 - First names as initials, as the bibliography shows them: `author = {Vila, M. and Martí, M. A.}`.

@@ -1,4 +1,4 @@
-% wichmann.bst - BibTeX style for the Wichmann Tagungsband (author-year, natbib)
+% paper.bst - BibTeX style for the Tagungsband (author-year, natbib)
 %
 % Entry pattern (paper-skill, references/writing-rules.md, "Bibliography"):
 %   Surname, I., Surname, I. & Surname, I. (Year): Title. In: Journal, Vol (No), 1-10.

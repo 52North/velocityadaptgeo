@@ -20,8 +20,7 @@ Run from `docs/paper/` after `make`. Report every failed point; do not tick what
       for the lead author
 - [ ] Headings 13/11/10 pt bold, number + 0.9 cm tab, no level skipped; two headings in a row:
       no space before the second
-- [ ] First page: only the page number at the top right; publisher box at the bottom (8 pt,
-      rule above)
+- [ ] First page: only the page number at the top right
 - [ ] Even pages: page number left, "3. Forum GEO.KI" right; odd pages:
       "R. Flores & B. Gräler: <short title>" left, page number right; 9 pt
 - [ ] Captions above, "**Abbildung/Tabelle n:**" bold + tab, text regular; source line below

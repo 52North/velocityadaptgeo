@@ -18,10 +18,10 @@ needed.
 | Path              | Content                                                       |
 |-------------------|---------------------------------------------------------------|
 | `main.tex`        | Document frame: title, order of chapters, bibliography        |
-| `wichmann.cls`    | Document class: font (Times New Roman / Liberation Serif), loads the style |
+| `paper.cls`       | Document class: font (Times New Roman / Liberation Serif), loads the style |
 | `paper-style.sty` | **All** formatting (fonts, margins, headings, captions, ...)  |
 | `references.bib`  | Bibliography (BibTeX)                                         |
-| `wichmann.bst`    | BibTeX style in the publisher's format (author-year, natbib)  |
+| `paper.bst`       | BibTeX style in the publisher's format (author-year, natbib)  |
 | `chapters/`       | Text only, one file per section                               |
 | `tables/`         | Data as `*.csv` plus one thin `tab-*.tex` wrapper per table   |
 | `figures/`        | Images, referenced without the folder prefix                  |

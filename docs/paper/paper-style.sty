@@ -3,7 +3,7 @@
 % .claude/skills/paper-skill/references/format-spec.md (Word style names in brackets).
 % Options: ngerman (German labels and hyphenation), default is English.
 \NeedsTeXFormat{LaTeX2e}
-\ProvidesPackage{paper-style}[2026/10/29 Wichmann Tagungsband (3. Forum GEO.KI)]
+\ProvidesPackage{paper-style}[2026/10/29 Tagungsband layout from template/Mustertext_Tagungsband.docx]
 
 \newif\ifpaper@german
 \DeclareOption{ngerman}{\paper@germantrue}
@@ -29,7 +29,7 @@
 \fi
 
 % --- Font: Times New Roman -------------------------------------------------------------
-% LuaLaTeX: set in wichmann.cls before article.cls loads (Times New Roman or Liberation Serif).
+% LuaLaTeX: set in paper.cls before article.cls loads (Times New Roman or Liberation Serif).
 % pdfLaTeX (fallback): Times only with texlive-fontsrecommended, else Computer Modern.
 \ifdefined\directlua\else
   \IfFileExists{ptmr8t.tfm}
@@ -91,27 +91,6 @@
   \hangindent0.35cm\hangafter\@ne
   \noindent\makebox[0.35cm][l]{\@makefnmark}#1}
 
-% --- Publisher box at the bottom of page 1 ----------------------------------------------
-% 8 pt, rule above, full text width; ISBN/DOI are filled in by the publisher.
-\newcommand{\publisherbox}{%
-  Klingner, S., Wagenseil, H., Merita, P., Pauly, P. \& Schymik, C. (Hrsg.) (2027):
-  3. Forum GEO.KI. Modelle, Methoden, Mehrwert -- KI-gestützte Geodatenanalyse von der
-  Infrastruktur bis zur Anwendung. \textcopyright{} Wichmann Verlag, VDE VERLAG GMBH
-  \textperiodcentered{} Berlin \textperiodcentered{} Offenbach.
-  ISBN 978-3-87907-7xx-x, doi:10.14627/537xxxxxx.}
-% Placed absolutely on the bottom edge of the text block; page 1 is shortened by its height
-% (+ 12 pt gap) so the body text never runs into it.
-\newsavebox{\paper@pubbox}
-\newcommand{\paper@placepublisherbox}{%
-  \sbox{\paper@pubbox}{\parbox[b]{\textwidth}{%
-    \fontsize{8}{9.2}\selectfont\parskip\z@
-    \rule{\textwidth}{0.5pt}\par\vspace{2pt}\publisherbox}}%
-  \enlargethispage{-\dimexpr\ht\paper@pubbox+\dp\paper@pubbox+12pt\relax}%
-  \AddToHookNext{shipout/foreground}{%
-    \setlength{\unitlength}{1pt}%
-    \put(\strip@pt\dimexpr 2cm\relax,
-         -\strip@pt\dimexpr\paperheight-2.2cm\relax){\usebox{\paper@pubbox}}}}
-
 % --- Title block [Beitragstitel, Autorenname, Autorenadresse_1/_2] --------------------------
 % \author{Randy Flores\textsuperscript{1,2} and ...}, one \address{...} per address line.
 \newcommand{\paper@addresses}{}
@@ -121,7 +100,6 @@
     {\gappto{\paper@addresses}{\par#1}}}
 \renewcommand{\maketitle}{%
   \thispagestyle{firstpage}%
-  \paper@placepublisherbox
   \begingroup
     \raggedright\parskip\z@
     {\fontsize{16}{18.4}\selectfont\bfseries\rule{0pt}{15pt}\@title\par}%
@@ -241,11 +219,11 @@
 \setlength{\mathindent}{1cm}
 
 % --- Citations and bibliography [Literaturliste] ---------------------------------------
-% Author-year without comma: "(Vila et al. 2014)"; entry layout from wichmann.bst;
+% Author-year without comma: "(Vila et al. 2014)"; entry layout from paper.bst;
 % hanging 0.5 cm, 3 pt between entries.
 \RequirePackage{natbib}
 \setcitestyle{authoryear,round,citesep={,},aysep={},notesep={, }}
-\bibliographystyle{wichmann}
+\bibliographystyle{paper}
 \setlength{\bibhang}{0.5cm}
 \setlength{\bibsep}{3pt}
 

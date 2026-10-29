@@ -1,13 +1,13 @@
 ---
 name: paper-skill
-description: Formatting, writing and citation rules for the contribution to the Wichmann conference volume "3. Forum GEO.KI" (Herbert Wichmann Verlag / VDE), rebuilt in LaTeX under docs/paper. Use whenever working on docs/paper - editing paper-style.sty, main.tex, chapters/, tables/, figures/ or references.bib, converting the extended abstract to LaTeX, checking the PDF against the publisher's template, or answering questions about the Tagungsband / Wichmann / GEO.KI format, citations or bibliography.
+description: Formatting, writing and citation rules for our conference paper (Tagungsband), with the layout of the delivered Word template rebuilt in LaTeX under docs/paper. Use whenever working on docs/paper - editing paper-style.sty, main.tex, chapters/, tables/, figures/ or references.bib, converting the extended abstract to LaTeX, checking the PDF against the publisher's template, or answering questions about the Tagungsband / Wichmann / GEO.KI format, citations or bibliography.
 ---
 
-# Paper skill: Wichmann Tagungsband "3. Forum GEO.KI"
+# Paper skill: Tagungsband layout in LaTeX
 
 The paper (extended abstract "MCP vs. RAG: Evaluating Agentic Performance Across Paraphrased
-Prompts for Geospatial Workflows", R. Flores & B. Gräler) goes into a Wichmann conference
-volume. The publisher only ships Word material; we rebuild it in LaTeX.
+Prompts for Geospatial Workflows", R. Flores & B. Gräler) goes into a conference
+volume (Tagungsband). The publisher only ships Word material; we rebuild it in LaTeX.
 
 Sources of truth (do not edit; `template/` is ignored by git - if the files are missing, ask
 the user to copy them in):
@@ -41,7 +41,7 @@ the user to copy them in):
 
 | Command | Use |
 |---|---|
-| `\documentclass[ngerman]{wichmann}` | German labels/hyphenation; default English. `wichmann.cls` sets the font and loads `paper-style.sty` |
+| `\documentclass[ngerman]{paper}` | German labels/hyphenation; default English. `paper.cls` sets the font and loads `paper-style.sty` |
 | `\author{A\textsuperscript{1,2} and B\textsuperscript{1}}` | author line |
 | `\address{\textsuperscript{1}Institute, City · e-mail}` | one call per address line |
 | `\runningauthors{R. Flores \& B. Gräler}`, `\runningtitle{Short title}` | odd running head |
@@ -49,7 +49,7 @@ the user to copy them in):
 | `\tabsource{\ownwork}`, `\figsource{...}` | source line below a table / figure |
 | `\begin{abstract}` | "Abstract"/"Zusammenfassung" block (`ÜSZusammenfassung`) |
 
-The publisher box on page 1, the header rules, captions, lists, footnotes and the
+The header rules, captions, lists, footnotes and the
 bibliography layout are automatic.
 
 Spacing was verified against the LibreOffice render of the sample with
@@ -68,7 +68,7 @@ single points.
 - Citations author-year **without comma**: "Name (2020)", "(Name 2020, 144)",
   "(Name1 & Name2 2020)", "(Name et al. 2020)".
 - Bibliography: "Name, V. & Name, V. (2020): Title. Place." - produced by
-  `docs/paper/wichmann.bst`; `.bib` conventions in `writing-rules.md`.
+  `docs/paper/paper.bst`; `.bib` conventions in `writing-rules.md`.
 - Always real umlauts (Gräler, Münster), never ae/oe/ue.
 - Every figure needs alt text; formulas need an ASCII-math alt text.
 - Running heads: even page "page | 3. Forum GEO.KI", odd page "R. Flores & B. Gräler: <short title> | page".
@@ -104,8 +104,7 @@ Word-based accessibility workflow can be served:
 
    So printing is done from a PDF (fine for LaTeX), but the publisher apparently converts the
    **Word file** into the accessible PDF. Whether a LaTeX-made PDF alone is accepted must be
-   confirmed with the publisher: Gerold Olbrich, Herbert Wichmann Verlag,
-   gerold.olbrich@vde-verlag.de, +49 69 840006-1621. Fallback: the Word deliverable below.
+   confirmed with the contact named in the guidelines (section 3). Fallback: the Word deliverable below.
 2. **Accessible PDF.** The volume is produced as an accessible PDF (tags, alt text, heading
    structure). In LaTeX this realistically needs LuaLaTeX with `\DocumentMetadata{tagging=on}`.
    LuaLaTeX is installed; tagging is not switched on yet.
@@ -115,5 +114,3 @@ Word-based accessibility workflow can be served:
    Not installed; installed is Liberation Serif (metrically identical, same line breaks, but a
    different font name in the PDF). Real TNR: `ttf-ms-fonts` (AUR) + LuaLaTeX/fontspec.
    pdfLaTeX Times (`texlive-fontsrecommended`) is only similar, not metric-identical.
-4. **First-page box.** Its exact position in the printed volume is set by the publisher;
-   the ISBN/DOI are placeholders ("7xx-x", "537xxxxxx") filled in by the publisher.
