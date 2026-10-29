@@ -1,0 +1,15 @@
+build/
+*.aux
+*.bbl
+*.blg
+*.log
+*.out
+*.toc
+*.synctex.gz
+
+# The paper skill is part of the repo (root .gitignore ignores .claude everywhere)
+!.claude/
+
+# Publisher material and our source exports stay local (not in git)
+template/*
+!template/.gitkeep

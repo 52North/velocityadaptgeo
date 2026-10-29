@@ -1,0 +1,13 @@
+% Thin wrapper: caption, label and layout live here, the numbers in example.csv.
+\begin{table}[htbp]
+  \centering
+  \caption{Example table generated from \texttt{tables/example.csv}.}
+  \label{tab:example}
+  \csvreader[
+    tabular      = lrrr,
+    table head   = \toprule Variant & Precision & Recall & F1 \\ \midrule,
+    table foot   = \bottomrule
+  ]{tables/example.csv}{
+    variant=\variant, precision=\precision, recall=\recall, f1=\fone
+  }{\variant & \precision & \recall & \fone}
+\end{table}

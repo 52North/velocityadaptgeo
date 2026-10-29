@@ -1,0 +1,58 @@
+% All formatting of the paper lives here; main.tex and chapters/ hold content only.
+% Values below are placeholders until the formatting guidelines (template/) are transferred.
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{paper-style}[2026/10/29 Paper formatting]
+
+% --- Language and fonts -------------------------------------------------------
+% TODO: language of the paper (english / ngerman) from the guidelines
+\RequirePackage[english]{babel}
+% TODO: font family and size from the template. Only Computer Modern is installed
+% right now. Times/Helvetica (mathptmx, helvet) need `pacman -S texlive-fontsrecommended`;
+% system fonts (Calibri -> Carlito, Arial, ...) need LuaLaTeX + fontspec, i.e.
+% `pacman -S texlive-luatex`, and LATEX = lualatex in the Makefile.
+% TODO: \RequirePackage[T1]{fontenc} once the font is set (needed for umlauts).
+
+% --- Page layout ----------------------------------------------------------------
+% TODO: margins from the guidelines
+\RequirePackage[a4paper, top=2.5cm, bottom=2.5cm, left=2.5cm, right=2.5cm]{geometry}
+
+% --- Paragraphs and line spacing -----------------------------------------------
+% TODO: line spacing and spacing before/after paragraphs (Word "Abstand vor/nach")
+\RequirePackage{setspace}
+\setstretch{1.0}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{6pt}
+
+% --- Headings -------------------------------------------------------------------
+% TODO: heading sizes, numbering style and spacing from the template
+\RequirePackage{titlesec}
+\titleformat{\section}{\normalfont\large\bfseries}{\thesection}{1em}{}
+\titleformat{\subsection}{\normalfont\normalsize\bfseries}{\thesubsection}{1em}{}
+\titlespacing*{\section}{0pt}{12pt}{6pt}
+\titlespacing*{\subsection}{0pt}{12pt}{6pt}
+
+% --- Header and footer ----------------------------------------------------------
+% TODO: header/footer content from the template
+\RequirePackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyfoot[C]{\thepage}
+\renewcommand{\headrulewidth}{0pt}
+
+% --- Captions, tables, figures --------------------------------------------------
+% TODO: caption font, label style ("Table 1:" vs. "Tab. 1.") and position
+\RequirePackage[font=small, labelfont=bf]{caption}
+\RequirePackage{booktabs}
+\RequirePackage{csvsimple}
+\RequirePackage{graphicx}
+\graphicspath{{figures/}}
+
+% --- Citations ------------------------------------------------------------------
+% TODO: citation style from the guidelines (author-year vs. numeric)
+\RequirePackage[round]{natbib}
+\bibliographystyle{plainnat}
+
+% --- Links (load last) ------------------------------------------------------------
+\RequirePackage[hidelinks]{hyperref}
+
+\endinput
