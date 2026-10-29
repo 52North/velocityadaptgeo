@@ -1,6 +1,19 @@
 \section{Introduction}
 \label{sec:introduction}
 
-TODO.
+Agentic workflows allow complex tasks to be carried from a natural language prompt. This has
+broad applicability to allow non-expert users to perform difficult work. To facilitate the
+agents' ability to do things beyond text output, tools need to be provided in the form of an
+API. We examine two ways to expose this interface: A model context protocol (MCP) server which
+shows all available processes along with metadata, and a vector database populated with the
+available processes and accessed using retrieval augmented generation (RAG). These two
+approaches are compared within an agentic system to create a workflow for a geospatial analysis
+task, and the input prompt is paraphrased in various ways to improve the robustness of the trial.
 
-Placeholder citation \citep{placeholder2026}.
+Paraphrases are difficult to formally define but can still be categorized. For example, a
+sentence can swap words for synonyms or change the order of clauses. Defining different types
+of paraphrases allows for the identification and creation of paraphrases via a systematic
+method \citep{vila2014}. We use six such categories and their subtypes to programmatically
+generate paraphrases. Paraphrases have been shown to have a noticeable effect on LLM
+performance \citep{wahle2024}. By testing many paraphrases, we aim to avoid any influence
+related to semantics on the outcome of the trial.

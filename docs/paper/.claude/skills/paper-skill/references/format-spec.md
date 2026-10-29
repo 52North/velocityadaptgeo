@@ -47,7 +47,7 @@ gap between two paragraphs = after(previous) + before(next). Rebuild the gaps th
 | `Tabellenquelle` | 10 pt | 6 pt | 18 pt | hanging 1.0 cm | as above | `\tabsource{...}` macro |
 | Source line followed by a heading | - | - | 6 pt | - | - | macro option or rely on heading "before" |
 | `Absatz nach Tab.` | 10 pt | 18 pt | 6 pt | - | paragraph after a table (only base for `Tabellenquelle`) | covered by source "after" |
-| `Literaturliste` | 10 pt | 0 | 3 pt | hanging 0.5 cm | justified | `thebibliography` with `\leftmargin=0.5cm`, `\itemindent=-0.5cm`, `\itemsep=3pt` |
+| `Literaturliste` | 10 pt | 0 | 3 pt | hanging 0.5 cm | justified | natbib `\bibhang=0.5cm`, `\bibsep=3pt`; entry layout from `wichmann.bst` |
 | `Fußnotentext` | 9 pt | 0 | 6 pt | hanging 0.35 cm | mark + tab at 0.35 cm | `\renewcommand\@makefntext` |
 | `Fußnotenzeichen` | superscript | - | - | - | - | default |
 | `Kopfzeile` | 9 pt | - | 0 | - | - | fancyhdr with `\fontsize{9}{10.35}` |

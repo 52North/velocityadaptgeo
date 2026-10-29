@@ -42,15 +42,49 @@
 % --- Captions, tables, figures --------------------------------------------------
 % TODO: caption font, label style ("Table 1:" vs. "Tab. 1.") and position
 \RequirePackage[font=small, labelfont=bf]{caption}
-\RequirePackage{booktabs}
+\captionsetup[table]{position=top}
 \RequirePackage{csvsimple}
 \RequirePackage{graphicx}
 \graphicspath{{figures/}}
 
+% Tables: full grid 0.5 pt, 0.1 cm cell padding, 9 pt, shaded bold header row
+% (references/format-spec.md, "Tables")
+\RequirePackage[table]{xcolor}
+\RequirePackage{tabularx}
+\setlength{\arrayrulewidth}{0.5pt}
+\setlength{\tabcolsep}{0.1cm}
+\definecolor{tablehead}{HTML}{DDDDDD}
+\newcommand{\tablefont}{\fontsize{9}{10.35}\selectfont}
+
+% Source line below tables and figures: "Source:" + tab at 1 cm, 6 pt before
+% TODO: German labels (Quelle / eigene Darstellung) via babel captionsngerman
+\newcommand{\sourcename}{Source:}
+\newcommand{\ownwork}{own illustration}
+% Like a Word tab: a label wider than the 1 cm stop ("Source:") is followed by a space.
+\newsavebox{\sourcelabelbox}
+\newcommand{\tabsource}[1]{%
+  \par\vspace{6pt}\normalsize\noindent
+  \sbox{\sourcelabelbox}{\sourcename\ }%
+  \ifdim\wd\sourcelabelbox<1cm
+    \makebox[1cm][l]{\sourcename}%
+  \else
+    \usebox{\sourcelabelbox}%
+  \fi
+  #1\par}
+\let\figsource\tabsource
+
 % --- Citations ------------------------------------------------------------------
-% TODO: citation style from the guidelines (author-year vs. numeric)
-\RequirePackage[round]{natbib}
-\bibliographystyle{plainnat}
+% Author-year without comma: "(Vila et al. 2014)" (references/writing-rules.md, "Citations")
+% Entry layout comes from wichmann.bst; hanging 0.5 cm, 3 pt between entries
+\RequirePackage{natbib}
+\setcitestyle{authoryear,round,citesep={,},aysep={},notesep={, }}
+\bibliographystyle{wichmann}
+\setlength{\bibhang}{0.5cm}
+\setlength{\bibsep}{3pt}
+% TODO: German words (In: / (Hrsg.) / o. J.) via babel captionsngerman
+\newcommand{\bibinname}{In:}
+\newcommand{\bibedsname}{(Eds.)}
+\newcommand{\bibnodatename}{n.d.}
 
 % --- Links (load last) ------------------------------------------------------------
 \RequirePackage[hidelinks]{hyperref}

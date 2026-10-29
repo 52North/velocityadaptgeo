@@ -46,7 +46,9 @@ the user to copy them in):
 - Tables: full grid ½ pt, 13 cm wide, 9 pt, bold shaded header row, no merged cells.
 - Citations author-year **without comma**: "Name (2020)", "(Name 2020, 144)",
   "(Name1 & Name2 2020)", "(Name et al. 2020)".
-- Bibliography: "Name, V. & Name, V. (2020): Title. Place." - see `writing-rules.md`.
+- Bibliography: "Name, V. & Name, V. (2020): Title. Place." - produced by
+  `docs/paper/wichmann.bst`; `.bib` conventions in `writing-rules.md`.
+- Always real umlauts (Gräler, Münster), never ae/oe/ue.
 - Every figure needs alt text; formulas need an ASCII-math alt text.
 - Running heads: even page "page | 3. Forum GEO.KI", odd page "R. Flores & B. Gräler: <short title> | page".
 
@@ -57,11 +59,32 @@ switched by the babel language (`ngerman` / `english`). Layout is identical; onl
 (table in `writing-rules.md`, section "Labels"). German-only rules (spelling reform, gender
 colon) apply only when the paper is German.
 
+## Word deliverable (last step, only after the LaTeX version is final)
+
+LaTeX stays the source. At the very end, a `.docx` is built in parallel so the publisher's
+Word-based accessibility workflow can be served:
+
+1. Start from a copy of `template/Mustertext_Tagungsband.docx` and fill in our content using
+   its own paragraph styles (`Beitragstitel`, `Überschrift 1`, `Tabellenüberschrift`, ...) -
+   never direct formatting. Use the Word/docx skill for this.
+2. Check it in Word for the web (Microsoft 365 account available; driven via the Chrome
+   extension): "Überprüfen -> Barrierefreiheit überprüfen". Record the result (screenshot).
+3. Only a `.docx` can be checked this way - opening our LaTeX PDF in Word converts it and says
+   nothing about our document.
+
 ## Open risks - raise these, do not silently decide
 
-1. **Submission format.** The guidelines describe Word plus a PDF printout only. Whether a
-   LaTeX-made PDF is accepted must be confirmed with the publisher:
-   Gerold Olbrich, Herbert Wichmann Verlag, gerold.olbrich@vde-verlag.de, +49 69 840006-1621.
+1. **Submission format.** What the guidelines say:
+   - 1.1: "Das Manuskript wird als PDF gedruckt. Deshalb ist es vorteilhaft, den Druckertreiber
+     Adobe PDF oder einen anderen kompatiblen PDF-Druckertreiber zu verwenden."
+   - Footnote 1: page format 17 × 24 cm, not A4 - "beim Ausdrucken zu berücksichtigen".
+   - 1.3: "Ein barrierefreies Word-Dokument ist Grundvoraussetzung für die Umwandlung in ein
+     barrierefreies PDF-Dokument."
+
+   So printing is done from a PDF (fine for LaTeX), but the publisher apparently converts the
+   **Word file** into the accessible PDF. Whether a LaTeX-made PDF alone is accepted must be
+   confirmed with the publisher: Gerold Olbrich, Herbert Wichmann Verlag,
+   gerold.olbrich@vde-verlag.de, +49 69 840006-1621. Fallback: the Word deliverable below.
 2. **Accessible PDF.** The volume is produced as an accessible PDF (tags, alt text, heading
    structure). In LaTeX this realistically needs LuaLaTeX with `\DocumentMetadata{tagging=on}`.
    Only pdfLaTeX is usable right now; LuaLaTeX needs `sudo pacman -S texlive-luatex`.
@@ -69,7 +92,5 @@ colon) apply only when the paper is German.
    Not installed; installed is Liberation Serif (metrically identical, same line breaks, but a
    different font name in the PDF). Real TNR: `ttf-ms-fonts` (AUR) + LuaLaTeX/fontspec.
    pdfLaTeX Times (`texlive-fontsrecommended`) is only similar, not metric-identical.
-4. **Bibliography style.** `biblatex`/`biber` are not installed. Options: a custom `.bst`
-   for natbib, or a hand-written `thebibliography`. Decide when building the `.sty`.
-5. **First-page box.** Its exact position in the printed volume is set by the publisher;
+4. **First-page box.** Its exact position in the printed volume is set by the publisher;
    the ISBN/DOI are placeholders ("7xx-x", "537xxxxxx") filled in by the publisher.

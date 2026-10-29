@@ -1,0 +1,17 @@
+\section{Methods}
+\label{sec:methods}
+
+The paraphrases were generated from a seed prompt that used basic, simplified language. An LLM
+was given a separate prompt for each type of paraphrase which included instructions and examples
+from a corpus of paraphrases \citep{kovatchev2018}. 162~distinct paraphrases were generated from
+the seed prompt. Each paraphrase was reviewed by both an LLM judge and a human reviewer, and had
+to meet 8~constraints regarding intention to ensure alignment with the original request.
+
+A LangChain agentic workflow generated a workflow graph of geoprocesses with edges denoting data
+flow. Each paraphrase was used once, and the seed prompt was run 200~times for each variant as a
+control. The batch script was configured to switch the retrieval method between MCP and RAG with
+all other nodes of the agentic workflow remaining the same. The workflow graph outputs were
+grouped and manually evaluated on the basis of accomplishing the user intention, and the
+quantifiable output of the workflow was checked against a known correct solution. As some
+parameters were arbitrarily determined by the model, this validation step was solely meant to
+check that output was correct in a general sense.

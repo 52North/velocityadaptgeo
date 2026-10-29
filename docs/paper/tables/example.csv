@@ -1,3 +1,0 @@
-variant,precision,recall,f1
-baseline,0.71,0.64,0.67
-few-shot,0.78,0.73,0.75

@@ -1,0 +1,3 @@
+variant,lenient_seed,lenient_paraphrases,lenient_all,strict_seed,strict_paraphrases,strict_all,tokens_input,tokens_output
+MCP,95.0,95.7,95.3,93.5,90.7,92.3,191k,5.2k
+RAG,89.5,81.5,85.9,27.0,27.2,27.1,88k,6.3k

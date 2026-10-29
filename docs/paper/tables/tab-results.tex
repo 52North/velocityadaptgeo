@@ -1,0 +1,28 @@
+% Results table of the extended abstract; numbers in results.csv.
+% The original merged header cells ("Lenient accuracy" over three columns) are not allowed by
+% the guidelines, so every column carries its full name.
+\begin{table}[htbp]
+  \caption{Results of MCP and RAG trial runs}
+  \label{tab:results}
+  \tablefont
+  \begin{tabularx}{\textwidth}{|l|*{8}{>{\centering\arraybackslash}X|}}
+    \hline
+    \rowcolor{tablehead}
+    \textbf{Variant}
+      & \textbf{Lenient seed} & \textbf{Lenient para\-phrases} & \textbf{Lenient all}
+      & \textbf{Strict seed} & \textbf{Strict para\-phrases} & \textbf{Strict all}
+      & \textbf{Input tokens/ req} & \textbf{Output tokens/ req} \\
+    \hline
+    \csvreader[late after line=\\\hline]{tables/results.csv}{
+      variant=\variant,
+      lenient_seed=\lenientseed, lenient_paraphrases=\lenientparaphrases, lenient_all=\lenientall,
+      strict_seed=\strictseed, strict_paraphrases=\strictparaphrases, strict_all=\strictall,
+      tokens_input=\tokensinput, tokens_output=\tokensoutput
+    }{%
+      \variant
+      & \lenientseed\% & \lenientparaphrases\% & \lenientall\%
+      & \strictseed\% & \strictparaphrases\% & \strictall\%
+      & \tokensinput & \tokensoutput}
+  \end{tabularx}
+  \tabsource{\ownwork}
+\end{table}

@@ -5,7 +5,7 @@ LaTeX rebuild of the formatting template in `template/` (guidelines PDF + Word t
 ## Build
 
 ```sh
-make        # -> build/main.pdf (pdfLaTeX + BibTeX)
+make        # -> build/main.pdf, copied to main.pdf (pdfLaTeX + BibTeX)
 make clean
 ```
 
@@ -19,6 +19,7 @@ needed.
 | `main.tex`        | Document frame: title, order of chapters, bibliography        |
 | `paper-style.sty` | **All** formatting (fonts, margins, headings, captions, ...)  |
 | `references.bib`  | Bibliography (BibTeX)                                         |
+| `wichmann.bst`    | BibTeX style in the publisher's format (author-year, natbib)  |
 | `chapters/`       | Text only, one file per section                               |
 | `tables/`         | Data as `*.csv` plus one thin `tab-*.tex` wrapper per table   |
 | `figures/`        | Images, referenced without the folder prefix                  |

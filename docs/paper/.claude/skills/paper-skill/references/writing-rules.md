@@ -7,6 +7,7 @@ From `template/Hinweise_Tagungsband.pdf` (sections 1.1, 1.2, 2.1-2.12) and the e
 
 | Rule | LaTeX |
 |---|---|
+| Always real umlauts and ß: Gräler, Münster, Straße - never ae/oe/ue/ss transliterations (team convention, also in English text and in `.bib`) | type them directly (UTF-8 source) |
 | Typographic quotes; DE „…“, EN “…” | `\enquote{}` (`csquotes`) or `"`/`` ` `` babel shorthands; never straight `"` |
 | Dash: en dash with spaces – as a dash | ` -- `; hyphen `-` only inside words |
 | No manual hyphenation | never `\-` or `-` line breaks in chapters; fix bad breaks via `\hyphenation{}` in the `.sty` |
@@ -47,8 +48,8 @@ Author surnames only, author-year, **no comma between name and year**, page afte
 | Several with pages | (Name1 2020, 144; Name2 2020, 67; Name3 et al. 2020, 189) - separated by **semicolon** | write the parenthesis by hand with `\citealp[144]{a}; ...` |
 
 natbib setup that yields this: `\setcitestyle{authoryear,round,citesep={,},aysep={},notesep={, }}`,
-"&" instead of "and" comes from the `.bst`. Our abstract currently uses APA ("Vila et al., 2014")
-- convert every citation.
+"&" instead of "and" and "et al." from three authors on come from `docs/paper/wichmann.bst`.
+The Google Doc uses APA ("Vila et al., 2014") - every citation in LaTeX uses `\citep`/`\citet`.
 
 ## Bibliography (guidelines 2.11, sample "Literatur")
 
@@ -79,6 +80,21 @@ Details:
 - DOI: give as `https://doi.org/...` like a web source but without access date (the guidelines
   are silent on DOIs; keep it short and consistent).
 
+### Implementation: `wichmann.bst` + `references.bib`
+
+`docs/paper/wichmann.bst` produces exactly these patterns from BibTeX entries (`@article`,
+`@inproceedings`/`@incollection`, `@book`, `@misc`/`@online`). Conventions for `references.bib`:
+
+- First names as initials, as the bibliography shows them: `author = {Vila, M. and Martí, M. A.}`.
+- Names and titles in UTF-8 (`Martí`, `Gräler`). Exception: an initial that is itself a
+  non-ASCII letter must be TeX-escaped (`{\"O}.`), BibTeX's initials function cuts UTF-8 bytes.
+- Titles in double braces `{{...}}` so the original capitalisation survives.
+- Page ranges as `205--218`; the style prints them with a hyphen.
+- Place in `address`; if there is none, `publisher` is printed in its place.
+- DOI in `doi` (printed as `https://doi.org/...`); web sources in `url` + `urldate = {11.04.2006}`.
+- Language words come from macros in `paper-style.sty`: `\bibinname`, `\bibedsname`,
+  `\bibnodatename`.
+
 Our three references converted (EN paper):
 
 ```
@@ -94,7 +110,6 @@ Wahle, J. P., Ruas, T., Xu, Y. & Gipp, B. (2024): Paraphrase Types Elicit Prompt
   Computational Linguistics, 11004-11033. https://doi.org/10.18653/v1/2024.emnlp-main.617
 ```
 
-(Check the LREC place and the exact ETPC title before submission.)
 
 ## Figures and tables in the text
 

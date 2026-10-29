@@ -1,0 +1,12 @@
+\section{Findings}
+\label{sec:findings}
+
+Paraphrasing had a minor impact on the accuracy of workflow generation and affected both
+approaches to a similar degree. The MCP approach was consistently more accurate and reliable.
+Workflow graphs that produced acceptable results but not identical to the correct graph are
+labeled ``lenient'' in the results table (Table~\ref{tab:results}). MCP retrieval resulted in a
+significantly larger context and token usage compared to the shortlist of 5~tools from RAG.
+Quantitative analysis shows that all approved workflow graphs create acceptable results when run
+with real geoprocesses.
+
+\input{tables/tab-results}

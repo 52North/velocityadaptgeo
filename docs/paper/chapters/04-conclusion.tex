@@ -1,0 +1,12 @@
+\section{Conclusion}
+\label{sec:conclusion}
+
+The results show that MCP is a more accurate and reliable solution than RAG, but has the drawback
+of additional context usage as well as the potential for extra token usage if caching is not
+implemented. This advantage may decrease as more processes are added to the geoserver, as our
+example server provided only 25~processes. Paraphrasing did not have a large impact, proving that
+these systems can handle a variety of distinct inputs. However, so-called extreme paraphrases were
+not tested and all prompts were required to be grammatically correct. Additionally, the intended
+workflow had a well-defined correct output and a predictable set of steps to take. Future work
+could investigate both extreme paraphrases as well as geospatial analysis that has open-ended
+workflows and results.

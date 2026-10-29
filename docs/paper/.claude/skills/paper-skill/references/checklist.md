@@ -59,3 +59,5 @@ Run from `docs/paper/` after `make`. Report every failed point; do not tick what
       (`01_workflow.png`), rasters TIFF/PNG/JPEG, vectors PDF/EMF
 - [ ] Reprint permissions for external figures
 - [ ] Submission format confirmed with the publisher (see open risk 1 in `SKILL.md`)
+- [ ] If needed: `.docx` built from the template's styles and passed Word's accessibility
+      check (see "Word deliverable" in `SKILL.md`)
