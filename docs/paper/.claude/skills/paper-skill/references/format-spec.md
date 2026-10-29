@@ -114,7 +114,8 @@ column names (e.g. "Lenient seed", "Lenient paraphrases", ...) or two tables.
 | Even (left page) | page number | "3. Forum GEO.KI" (volume title, do not change) | `\fancyhead[LE]{\thepage}`, `\fancyhead[RE]{3. Forum GEO.KI}` |
 | Odd (right page) | "R. Flores & B. Gräler: <short title>" | page number | `\fancyhead[LO]{...}`, `\fancyhead[RO]{\thepage}` |
 
-- Size 9 pt, regular, no rule (`\headrulewidth=0pt`).
+- Size 9 pt, regular, with a 0.75 pt rule below the header text on every page, page 1
+  included (`pBdr bottom sz=6 space=1` in all three `header*.xml`).
 - Authors in the odd head: abbreviated first name + surname; two authors joined by "&";
   three or more: "R. Flores et al.". Long titles: sensible short form.
 - The publisher sets real page numbers; our numbering starting at 1 is fine.

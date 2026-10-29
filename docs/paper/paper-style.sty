@@ -1,92 +1,257 @@
 % All formatting of the paper lives here; main.tex and chapters/ hold content only.
-% Values below are placeholders until the formatting guidelines (template/) are transferred.
+% Every value comes from the publisher's sample text, see
+% .claude/skills/paper-skill/references/format-spec.md (Word style names in brackets).
+% Options: ngerman (German labels and hyphenation), default is English.
 \NeedsTeXFormat{LaTeX2e}
-\ProvidesPackage{paper-style}[2026/10/29 Paper formatting]
+\ProvidesPackage{paper-style}[2026/10/29 Wichmann Tagungsband (3. Forum GEO.KI)]
 
-% --- Language and fonts -------------------------------------------------------
-% TODO: language of the paper (english / ngerman) from the guidelines
-\RequirePackage[english]{babel}
-% TODO: font family and size from the template. Only Computer Modern is installed
-% right now. Times/Helvetica (mathptmx, helvet) need `pacman -S texlive-fontsrecommended`;
-% system fonts (Calibri -> Carlito, Arial, ...) need LuaLaTeX + fontspec, i.e.
-% `pacman -S texlive-luatex`, and LATEX = lualatex in the Makefile.
-% TODO: \RequirePackage[T1]{fontenc} once the font is set (needed for umlauts).
+\newif\ifpaper@german
+\DeclareOption{ngerman}{\paper@germantrue}
+\ProcessOptions\relax
 
-% --- Page layout ----------------------------------------------------------------
-% TODO: margins from the guidelines
-\RequirePackage[a4paper, top=2.5cm, bottom=2.5cm, left=2.5cm, right=2.5cm]{geometry}
+\RequirePackage{etoolbox}
 
-% --- Paragraphs and line spacing -----------------------------------------------
-% TODO: line spacing and spacing before/after paragraphs (Word "Abstand vor/nach")
-\RequirePackage{setspace}
-\setstretch{1.0}
+% --- Language and labels ------------------------------------------------------
+\ifpaper@german
+  \RequirePackage[ngerman]{babel}
+  \newcommand{\sourcename}{Quelle:}
+  \newcommand{\ownwork}{eigene Darstellung}
+  \newcommand{\bibinname}{In:}
+  \newcommand{\bibedsname}{(Hrsg.)}
+  \newcommand{\bibnodatename}{o.\,J.}
+\else
+  \RequirePackage[english]{babel}
+  \newcommand{\sourcename}{Source:}
+  \newcommand{\ownwork}{own illustration}
+  \newcommand{\bibinname}{In:}
+  \newcommand{\bibedsname}{(Eds.)}
+  \newcommand{\bibnodatename}{n.d.}
+\fi
+
+% --- Font: Times New Roman -------------------------------------------------------------
+% LuaLaTeX: set in wichmann.cls before article.cls loads (Times New Roman or Liberation Serif).
+% pdfLaTeX (fallback): Times only with texlive-fontsrecommended, else Computer Modern.
+\ifdefined\directlua\else
+  \IfFileExists{ptmr8t.tfm}
+    {\RequirePackage[T1]{fontenc}\RequirePackage{mathptmx}}
+    {\RequirePackage{fix-cm}%
+     \PackageWarningNoLine{paper-style}{Times is not available, falling back to
+      Computer Modern. Install texlive-luatex and build with LuaLaTeX}}
+\fi
+
+% --- Base size: 10 pt, Word single line spacing for Times (1.15) ---------------------
+\renewcommand{\normalsize}{%
+  \@setfontsize\normalsize{10}{11.5}%
+  \abovedisplayskip 6pt \belowdisplayskip 6pt
+  \abovedisplayshortskip 6pt \belowdisplayshortskip 6pt
+  \let\@listi\@listI}
+\renewcommand{\small}{\@setfontsize\small{9}{10.35}}
+\renewcommand{\footnotesize}{\@setfontsize\footnotesize{9}{10.35}}
+\normalsize
+% Word puts the first baseline at the font ascent (0.891 em for Times), not at \topskip
+\setlength{\topskip}{9.1pt}
+
+% --- Page: 17 x 24 cm, text block 13 cm --------------------------------------------
+% Header text starts 1.2 cm below the top edge, body text at 2.3 cm; no footer.
+\RequirePackage[paperwidth=17cm, paperheight=24cm,
+  top=2.3cm, bottom=2.2cm, left=2cm, right=2cm,
+  headheight=11.35pt, headsep=19.3pt, footskip=12pt]{geometry}
+
+% --- Paragraphs [Standard]: justified, 6 pt after, no indent, hyphenation on -------------
 \setlength{\parindent}{0pt}
 \setlength{\parskip}{6pt}
+\emergencystretch=1em
+\raggedbottom
 
-% --- Headings -------------------------------------------------------------------
-% TODO: heading sizes, numbering style and spacing from the template
-\RequirePackage{titlesec}
-\titleformat{\section}{\normalfont\large\bfseries}{\thesection}{1em}{}
-\titleformat{\subsection}{\normalfont\normalsize\bfseries}{\thesubsection}{1em}{}
-\titlespacing*{\section}{0pt}{12pt}{6pt}
-\titlespacing*{\subsection}{0pt}{12pt}{6pt}
-
-% --- Header and footer ----------------------------------------------------------
-% TODO: header/footer content from the template
+% --- Running heads [Kopfzeile], 9 pt, rule below -------------------------------------------------
 \RequirePackage{fancyhdr}
+\newcommand{\volumetitle}{3. Forum GEO.KI}
+\newcommand{\paper@runningauthors}{}
+\newcommand{\paper@runningtitle}{}
+\newcommand{\runningauthors}[1]{\renewcommand{\paper@runningauthors}{#1}}
+\newcommand{\runningtitle}[1]{\renewcommand{\paper@runningtitle}{#1}}
+\newcommand{\paper@headfont}{\fontsize{9}{10.35}\selectfont}
 \pagestyle{fancy}
 \fancyhf{}
-\fancyfoot[C]{\thepage}
-\renewcommand{\headrulewidth}{0pt}
+\fancyhead[LE]{\paper@headfont\thepage}
+\fancyhead[RE]{\paper@headfont\volumetitle}
+\fancyhead[LO]{\paper@headfont\paper@runningauthors: \paper@runningtitle}
+\fancyhead[RO]{\paper@headfont\thepage}
+% Every header (also on page 1) has a 0.75 pt rule 1 pt below the text
+\renewcommand{\headrulewidth}{0.75pt}
+\renewcommand{\headrule}{\vskip-\dimexpr\headrulewidth-0.5pt\relax
+  \hrule\@height\headrulewidth\@width\headwidth}
+\fancypagestyle{firstpage}{%
+  \fancyhf{}%
+  \fancyhead[R]{\paper@headfont\thepage}}
 
-% --- Captions, tables, figures --------------------------------------------------
-% TODO: caption font, label style ("Table 1:" vs. "Tab. 1.") and position
-\RequirePackage[font=small, labelfont=bf]{caption}
-\captionsetup[table]{position=top}
-\RequirePackage{csvsimple}
-\RequirePackage{graphicx}
-\graphicspath{{figures/}}
+% --- Footnotes [Fußnotentext]: 9 pt, mark + tab at 0.35 cm -------------------------------
+\renewcommand{\@makefntext}[1]{%
+  \parindent\z@\parskip\z@
+  \hangindent0.35cm\hangafter\@ne
+  \noindent\makebox[0.35cm][l]{\@makefnmark}#1}
 
-% Tables: full grid 0.5 pt, 0.1 cm cell padding, 9 pt, shaded bold header row
-% (references/format-spec.md, "Tables")
-\RequirePackage[table]{xcolor}
-\RequirePackage{tabularx}
-\setlength{\arrayrulewidth}{0.5pt}
-\setlength{\tabcolsep}{0.1cm}
-\definecolor{tablehead}{HTML}{DDDDDD}
-\newcommand{\tablefont}{\fontsize{9}{10.35}\selectfont}
+% --- Publisher box at the bottom of page 1 ----------------------------------------------
+% 8 pt, rule above, full text width; ISBN/DOI are filled in by the publisher.
+\newcommand{\publisherbox}{%
+  Klingner, S., Wagenseil, H., Merita, P., Pauly, P. \& Schymik, C. (Hrsg.) (2027):
+  3. Forum GEO.KI. Modelle, Methoden, Mehrwert -- KI-gestützte Geodatenanalyse von der
+  Infrastruktur bis zur Anwendung. \textcopyright{} Wichmann Verlag, VDE VERLAG GMBH
+  \textperiodcentered{} Berlin \textperiodcentered{} Offenbach.
+  ISBN 978-3-87907-7xx-x, doi:10.14627/537xxxxxx.}
+% Placed absolutely on the bottom edge of the text block; page 1 is shortened by its height
+% (+ 12 pt gap) so the body text never runs into it.
+\newsavebox{\paper@pubbox}
+\newcommand{\paper@placepublisherbox}{%
+  \sbox{\paper@pubbox}{\parbox[b]{\textwidth}{%
+    \fontsize{8}{9.2}\selectfont\parskip\z@
+    \rule{\textwidth}{0.5pt}\par\vspace{2pt}\publisherbox}}%
+  \enlargethispage{-\dimexpr\ht\paper@pubbox+\dp\paper@pubbox+12pt\relax}%
+  \AddToHookNext{shipout/foreground}{%
+    \setlength{\unitlength}{1pt}%
+    \put(\strip@pt\dimexpr 2cm\relax,
+         -\strip@pt\dimexpr\paperheight-2.2cm\relax){\usebox{\paper@pubbox}}}}
 
-% Source line below tables and figures: "Source:" + tab at 1 cm, 6 pt before
-% TODO: German labels (Quelle / eigene Darstellung) via babel captionsngerman
-\newcommand{\sourcename}{Source:}
-\newcommand{\ownwork}{own illustration}
+% --- Title block [Beitragstitel, Autorenname, Autorenadresse_1/_2] --------------------------
+% \author{Randy Flores\textsuperscript{1,2} and ...}, one \address{...} per address line.
+\newcommand{\paper@addresses}{}
+\newcommand{\address}[1]{%
+  \ifdefempty{\paper@addresses}
+    {\gappto{\paper@addresses}{#1}}
+    {\gappto{\paper@addresses}{\par#1}}}
+\renewcommand{\maketitle}{%
+  \thispagestyle{firstpage}%
+  \paper@placepublisherbox
+  \begingroup
+    \raggedright\parskip\z@
+    {\fontsize{16}{18.4}\selectfont\bfseries\rule{0pt}{15pt}\@title\par}%
+    \vspace{13.4pt}% 12 pt in Word; TeX's baselineskip logic loses 1.4 pt here
+    {\normalsize\@author\par}%
+    \vspace{4pt}%
+    {\fontsize{9}{10.35}\selectfont\paper@addresses\par}%
+    \vspace{15pt}%
+  \endgroup}
+
+% --- Headings [Überschrift 1-3], number + tab at 0.9 cm -------------------------------------
+\RequirePackage{titlesec}
+\setcounter{secnumdepth}{3}
+\titleformat{\section}[hang]
+  {\fontsize{13}{14.95}\selectfont\bfseries\raggedright}
+  {\makebox[0.9cm][l]{\thesection}}{0pt}{}
+\titleformat{\subsection}[hang]
+  {\fontsize{11}{12.65}\selectfont\bfseries\raggedright}
+  {\makebox[0.9cm][l]{\thesubsection}}{0pt}{}
+\titleformat{\subsubsection}[hang]
+  {\normalsize\bfseries}
+  {\makebox[0.9cm][l]{\thesubsubsection}}{0pt}{}
+% Word: gap = after(previous, 6 pt) + before(heading), and after(heading) + 0 to the text.
+% LaTeX adds \parskip (6 pt) on both sides, so: before = Word before, after = Word after - 6 pt.
+% Ü1 18/12 pt, Ü2 6/6 pt, Ü3 6/6 pt.
+\titlespacing*{\section}{0pt}{18pt}{6pt}
+\titlespacing*{\subsection}{0pt}{6pt}{0pt}
+\titlespacing*{\subsubsection}{0pt}{6pt}{0pt}
+% Two headings in a row: the second one gets 0 pt before (guidelines 2.4). \if@nobreak is
+% true right after a heading; the correction was measured against the sample.
+\pretocmd{\subsection}{\if@nobreak\vspace{-1.2pt}\fi}{}{}
+\pretocmd{\subsubsection}{\if@nobreak\vspace{-1.2pt}\fi}{}{}
+
+% Abstract [ÜSZusammenfassung]: like Überschrift 1, unnumbered, 15 pt before, 10 pt after
+\renewenvironment{abstract}
+  {\vspace{8.3pt}{\fontsize{13}{14.95}\selectfont\bfseries\abstractname\par}\vspace{4.8pt}}
+  {\par}
+
+% --- Captions [Tabellen-/Abbildungsüberschrift]: above, bold label + tab ---------------------
+% Table: tab at 1.7 cm, figure: tab at 2.3 cm, hanging indent to the tab.
+\RequirePackage{caption}
+% \strut: fixed line height, independent of the letters in the caption
+\DeclareCaptionLabelFormat{paper@tabbox}{\strut\makebox[1.7cm][l]{#1~#2:}}
+\DeclareCaptionLabelFormat{paper@figbox}{\strut\makebox[2.3cm][l]{#1~#2:}}
+\captionsetup{font=normalsize, labelfont=bf, labelsep=none, format=hang,
+  justification=justified, singlelinecheck=false, position=top, skip=6pt}
+\captionsetup[table]{labelformat=paper@tabbox}
+\captionsetup[figure]{labelformat=paper@figbox, skip=5pt}% 6 pt in Word, measured
+% Space around floats: Word puts 6 pt (previous paragraph) + 12 pt (caption "before") above
+% and 18 pt (source "after") below. Measured against the sample, \intextsep = 19.8 pt gives
+% both within 0.4 pt (LaTeX adds the interline glue of the neighbouring lines on top).
+\setlength{\intextsep}{19.8pt}
+\setlength{\textfloatsep}{19.8pt}
+\setlength{\floatsep}{19.8pt}
+
+% --- Source line [Tabellen-/Abbildungsquelle]: "Source:" + tab at 1 cm, 6 pt before --------
 % Like a Word tab: a label wider than the 1 cm stop ("Source:") is followed by a space.
 \newsavebox{\sourcelabelbox}
-\newcommand{\tabsource}[1]{%
-  \par\vspace{6pt}\normalsize\noindent
+% Source line directly followed by a heading: Word sets its "after" to 6 pt instead of 18 pt
+% (guidelines 2.5.1). The flag is cleared by the next paragraph; a heading that follows
+% directly removes the difference (value measured against Word's spacing).
+\newif\ifpaper@aftersource
+\newlength{\paper@belowsource}
+\setlength{\paper@belowsource}{-2.9pt}
+\AddToHook{para/end}{\global\paper@aftersourcefalse}
+\newcommand{\paper@aftersourcefix}{%
+  \ifpaper@aftersource\vspace{-12.8pt}\nobreak\global\paper@aftersourcefalse\fi}
+\pretocmd{\section}{\paper@aftersourcefix}{}{}
+\pretocmd{\subsection}{\paper@aftersourcefix}{}{}
+\pretocmd{\subsubsection}{\paper@aftersourcefix}{}{}
+% #1: space above. Word has 6 pt "before"; measured against the sample, LaTeX needs 6.8 pt
+% after a table (rule and strut depth) and 4 pt after a graphic (its line has no depth).
+\newcommand{\paper@source}[2]{%
+  \par\vspace{#1}\normalsize\noindent% floats have \parskip=0
   \sbox{\sourcelabelbox}{\sourcename\ }%
+  \hangindent\ifdim\wd\sourcelabelbox<1cm 1cm\else\wd\sourcelabelbox\fi
+  \hangafter\@ne
   \ifdim\wd\sourcelabelbox<1cm
     \makebox[1cm][l]{\sourcename}%
   \else
     \usebox{\sourcelabelbox}%
   \fi
-  #1\par}
-\let\figsource\tabsource
+  #2\vrule\@width\z@\@height\z@\@depth0.3\baselineskip\par% same depth with or without descenders
+  \vspace{\paper@belowsource}% measured against the sample
+  \global\paper@aftersourcetrue}
+\newcommand{\tabsource}[1]{\paper@source{6.8pt}{#1}}
+\newcommand{\figsource}[1]{\paper@source{4pt}{#1}}
 
-% --- Citations ------------------------------------------------------------------
-% Author-year without comma: "(Vila et al. 2014)" (references/writing-rules.md, "Citations")
-% Entry layout comes from wichmann.bst; hanging 0.5 cm, 3 pt between entries
+% --- Figures [Grafik]: left-aligned ------------------------------------------------------
+\RequirePackage{graphicx}
+\graphicspath{{figures/}}
+
+% --- Tables: full grid 0.5 pt, 13 cm, 9 pt, shaded bold header ----------------------------
+% Cell padding 0.1 cm; data cells 1 pt before/after, header cells 3 pt before/after.
+\RequirePackage[table]{xcolor}
+\RequirePackage{array}
+\RequirePackage{tabularx}
+\RequirePackage{csvsimple}
+\setlength{\arrayrulewidth}{0.5pt}
+\setlength{\tabcolsep}{0.1cm}
+\definecolor{tablehead}{HTML}{DDDDDD}
+\newcommand{\tablefont}{\fontsize{9}{10.35}\selectfont}
+% (hooked to tabularx: floats reset the font to \normalsize when they open)
+\AtBeginEnvironment{tabularx}{\tablefont\renewcommand{\arraystretch}{1.19}}
+% Header cell: \headcell{Text} - bold, extra 2 pt above and below the data-cell strut
+\newcommand{\headcell}[1]{\rule{0pt}{10.6pt}\textbf{#1}\rule[-5.7pt]{0pt}{5.7pt}}
+
+% --- Lists [Aufzählungen]: bullet, hanging 0.63 cm, 3 pt before, 0 inside, 6 pt after -----
+\RequirePackage{enumitem}
+\setlist{leftmargin=0.63cm, labelindent=0pt, labelsep=*, itemsep=0pt, parsep=0pt,
+  topsep=-3pt, partopsep=0pt, after=\vspace{3pt}}
+\setlist[itemize]{label=\textbullet}
+\setlist[enumerate]{label=\arabic*.}
+
+% --- Formulas: indent 1 cm, number (n) at the right margin ---------------------------------
+\RequirePackage[fleqn]{amsmath}
+\setlength{\mathindent}{1cm}
+
+% --- Citations and bibliography [Literaturliste] ---------------------------------------
+% Author-year without comma: "(Vila et al. 2014)"; entry layout from wichmann.bst;
+% hanging 0.5 cm, 3 pt between entries.
 \RequirePackage{natbib}
 \setcitestyle{authoryear,round,citesep={,},aysep={},notesep={, }}
 \bibliographystyle{wichmann}
 \setlength{\bibhang}{0.5cm}
 \setlength{\bibsep}{3pt}
-% TODO: German words (In: / (Hrsg.) / o. J.) via babel captionsngerman
-\newcommand{\bibinname}{In:}
-\newcommand{\bibedsname}{(Eds.)}
-\newcommand{\bibnodatename}{n.d.}
 
-% --- Links (load last) ------------------------------------------------------------
+% --- Links: live but not coloured (load last) ---------------------------------------------
 \RequirePackage[hidelinks]{hyperref}
+\RequirePackage{url}
+\urlstyle{same}% URLs in the body font, as in the sample
 
 \endinput

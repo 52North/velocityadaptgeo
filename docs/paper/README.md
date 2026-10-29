@@ -5,11 +5,12 @@ LaTeX rebuild of the formatting template in `template/` (guidelines PDF + Word t
 ## Build
 
 ```sh
-make        # -> build/main.pdf, copied to main.pdf (pdfLaTeX + BibTeX)
+make        # -> build/main.pdf, copied to main.pdf (LuaLaTeX + BibTeX)
 make clean
 ```
 
-Requires `pdflatex` and `bibtex` (TeX Live). `latexmk`, `biber` and `biblatex` are not
+Requires `lualatex` (`texlive-luatex`) and `bibtex`; `pdflatex` works as a fallback without
+the right font. `latexmk`, `biber` and `biblatex` are not
 needed.
 
 ## Layout
@@ -17,6 +18,7 @@ needed.
 | Path              | Content                                                       |
 |-------------------|---------------------------------------------------------------|
 | `main.tex`        | Document frame: title, order of chapters, bibliography        |
+| `wichmann.cls`    | Document class: font (Times New Roman / Liberation Serif), loads the style |
 | `paper-style.sty` | **All** formatting (fonts, margins, headings, captions, ...)  |
 | `references.bib`  | Bibliography (BibTeX)                                         |
 | `wichmann.bst`    | BibTeX style in the publisher's format (author-year, natbib)  |

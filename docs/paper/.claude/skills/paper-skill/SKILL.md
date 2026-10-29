@@ -37,6 +37,27 @@ the user to copy them in):
 5. Run `references/checklist.md`.
 6. Show the diff and wait for approval before committing (English commit messages).
 
+## Commands provided by `paper-style.sty`
+
+| Command | Use |
+|---|---|
+| `\documentclass[ngerman]{wichmann}` | German labels/hyphenation; default English. `wichmann.cls` sets the font and loads `paper-style.sty` |
+| `\author{A\textsuperscript{1,2} and B\textsuperscript{1}}` | author line |
+| `\address{\textsuperscript{1}Institute, City · e-mail}` | one call per address line |
+| `\runningauthors{R. Flores \& B. Gräler}`, `\runningtitle{Short title}` | odd running head |
+| `\headcell{Text}` | bold table header cell with the 3 pt padding |
+| `\tabsource{\ownwork}`, `\figsource{...}` | source line below a table / figure |
+| `\begin{abstract}` | "Abstract"/"Zusammenfassung" block (`ÜSZusammenfassung`) |
+
+The publisher box on page 1, the header rules, captions, lists, footnotes and the
+bibliography layout are automatic.
+
+Spacing was verified against the LibreOffice render of the sample with
+`pdftotext -bbox` (body pitch 11.5 pt, paragraph 17.5 pt, table row 12.8 pt, cell line 10.3 pt,
+caption to table 20 pt; deviations mostly ≤ 1 pt, up to 2 pt below floats). Good enough - the
+templates are first guidance; final verification is the Word check at the end. Do not chase
+single points.
+
 ## Rules at a glance
 
 - Page 17 × 24 cm, text block 13 cm wide; Times New Roman 10 pt, justified, hyphenation on.
@@ -87,8 +108,10 @@ Word-based accessibility workflow can be served:
    gerold.olbrich@vde-verlag.de, +49 69 840006-1621. Fallback: the Word deliverable below.
 2. **Accessible PDF.** The volume is produced as an accessible PDF (tags, alt text, heading
    structure). In LaTeX this realistically needs LuaLaTeX with `\DocumentMetadata{tagging=on}`.
-   Only pdfLaTeX is usable right now; LuaLaTeX needs `sudo pacman -S texlive-luatex`.
-3. **Font.** Only fonts that ship with MS Word/Windows are allowed -> Times New Roman.
+   LuaLaTeX is installed; tagging is not switched on yet.
+3. **Font.** Build needs `texlive-luatex` and `texlive-langgerman` (both installed); the Makefile
+   picks LuaLaTeX automatically, pdfLaTeX is only a fallback with Computer Modern.
+   Only fonts that ship with MS Word/Windows are allowed -> Times New Roman.
    Not installed; installed is Liberation Serif (metrically identical, same line breaks, but a
    different font name in the PDF). Real TNR: `ttf-ms-fonts` (AUR) + LuaLaTeX/fontspec.
    pdfLaTeX Times (`texlive-fontsrecommended`) is only similar, not metric-identical.

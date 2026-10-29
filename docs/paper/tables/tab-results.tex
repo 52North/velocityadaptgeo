@@ -4,14 +4,13 @@
 \begin{table}[htbp]
   \caption{Results of MCP and RAG trial runs}
   \label{tab:results}
-  \tablefont
   \begin{tabularx}{\textwidth}{|l|*{8}{>{\centering\arraybackslash}X|}}
     \hline
     \rowcolor{tablehead}
-    \textbf{Variant}
-      & \textbf{Lenient seed} & \textbf{Lenient para\-phrases} & \textbf{Lenient all}
-      & \textbf{Strict seed} & \textbf{Strict para\-phrases} & \textbf{Strict all}
-      & \textbf{Input tokens/ req} & \textbf{Output tokens/ req} \\
+    \headcell{Variant}
+      & \headcell{Lenient seed} & \headcell{Lenient para\-phrases} & \headcell{Lenient all}
+      & \headcell{Strict seed} & \headcell{Strict para\-phrases} & \headcell{Strict all}
+      & \headcell{Input tokens/ req} & \headcell{Output tokens/ req} \\
     \hline
     \csvreader[late after line=\\\hline]{tables/results.csv}{
       variant=\variant,
