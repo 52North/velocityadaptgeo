@@ -21,7 +21,7 @@ Run from `docs/paper/` after `make`. Report every failed point; do not tick what
 - [ ] Headings 13/11/10 pt bold, number + 0.9 cm tab, no level skipped; two headings in a row:
       no space before the second
 - [ ] First page: only the page number at the top right
-- [ ] Even pages: page number left, "3. Forum GEO.KI" right; odd pages:
+- [ ] Even pages: page number left, "3. Forum GEO.KI" (8 pt) right; odd pages:
       "R. Flores & B. Gräler: <short title>" left, page number right; 9 pt
 - [ ] Captions above, "**Abbildung/Tabelle n:**" bold + tab, text regular; source line below
 - [ ] Tables: 13 cm, full ½ pt grid, 9 pt, bold shaded header, no merged cells, no empty

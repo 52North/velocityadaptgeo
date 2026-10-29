@@ -13,8 +13,8 @@ From `template/Hinweise_Tagungsband.pdf` (sections 1.1, 1.2, 2.1-2.12) and the e
 | No manual hyphenation | never `\-` or `-` line breaks in chapters; fix bad breaks via `\hyphenation{}` in the `.sty` |
 | Number + unit never split (3 %, 4 m, 50 kg) | non-breaking space `3~\%`, `4~m`; or thin `3\,\%` (pick one, be consistent) |
 | Abbreviations with space: z. B., d. h., i. Allg. (**DE**); e.g., i.e. (EN) | `z.\,B.`, `d.\,h.`, `i.\,Allg.` |
-| Thousands separator: DE `1.000`, EN `1,000` | write it out; no `siunitx` (not installed) |
-| Percent values keep a (non-breaking) space in DE: `95,3~\%`; EN usual: `95.3\%` | choose per language, consistent |
+| Numbers with more than three digits grouped with a point: `1.000` (guidelines 1.1; our text has none so far) | write it out; no `siunitx` (not installed) |
+| Percent like any unit: non-breaking space, `95.3~\%` (guidelines 1.1: „3 %“) | `~\%` |
 | Only fonts/special characters that ship with MS Word/Windows | Times New Roman + its glyphs; no exotic symbols |
 | New German spelling (**DE**) | - |
 | Gender-fair language with colon: Autor:innen, Expert:innen; or neutral forms (das Team, die Studierenden) (**DE**) | write `Autor:innen` directly |
@@ -98,8 +98,8 @@ Details:
 Our three references converted (EN paper):
 
 ```
-Kovatchev, V., Martí, M. A. & Salamó, M. (2018): ETPC – A Paraphrase Identification Corpus
-  Annotated with Extended Paraphrase Typology and Negation. In: Proceedings of the Eleventh
+Kovatchev, V., Martí, M. A. & Salamó, M. (2018): ETPC – a paraphrase identification corpus
+  annotated with extended paraphrase typology and negation. In: Proceedings of the Eleventh
   International Conference on Language Resources and Evaluation (LREC 2018). Miyazaki.
 Vila, M., Martí, M. A. & Rodríguez, H. (2014): Is This a Paraphrase? What Kind? Paraphrase
   Boundaries and Typology. In: Open Journal of Modern Linguistics, 4 (1), 205-218.

@@ -74,8 +74,9 @@
 \pagestyle{fancy}
 \fancyhf{}
 \fancyhead[LE]{\paper@headfont\thepage}
-\fancyhead[RE]{\paper@headfont\volumetitle}
-\fancyhead[LO]{\paper@headfont\paper@runningauthors: \paper@runningtitle}
+\fancyhead[RE]{\fontsize{8}{9.2}\selectfont\volumetitle}% 8 pt in the sample (header1.xml)
+\fancyhead[LO]{\paper@headfont\paper@runningauthors
+  \ifdefempty{\paper@runningtitle}{}{: \paper@runningtitle}}
 \fancyhead[RO]{\paper@headfont\thepage}
 % Every header (also on page 1) has a 0.75 pt rule 1 pt below the text
 \renewcommand{\headrulewidth}{0.75pt}
@@ -231,5 +232,8 @@
 \RequirePackage[hidelinks]{hyperref}
 \RequirePackage{url}
 \urlstyle{same}% URLs in the body font, as in the sample
+% No line break between "https:" and "//": ":" is a relation in math mode, so make it "open"
+\renewcommand{\UrlBigBreaks}{}
+\renewcommand{\UrlNoBreaks}{\do\(\do\[\do\{\do\<\do\:}
 
 \endinput

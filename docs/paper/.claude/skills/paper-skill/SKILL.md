@@ -16,6 +16,14 @@ the user to copy them in):
   every measurement in `references/format-spec.md` was read from its `word/styles.xml`
 - `docs/paper/template/MCP vs RAG Comparison - Extended Abstract.{md,docx}` - our content
 
+## Principle
+
+Apply every rule of the template to our text, including the additions the rules require:
+table/figure mentioned in the text, a source line under every table/figure, the place in each
+bibliography entry, both running heads (short title on odd pages, the given volume title
+"3. Forum GEO.KI" on even pages). Change our wording only where a rule demands it. Never copy
+the sample's own content (its text, its citation box, its author data).
+
 ## References - read before acting
 
 | File | Read when |

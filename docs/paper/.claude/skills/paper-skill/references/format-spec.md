@@ -111,10 +111,10 @@ column names (e.g. "Lenient seed", "Lenient paraphrases", ...) or two tables.
 | Page | Left | Right | LaTeX |
 |---|---|---|---|
 | First page | - | page number | `\thispagestyle{firstpage}` |
-| Even (left page) | page number | "3. Forum GEO.KI" (volume title from the sample - confirm for our conference) | `\fancyhead[LE]{\thepage}`, `\fancyhead[RE]{3. Forum GEO.KI}` |
+| Even (left page) | page number | "3. Forum GEO.KI" in **8 pt** (volume title, given by the template; guidelines 2.8: "hier müssen keine Änderungen erfolgen") | `\fancyhead[LE]{\thepage}`, `\fancyhead[RE]{3. Forum GEO.KI}` |
 | Odd (right page) | "R. Flores & B. Gräler: <short title>" | page number | `\fancyhead[LO]{...}`, `\fancyhead[RO]{\thepage}` |
 
-- Size 9 pt, regular, with a 0.75 pt rule below the header text on every page, page 1
+- Size 9 pt (even-page volume title 8 pt), regular, with a 0.75 pt rule below the header text on every page, page 1
   included (`pBdr bottom sz=6 space=1` in all three `header*.xml`).
 - Authors in the odd head: abbreviated first name + surname; two authors joined by "&";
   three or more: "R. Flores et al.". Long titles: sensible short form.
