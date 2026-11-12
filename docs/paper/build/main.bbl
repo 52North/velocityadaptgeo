@@ -1,0 +1,23 @@
+\begin{thebibliography}{3}
+
+\bibitem[{Kovatchev et~al.(2018)}]{kovatchev2018}
+Kovatchev, V., Martí, M.~A. \& Salamó, M. (2018): {ETPC -- a paraphrase
+  identification corpus annotated with extended paraphrase typology and
+  negation}. \bibinname{} Proceedings of the Eleventh International Conference
+  on Language Resources and Evaluation (LREC 2018). Miyazaki.
+
+\bibitem[{Vila et~al.(2014)}]{vila2014}
+Vila, M., Martí, M.~A. \& Rodríguez, H. (2014): {Is This a Paraphrase? What
+  Kind? Paraphrase Boundaries and Typology}. \bibinname{} Open Journal of
+  Modern Linguistics, 4 (1), 205-218.
+  \url{https://doi.org/10.4236/ojml.2014.41016}
+
+\bibitem[{Wahle et~al.(2024)}]{wahle2024}
+Wahle, J.~P., Ruas, T., Xu, Y. \& Gipp, B. (2024): {Paraphrase Types Elicit
+  Prompt Engineering Capabilities}. \bibinname{} Al-Onaizan, Y., Bansal, M. \&
+  Chen, Y.-N. \bibedsname: Proceedings of the 2024 Conference on Empirical
+  Methods in Natural Language Processing. Association for Computational
+  Linguistics, 11004-11033.
+  \url{https://doi.org/10.18653/v1/2024.emnlp-main.617}
+
+\end{thebibliography}

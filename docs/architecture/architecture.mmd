@@ -1,0 +1,55 @@
+---
+config:
+  layout: elk
+  elk:
+    nodePlacementStrategy: LINEAR_SEGMENTS
+---
+flowchart TB
+    subgraph frontend["Web frontend"]
+        ui["Chat · workflow graph editor · map"]
+    end
+
+    subgraph backend["Backend (FastAPI)"]
+        subgraph agent["LangGraph agent: builds the workflow graph"]
+            manager["manager<br/>LLM plans the next step"]
+            retriever["retriever<br/>fetches candidate processes"]
+            autobuild["auto_build<br/>LLM picks one candidate<br/>and adds it to the graph"]
+            others["builder · validator · responder<br/>edit and check the graph, answer the user"]
+
+            manager -- search --> retriever
+            retriever -- candidates --> autobuild
+            autobuild -- next step --> manager
+            manager <--> others
+        end
+        llm["LLM (Claude via Anthropic API)"]
+        runner["Execution runner<br/>runs the finished workflow graph"]
+    end
+
+    subgraph retrieval["Tool retrieval: one of two options"]
+        rag["RAG<br/>top 5 processes"]
+        mcp["MCP<br/>all N process tools"]
+    end
+
+    subgraph ogc["OGC API - Processes servers"]
+        servers["local pygeoapi · demo.pygeoapi.io · maps.ecere.com"]
+    end
+
+    ui -- "chat" --> manager
+    ui -- "execute" --> runner
+
+    manager -.-> llm
+    autobuild -.-> llm
+
+    retriever <-- "either: query" --> rag
+    retriever <-- "or: tools/list" --> mcp
+
+    rag -. "crawled from" .-> servers
+    mcp -. "crawled from" .-> servers
+    runner -- "executes processes" --> servers
+
+    classDef rag fill:#e3f2fd,stroke:#1565c0,color:#0d2b4e
+    classDef mcp fill:#fff3e0,stroke:#e65100,color:#4e2500
+    classDef llm fill:#e8f5e9,stroke:#2e7d32,color:#12350f
+    class rag rag
+    class mcp mcp
+    class llm,manager,autobuild llm

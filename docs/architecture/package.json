@@ -1,0 +1,10 @@
+{
+  "name": "architecture-diagrams",
+  "private": true,
+  "scripts": {
+    "build": "for f in *.mmd; do mmdc -i \"$f\" -o \"out/${f%.mmd}.svg\" -b transparent || exit 1; done"
+  },
+  "devDependencies": {
+    "@mermaid-js/mermaid-cli": "^11.4.0"
+  }
+}

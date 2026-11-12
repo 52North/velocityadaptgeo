@@ -1,0 +1,54 @@
+flowchart TB
+    manager["manager<br/>step: search '&lt;instruction&gt;'"]
+
+    subgraph rag["Option A: RAG"]
+        embed["Embed the instruction<br/>Ollama nomic-embed-text"]
+        cosine[("Cosine search<br/>pgvector catalog")]
+        top5["Top 5 processes<br/>title · description<br/>inputs/outputs schema"]
+        embed --> cosine --> top5
+
+        subgraph ragctx["Context window of the LLM call"]
+            direction TB
+            ragInstr["Instructions"]
+            ragGraph["Current workflow graph"]
+            ragTools["Tool definitions<br/>5 processes"]
+            ragInstr ~~~ ragGraph ~~~ ragTools
+        end
+        top5 --> ragctx
+    end
+
+    subgraph mcp["Option B: MCP"]
+        list["tools/list on the MCP server<br/>the instruction is not used"]
+        all["All N process tools<br/>name · description<br/>input schema"]
+        list --> all
+
+        subgraph mcpctx["Context window of the LLM call"]
+            direction TB
+            mcpInstr["Instructions"]
+            mcpGraph["Current workflow graph"]
+            mcpTools["Tool definitions<br/>all N processes<br/><br/>no ranking, no filtering<br/><br/>grows with every process<br/>on every server"]
+            mcpInstr ~~~ mcpGraph ~~~ mcpTools
+        end
+        all --> mcpctx
+    end
+
+    manager --> embed
+    manager --> list
+
+    ragOut["LLM picks one process<br/>≈ 88k input tokens per request"]
+    mcpOut["LLM picks one process<br/>≈ 191k input tokens per request"]
+    ragctx --> ragOut
+    mcpctx --> mcpOut
+
+    back["back to manager<br/>every further search fills<br/>the context window again"]
+    ragOut --> back
+    mcpOut --> back
+
+    classDef rag fill:#e3f2fd,stroke:#1565c0,color:#0d2b4e
+    classDef mcp fill:#fff3e0,stroke:#e65100,color:#4e2500
+    classDef tools fill:#ffcdd2,stroke:#b71c1c,color:#4e0000,font-weight:bold
+    classDef llm fill:#e8f5e9,stroke:#2e7d32,color:#12350f
+    class embed,cosine,top5 rag
+    class list,all mcp
+    class ragTools,mcpTools tools
+    class ragOut,mcpOut llm
