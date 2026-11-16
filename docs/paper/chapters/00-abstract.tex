@@ -1,0 +1,16 @@
+\begin{abstract}
+Agentic workflows allow complex tasks to be carried from a natural language prompt. This has
+broad applicability to allow non-expert users to perform difficult work. To facilitate the
+agents' ability to do things beyond text output, tools need to be provided in the form of an
+API. We examine two ways to expose this interface: A model context protocol (MCP) server which
+shows all available processes along with metadata, and a vector database populated with the
+available processes and accessed using retrieval augmented generation (RAG). These two
+approaches are compared within an agentic system to create a workflow for a sample geospatial
+analysis task, and the input prompt is paraphrased in various ways to improve the robustness of
+the trial. Paraphrases are systematically created using an LLM-generated and human-reviewed
+strategy. The resulting workflows are evaluated manually and processed with the actual tools to
+ensure correctness. Our findings indicate that MCP provides higher accuracy and greater
+reliability when compared to RAG. Additionally, paraphrasing did not cause a substantial
+difference in performance, showing that the agentic system can effectively process a range of
+distinct inputs.
+\end{abstract}

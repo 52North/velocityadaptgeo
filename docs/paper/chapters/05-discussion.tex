@@ -1,0 +1,57 @@
+\section{Discussion}
+\label{sec:discussion}
+
+The results show that MCP is a more accurate and reliable solution than RAG, but has the drawback
+of additional context usage as well as the potential for extra token usage if caching is not
+implemented. This advantage may decrease as more processes are added to the geoserver, as our
+example server provided only 25~processes. Paraphrasing did not have a large impact, proving that
+these systems can handle a variety of distinct inputs. However, so-called extreme paraphrases
+were not tested and all prompts were required to be grammatically correct. Additionally, the
+intended workflow had a well-defined correct output and a predictable set of steps to take.
+Future work could investigate both extreme paraphrases as well as geospatial analysis that has
+open-ended workflows and results.
+
+For this workflow, MCP outperformed RAG assisted tool retrieval by a noticeable margin,
+especially when considering the strict workflow criteria. These results persisted across seed
+prompt and paraphrased prompt trials. In addition, MCP did not show any drastic differences
+between strict and lenient grading, in comparison to RAG which struggled.
+
+On the other hand, the MCP tool list added a significant amount of tokens to the context of any
+LLM call. This may be avoided by using token caching with providers that implement this feature.
+Then, each repeated token input would be significantly cheaper from an economic point of view.
+However, this does not avoid the drawbacks of a larger context usage in general. This includes
+degraded performance due to superfluous information in the context window
+\citep{anthropic2025b}.
+
+The geoserver in the benchmark had 25~separate processes available as tools for the agent to
+call. All processes have been described with standard metadata as required for the OGC API
+Processes. Both approaches, MCP and RAG based, used the identical technical set-up with the same
+metadata as textual resource to help the LLM select the best suited process. 25~processes is a
+reasonable amount to test tool selection, but raises a question about scalability. Would the MCP
+performance retain its advantage if there were 50 or more tools available instead? Some research
+shows that the limit lies somewhere around 50~tools before the metadata begins to flood the
+context window with too much information. Additional metadata, tailored to the LLM selection
+process (including e.g.\ counter examples explicit ``Dos and Don'ts'') could further help to
+improve the tool selection.
+
+While paraphrases were used to test the variability of prompt inputs, they were semantically
+similar in general. They included simple vocabulary swaps, sentence clause reordering, and other
+such minor adjustments. It did not include any so-called extreme paraphrases, where the sentence
+is changed to such a degree that the underlying meaning may begin to deviate. This presents the
+difficulty of ensuring that the same intent is present across prompts but also provides the
+opportunity to test the robustness of the models against much more strenuous conditions.
+
+In a similar vein to the degree to which the paraphrases were different from the seed prompt, the
+paraphrases were also required to be grammatically correct. This paper chose to focus on
+paraphrasing on its own, but the larger aim was to check the agent's performance against a wide
+variety of realistic inputs. It is very reasonable to expect grammatical and spelling errors in
+prompt input, but generating these would provide a similarly complex challenge as generating
+paraphrases. Nonetheless, a test of these types of errors would give additional evidence for or
+against the robustness of the agentic workflow generator.
+
+The complexity of the desired task also played a part. The example used in this paper was
+relatively simple with a well-defined correct output. There is some but not too much room for
+interpretation or variability. This provides a convenient way to test and measure the outputs but
+leaves out the potential effects of a more difficult task. As with grammar and extreme
+paraphrasing, this is another dimension that may potentially prove more advantageous for RAG over
+MCP.

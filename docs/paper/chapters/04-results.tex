@@ -1,0 +1,62 @@
+\section{Results}
+\label{sec:results}
+
+Paraphrasing had a minor impact on the accuracy of workflow generation and affected both
+approaches to a similar degree. The MCP approach was consistently more accurate and reliable.
+Workflow graphs that produced acceptable results but not identical to the correct graph are
+labeled ``lenient'' in the results table (Table~\ref{tab:results}). MCP retrieval resulted in a
+significantly larger context and token usage compared to the shortlist of 5~tools from RAG.
+Quantitative analysis shows that all approved workflow graphs create acceptable results when run
+with real geoprocesses.
+
+\input{tables/tab-results}
+
+MCP provided more accurate and reliable performance with lenient and strict scores of 95.3~\%
+and 92.3~\% respectively. Unlike the RAG results, the MCP produced few graphs that were only
+leniently correct. Instead, the vast majority of them only made the correct graph workflow.
+
+On the other hand, RAG provided graphs that were leniently accurate 85.9~\% of the time but
+strictly accurate only 27.1~\% of the time. This was due to the frequent inclusion of an extra
+buffer node at the end of the workflow, in addition to the correct interval buffer node.
+
+When considering only the lenient results, there was not that much of a difference between the
+two approaches. The difference was roughly 10~\% poorer for the RAG retrieval method. Paraphrasing
+had a minor impact on the performance of both RAG and MCP retrieval. For MCP, the impact was only
+observed when scoring against the strict criteria. Meanwhile, RAG showed negative effects only
+for the lenient criteria. In both cases, the observed effect was small, at less than
+5~percentage points.
+
+Where MCP clearly had a drawback was in token usage. Each time the retrieval node called the list
+of tools, this was added as context to the LLM request. This resulted in an average of 191K
+tokens of input per request for MCP compared to an average of 88K for RAG. Output tokens remained
+roughly the same, with MCP having a slightly lower token cost.
+
+\begin{figure}[htbp]
+  \caption{An example of correct output visualized on a map, dark colored regions indicate
+    ``cool spots''}
+  \label{fig:map}
+  \includegraphics[width=\textwidth, alt={Map of the south-western part of Münster. Dark
+    shading covers the areas within the walking-distance buffers around large parks and forests;
+    the remaining unshaded patches, mostly between the districts, lie outside the 300 m
+    limit.}]{04_result-map}
+  \figsource{\ownwork; map data \textcopyright{} OpenStreetMap contributors,
+    \url{https://www.openstreetmap.org/copyright}}
+\end{figure}
+
+\begin{figure}[htbp]
+  \caption{Workflow output visualized in the user interface}
+  \label{fig:ui}
+  \includegraphics[width=\textwidth, alt={Screenshot of the execution graph view in the web
+    interface: five nodes (city-boundary, osm-green-areas, min-area-filter, buffer and
+    multi-ring-buffer) connected by four edges and marked as valid, with buttons to delete the
+    graph, show results and run it.}]{05_result-ui}
+  \figsource{\ownwork}
+\end{figure}
+
+The resulting graphs were validated by executing the workflows with the actual services of the
+geoserver (Figures~\ref{fig:map} and~\ref{fig:ui}). The exact quantities that resulted depended
+on arbitrary decisions made by the agent, for example the number of parks within the city
+boundary that meet the criteria or the minimum size of the park. For this reason, the results
+were validated by checking that they did not vary significantly from a known correct solution.
+By these metrics, all graphs deemed correct, both lenient and strict, did not differ to such a
+degree that they would be considered incorrect.

@@ -1,0 +1,152 @@
+\section{Methods}
+\label{sec:methods}
+
+The paraphrases are generated from an initial seed prompt that uses simplified language to
+describe the desired results. The prompt represents a use-case in urban planning to find areas of
+the city which have access to a nearby green space such as a park or a forest, called cool spot
+analysis \citep{kluck2022}. It requires a multi-step process that includes querying feature types
+within a geographic area, filtering on criteria, and then running a spatial processing tool on
+the features. This use case is realistic and fairly simple to envision, consisting of just a few
+steps. It has a clear correct answer that can only vary due to the selection of certain
+parameters such as the area threshold (``Large enough for recreation'') or the number and size
+of buffer intervals (``In incremental intervals''). While this does introduce some ambiguity, it
+reflects a realistic prompt where not everything is specified precisely and the agent must
+reason on its own to fill in the gaps. Since we have executed this workflow manually, we can use
+its results as ground truth to validate the agent's output against it \citep{voigtlaender2022}.
+
+\emph{Identify all areas in Münster that are within a 300-meter walking distance of a public park
+or forest large enough for recreation. Output a visualization that highlights these well-served
+areas and displays the walking distances from the green spaces in incremental intervals up to
+the 300-meter limit.}
+
+To create the dataset or paraphrases, a guided LLM approach was used. The paraphrase typology
+was separated into individual functions which were used by an LLM to generate a paraphrase.
+Then, an LLM is provided with distinct prompts corresponding to each paraphrase category. These
+prompts incorporate specific instructions and contextual examples drawn from an established
+paraphrase corpus \citep{kovatchev2018}.
+
+To guarantee quality and relevance, every generated paraphrase undergoes a rigorous two-step
+evaluation. First, an automated process runs basic checks: a stem check for morphological
+paraphrases to ensure word stems match the original, and a cosine similarity check to filter out
+near duplicates. Next, an ``LLM judge'' evaluates the output against predefined criteria, ensures
+it is in the correct typological category (suggesting recategorization if needed), and checks
+for grammatical correctness. In borderline cases where constraints are arguably met, the prompt
+is flagged as ``relatively correct'' for manual human review. This dual-review process confirms
+that semantic variations do not alter the core task requirements.
+
+During the review phase, each paraphrase must satisfy eight distinct, hard constraints focused on
+user intention. These strict guidelines are enforced to ensure that despite linguistic variations
+or structural changes, the paraphrased prompt remains perfectly aligned with the original
+geospatial request and expects the exact same practical outcome.
+
+\begin{enumerate}
+  \item \emph{The analysis is about the city of Münster.}
+  \item \emph{The result is the areas that are within the distance limit of a qualifying green
+    space.}
+  \item \emph{The distance limit is 300 metres.}
+  \item \emph{Distance is measured as walking distance (along walkable routes), not straight-line
+    distance or by another mode.}
+  \item \emph{The destinations are public parks or forests.}
+  \item \emph{Only green spaces large enough for recreation count.}
+  \item \emph{The output is a visualization that highlights the well-served areas.}
+  \item \emph{The visualization shows walking distance from the green spaces in incremental
+    intervals up to the limit.}
+\end{enumerate}
+
+\subsection{System Architecture}
+\label{sec:architecture}
+
+The core system is an agentic workflow built with LangGraph that translates natural language
+requests into an executable workflow. This output workflow consists of a graph, not to be
+confused with LangGraph, where the nodes are actionable technical steps and the edges represent
+the data flow between steps. The agent processes the input prompt and from it builds a workflow
+step by step, one node at a time. Each step will call a different sub-agent depending on the
+stage of the current workflow graph and its most recent validation check.
+
+The agent interfaces with an external geoserver to access the necessary tools for constructing
+the workflow graphs. For this experimental setup, the computation server, pygeoapi
+\citep{kralidis2026} exposes a controlled environment containing exactly 25~distinct geospatial
+processes. Depending on the trial run, these processes are either exposed in full via the MCP
+server or selectively retrieved using the RAG approach (Figure~\ref{fig:architecture}).
+
+\begin{figure}[htbp]
+  \caption{Overview of agentic architecture in test configuration with both RAG and MCP support}
+  \label{fig:architecture}
+  \includegraphics[width=0.7\textwidth, alt={Architecture diagram. Inside the LangGraph
+    service, the agent workflow (LLM) receives a request from the web UI and returns a workflow
+    graph. It exchanges information with a retriever, which reaches either a pgvector catalog via
+    RAG or an MCP server via MCP. The web UI sends the graph to a runner for execution; the runner
+    calls the OGC API Processes servers and returns the results to the web UI. The OGC API
+    Processes servers are crawled to fill both the pgvector catalog and the MCP
+    server.}]{01_architecture}
+  \figsource{\ownwork}
+\end{figure}
+
+\subsection{Execution}
+\label{sec:execution}
+
+Testing the paraphrases required running each prompt individually through the LangChain process,
+but the issue is that the primary interface is web-based. To circumvent this, queries are instead
+performed directly within the LangGraph process with no network calls involved, isolating the
+agentic interface to its core component. Every prompt is run separately with its own independent
+context, and multiple prompts can be run concurrently. The entire workflow is created from start
+to finish without interruption, and at each step of the agentic chain various metrics are
+recorded. These include per-LLM call metrics such as the LangGraph node making the call, message
+history, input/output tokens and cost, elapsed time, and visible tools. For each tool search, the
+tools, servers, and closest matches are recorded. Total elapsed time and number of runs are saved
+for each node. Finally, cumulative statistics are saved including: total time and iterations, the
+nodes and unmet capabilities, LLM calls and token usage, and any errors that occurred. An
+orchestration function manages all of the overhead processes needed to carry this work out.
+
+While the batch execution process covered the baseline functionality of the experiment,
+comparing the different tool retrieval methods required another layer of functionality to be
+built on top of the existing test harness. This is accomplished through the use of a specialized
+retrieval node in the LangGraph process. The retrieval node defined an abstract interface which
+the different retrieval methods implemented in their concrete forms. The batch script can then be
+configured to switch between these different variants of the retrieval node, resulting in an MCP
+or RAG based agent. The main functionality of this specific node is to return a list of tools
+from the server, either all tools in the case of MCP or the most similar tools in the case of RAG
+(Figure~\ref{fig:batch}).
+
+\begin{figure}[htbp]
+  \caption{Overview of the experimental batch script configuration}
+  \label{fig:batch}
+  \includegraphics[width=\textwidth, alt={Batch setup diagram. Paraphrased prompts feed the
+    agent workflow, which runs in-process without the web UI inside an orchestrator (batch
+    script), with one context per concurrent run. A variant switch (MCP or RAG) configures the
+    retriever, which queries either the MCP server for all tools or pgvector for the top-k
+    similar tools. The runs write metrics (LLM calls, tool searches, per node and cumulative) to
+    a store.}]{02_batch-setup}
+  \figsource{\ownwork}
+\end{figure}
+
+\subsection{Evaluation}
+\label{sec:evaluation}
+
+The primary way that the workflow graphs were evaluated was through manual verification. Most of
+the paraphrases created one of a small set of graphs that could be checked by hand. The graphs
+were checked based on whether they would produce the desired results. However, one subset of the
+graphs included extra nodes that were superfluous yet still produced an acceptable outcome. These
+graphs were labeled ``leniently'' correct, while the exact match of the desired workflow was
+labeled ``strictly'' correct (Figure~\ref{fig:graphs}).
+
+The workflow graphs still needed to be checked against a known correct solution to ensure that
+they worked correctly. An issue arises from the arbitrary values the agent chooses for some of
+the geospatial functions. For example, a sufficiently large park is not defined by a specific
+number in the prompt, leaving the agent to decide on its own. In some cases, the agent signaled
+the intention to ask clarifying questions by labelling the value ``unknown.'' In these cases, a
+reasonable default was used in the quantitative evaluation. Altogether, this means that a correct
+solution can still vary from the ground truth by quite some degree. For this reason, quantitative
+metrics of the output were only used for general validation rather than scoring.
+
+\begin{figure}[htbp]
+  \caption{Strictly correct (left) and leniently correct (right) workflow graphs}
+  \label{fig:graphs}
+  \includegraphics[height=7cm, alt={Strictly correct workflow graph with four nodes in a chain:
+    city-boundary (place: Münster), osm-green-areas (parks, forests), min-area-filter (minArea)
+    and multi-ring-buffer (rings up to 300 m).}]{03a_graph-strict}\qquad
+  \includegraphics[height=7cm, alt={Leniently correct workflow graph: the same four nodes, plus
+    a dashed, superfluous buffer node (300 m) that also takes the output of
+    min-area-filter.}]{03b_graph-lenient}
+  \figsource{\ownwork}
+\end{figure}

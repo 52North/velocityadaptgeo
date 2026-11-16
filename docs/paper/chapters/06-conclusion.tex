@@ -1,0 +1,34 @@
+\section{Conclusion}
+\label{sec:conclusion}
+
+MCP tool retrieval is an effective and practical strategy for designing straightforward and
+well-defined workflows through the use of an AI agent. RAG performed slightly worse but the
+reason for this is not clear and needs further investigation. MCP has a higher token usage due to
+the tools list being sent with every request, token caching can alleviate much of this cost if
+implemented. This does not reduce the context size, however, and with a significantly larger
+number of tools, MCP may degrade while RAG will only retrieve the top N most relevant tools.
+
+Paraphrases did not have a significant impact on the performance of the agentic workflow
+generation, showing that the system is robust across a range of similarly worded inputs. Future
+work can include a similar test with extreme paraphrases with significantly different semantics
+while still containing the same intent and request. Grammatically incorrect prompt inputs can
+also enhance the stringency of the tests by checking if the agent can properly correct and
+understand the prompt even if the wording is obfuscated. The test can be expanded with additional
+scenarios, especially those that are more open-ended and have a less well-defined correct
+solution.
+
+A clear prerequisite of the RAG approach is, that the tools are known a priori, as otherwise the
+embedding cannot be done to inform the LLM about the available deterministic tools to perform the
+tasks. This a priori knowledge is also what saves resources and time during the execution, as the
+LLM does not need to query the MCP over and over again ``learning'' about the currently available
+models. But if the tooling changes frequently for whatever reason, MCP is the only option.
+
+As more tools of this kind emerge, best practices or tools like benchmarks and test-suites will
+be needed to systematically assess an approach's performance on different dimensions. These
+dimensions may include the capability to handle paraphrases and other variations of a prompt or
+the scalability of the solution in multiple facets such as cost or performance. Ideally, these
+assessment tools would allow researchers and developers to answer the question of whether the
+implementation of the agentic workflow is appropriate and meaningful for their individual use
+cases. Evaluating workflows across different domains will require incorporation of data and API
+standards such as OGC processes. We will work towards this in the VelocityAdapt project to better
+tackle these questions in the context of urban digital twins.

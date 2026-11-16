@@ -1,19 +1,85 @@
 \section{Introduction}
 \label{sec:introduction}
 
-Agentic workflows allow complex tasks to be carried from a natural language prompt. This has
-broad applicability to allow non-expert users to perform difficult work. To facilitate the
-agents' ability to do things beyond text output, tools need to be provided in the form of an
-API. We examine two ways to expose this interface: A model context protocol (MCP) server which
-shows all available processes along with metadata, and a vector database populated with the
-available processes and accessed using retrieval augmented generation (RAG). These two
-approaches are compared within an agentic system to create a workflow for a geospatial analysis
-task, and the input prompt is paraphrased in various ways to improve the robustness of the trial.
+Large language models (LLMs) are a promising technology that improves efficiency and
+effectiveness while simultaneously facing challenges of inaccuracies, hallucinations, and
+biases. This presents a substantial obstacle to any project or organization looking to
+implement LLMs or AI in an internal or public-facing product. This paper has been developed in
+the context of VelocityAdapt, an R\&D project municipal digital twin employing an agentic
+workflow generator. We measure the success of different strategies for tool usage in an agentic
+system, namely MCP and RAG assisted workflow development. To provide a diverse set of test data,
+a seed prompt is varied across a range of different paraphrases and used as input to the agentic
+workflow generator.
 
+VelocityAdapt is funded by the German Federal Ministry for Research, Technology and Space
+(BMFTR). This project's aim is to enhance an urban digital twin for two municipalities within
+Germany. The intended purpose and goal is to provide an easy-to-use and intuitive interface for
+stakeholders such as municipal employees and citizens to access various data sources, view
+geospatial information and run geoanalysis workflows. Through the integration of user-friendly
+technologies, previously difficult-to-obtain visualizations and metrics are made accessible to a
+non-expert audience. These technologies include no-code building blocks, dataset catalogues, and
+the focus of this paper: LLM-based chat interfaces that can generate and run geospatial
+workflows composed out of deterministic building blocks that allow for provenance,
+reproducibility and auditability of the results.
+
+Geospatial technical work has traditionally required training and expertise in tools such as
+ArcGIS or QGIS as well as knowledge across multiple domains including geography and information
+technology. With the advent of large language models, questions and requests can be given in
+natural language, in turn producing a natural language response. In the past few years, research
+has focused on converting these responses into tool calls and other conventional functions using
+application programming interfaces (API). This technology is one branch of GeoAI, or the
+application of artificial intelligence in the context of geospatial analysis
+\citep{janowicz2020}.
+
+Tools and functions are provided to an AI agent increasingly through the use of a model context
+protocol (MCP) interface \citep{linuxfoundation2026}. This provides a well defined and structured
+way for an LLM to interact with a conventional service such as a REST API or pygeoapi. MCP has a
+drawback when it comes to scaling. As the number of tools increases, the LLM will increasingly
+struggle with the expanded context and accuracy will degrade \citep{gan2025}. In comparison,
+retrieval augmented generation (RAG) is not directly related to tool usage. It is rather a
+technique to provide relevant contextual information to enrich a prompt. The primary mechanism is
+retrieving chunks of text that are similar to an input text within a vectorized database.
+However, RAG on its own does not provide an interface with which to call tools and other
+services. RAG-MCP is a hybrid approach to tool usage that combines the MCP interface with RAG
+context enrichment. Only the most relevant tools are returned via RAG instead of a list of all
+tools, which allows for a more concise context to be given to the model.
+
+LLM output is non-deterministic through the process of sampling. In the context of a chat
+interface, an LLM selects a statistically likely token to append to a chain of previous tokens.
+The sampling process chooses one of several candidate tokens, and the mechanism behind this
+sampling is pseudo-random in nature. In practice, this means that giving an LLM the same prompt
+can produce a completely different output each time. The accumulative effect of sampling a
+different logit for each new token of the response, including the previously sampled logits up
+to that point, is what gives the LLM output the appearance of non-determinism. However, the
+propagation of input data through the layers of the neural network is in fact deterministic, and
+a fixed input will produce the same logits to be sampled every time. Testing a system's
+performance with only a single prompt can therefore introduce a bias in the output.
+
+In order to address this problem, there needs to be a wide range of sufficiently distinct inputs
+to provide as input to the LLM. A problem arises when one considers that there is no
+straightforward and readily-apparent way to quantify the variance of a natural language dataset.
+Naive choices include word count or frequency, but two sentences with the same amount of words
+can be starkly different, and some words such as articles and pronouns will be present in a wide
+range of different sentences, giving a superficial indication of similarity. A further question
+is the method of obtaining such a dataset to begin with. Manual human judgment and creation is a
+potential strategy, but it is prone to human error and requires expertise. It also introduces
+problems of reproducibility for scientific purposes. An ideal solution would be an algorithmic
+approach to address these problems.
+
+This is a subject of much research in the field of computational linguistics. The original
+sentence must be altered in a way to create a reasonably distinct sentence while keeping the
+original meaning and intent. In linguistic terms, this is called a paraphrase. A single prompt
+should be paraphrased in a variety of ways to avoid a bias in the evaluation of the system.
 Paraphrases are difficult to formally define but can still be categorized. For example, a
-sentence can swap words for synonyms or change the order of clauses. Defining different types
-of paraphrases allows for the identification and creation of paraphrases via a systematic
-method \citep{vila2014}. We use six such categories and their subtypes to programmatically
-generate paraphrases. Paraphrases have been shown to have a noticeable effect on LLM
-performance \citep{wahle2024}. By testing many paraphrases, we aim to avoid any influence
-related to semantics on the outcome of the trial.
+sentence can swap words for synonyms or change the order of clauses. Defining different types of
+paraphrases allows for the identification and creation of paraphrases via a systematic method
+\citep{vila2014}. We use six such categories and their subtypes to programmatically generate
+paraphrases. Paraphrases have been shown to have a noticeable effect on LLM performance
+\citep{wahle2024}. By testing many paraphrases, we aim to avoid any influence related to
+semantics on the outcome of the trial.
+
+The purpose of this paper is to compare the accuracy in workflow generation by an AI agent
+assisted either with a purely MCP based approach or a MCP-RAG approach. The agent will be asked
+to create a workflow graph based on an initial prompt as well as a variety of different
+paraphrases of that prompt. This is done to avoid a bias that may favor one approach over the
+other based on the semantics of the seed prompt.

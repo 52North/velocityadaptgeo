@@ -1,0 +1,116 @@
+\section{Literature review}
+\label{sec:literature-review}
+
+To put our research regarding the application of agentic workflows to the realm of digital
+twins, we review three main areas of research. First, we evaluate the major developments in
+agentic systems and tool usage. Next, the geospatial context of GeoAI and digital twins are
+examined in closer detail. Finally, we touch briefly on the relevant aspects of computational
+linguistics, paraphrasing, and its relation to prompt robustness.
+
+\subsection{Tool Use}
+\label{sec:tool-use}
+
+MCP, created by Anthropic, one of the leading AI companies, was widely adopted and has emerged
+as the standard for tool integration with LLMs \citep{anthropic2024}. It compares users'
+questions against a list of tool descriptions it can call. This also includes all necessary
+input parameters as well as output formats, which allows for chaining of tools too. These
+textual definitions need to be present to the LLM at all times and together with instructions
+how to behave, the so called system prompt, and the actual chat message they occupy the LLM's
+context window.
+
+The context window has to be seen as a limiting resource, it is the LLM's ``short term memory''
+and everything it knows about the user's conversation. Unfortunately, as the context grows
+beyond a few thousand tokens, LLM accuracy begins to degrade when the correct solution can be
+found from the center of the context window instead of at the edges \citep{liu2024}. A typical
+MCP call to list tools and insert it into the prompt can reach well into this range of tokens.
+Beyond this issue, as the context window grows the cost of inference does as well. AI companies
+offer caching, e.g.\ Anthropic keeps a users cache alive for 5~minutes after the last
+interaction, but this could already be unused if the next user with the same tool definitions in
+its context windows sends another request after the short 5~minute period
+\citep{anthropicdocs}.
+
+\citet{gan2025} also pointed out that many tool descriptions decrease the chance of LLMs finding
+the correct tools. It is currently discussed how granular these tools should be.
+\citet{paschalides2026} suggest that tools with medium granularity show best results. Anthropic
+has a similar approach stating user should combine different REST-API functionalities to a new
+abstracted topic e.g.\ implement a tool called `shedule\_event' that internally calls
+`list\_users', `list\_events' and `create\_events' which correspond with the REST-API instead of
+making the agent chain them together individually \citep{anthropic2025a}. \citet{mastouri2026}
+found that most MCP implementations mirror their respective REST-API.
+
+With MCP the descriptions of all tools are available in the context window initially when the
+service starts. Therefore the LLM can incorporate the tools description when defining tasks to
+solve the spatial problem beforehand. Another positive aspect is that since these descriptions
+don't change over time and also are always in the same place within the context window they can
+be cached, which in some scenarios can cut down token usage.
+
+The RAG approach on the other hand does not have knowledge about the available tools beforehand.
+In this case the LLM plans the first step to solve the spatial problem and performs a similarity
+search in the vector database. It then gets handed 5~possible tools that are the most similar to
+the input and picks the one that fits best based on their descriptions. With this approach
+caching is not possible, since the content and order is different every time.
+
+\citet{zhang2026} compared `Retrieve-then-Plan' (RtP) with `Plan-then-Retrieve' (PtR) and found
+that when using PtR LLMs tend to just pick a tool when the retrieval showed it to them whereas
+LLMs that have knowledge of the tools beforehand tend to reject tools that might not fully solve
+the current step's problems. Another issue they found was that when using PtR is that LLMs guess
+possible solutions without any tie to what the toolset actually can solve and use wrong
+assumptions when looking for tools. A more robust approach could be to summarize the general
+possibilities of the toolbox at start.
+
+In order to wrap tools into APIs and make the system expandable and the tools exchangeable. We
+focus on \href{https://ogcapi.ogc.org/processes/}{OGC API Processes}. This is an open standard
+defined by the Open Geospatial Consortium (OGC) that allows for consistent and predictable
+execution of processing tasks by modularizing them into a set of standard units. These are
+referred to as building blocks and are envisioned as a way to integrate geospatial data with any
+other type of data available through similar open standards. Facilitating data integration and
+providing consistent service definitions is important for the development of complex geospatial
+solutions. For example, the next section provides a background on geospatial artificial
+intelligence as well as complicated real-time modeling, which both rely heavily on seamless
+integration of data and services.
+
+\subsection{GeoAI \& Digital Twins}
+\label{sec:geoai}
+
+The intersection of AI, big data, and high performance computing is referred to as geospatial
+artificial intelligence, or GeoAI \citep{li2020}. Artificial intelligence has long been
+considered in the context of geospatial technology but is currently being developed at a rapid
+pace in comparison to previous decades. While some credit can be given to new computing methods,
+an important aspect is also the accessibility and community based sharing of a wider volume of
+geospatial data \citep{janowicz2020}. The machine learning methods that are useful for
+geospatial problems goes far beyond LLMs and includes other deep learning methods such as
+recurrent neural networks and autoencoders, as well as regression and classification methods
+like random forest, support vector machines, among others. Likewise, use cases seem to span the
+entire range of geospatial applications, from agriculture to urban planning to environmental
+monitoring and beyond. The reason for this is that the main methods of network analysis, object
+detection, data classification, segmentation, and change detection are useful and relevant for
+geospatial data in general \citep{boutayeb2025}. LLMs are not directly related to these methods
+of geospatial analysis, but they can be used as agentic workflow generators in a geospatial
+context \citep{bhattaram2025}. When combined with a chat-based user interface, this allows for
+the democratization of geospatial work including GeoAI, especially in the application of urban
+planning and digital twins \citep{ye2026}.
+
+\subsection{Prompt Robustness \& Paraphrasing}
+\label{sec:paraphrasing}
+
+Paraphrases are well studied in the field of linguistics, and computational linguistics in
+particular is interested in the methods of generating paraphrases. The challenge lies in creating
+a sentence that is superficially different but still keeps the same underlying meaning. The
+meaning of the sentence can be understood through semantic representation theory
+\citep{abend2017}. Exchanging one word for a synonym can introduce unintentional connotations,
+adding modal verbs and restructuring clauses can create implications that were not present in
+the original sentence. A rigorous definition is necessary for the purpose of examining and
+evaluating paraphrases. Paraphrases can be grouped in general by the methods with which they
+rearrange and change sentence structure and vocabulary \citep{bhagat2013}. From these methods, a
+comprehensive typology of paraphrase types can be established \citep{vila2014}.
+
+Paraphrase generation can be seen as the other side of paraphrase detection, which is of
+interest to those who want to detect plagiarism. Paraphrase typologies can be used in detection
+and generation to categorize the exact type of paraphrase in either case \citep{wahle2023}. In
+the context of LLMs, paraphrasing has been shown to have a limited effect on performance
+\citep{wahle2024}. When generating paraphrases, the resulting sentence must have the same meaning
+as the original. Paraphrases have also been collected into large datasets. The extended typology
+paraphrase corpus is one such dataset that has been catalogued using existing paraphrase
+typology \citep{kovatchev2018}. These corpora are valuable for data analysis and training, and
+are especially useful for providing examples for an LLM to understand and create a particular
+paraphrase type.
