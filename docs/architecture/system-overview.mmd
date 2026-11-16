@@ -1,0 +1,30 @@
+---
+config:
+  look: neo
+  theme: redux
+  layout: dagre
+  flowchart:
+    curve: basis
+---
+flowchart TB
+    subgraph svc["LangGraph service"]
+        agent["Agent workflow<br/>(LLM)"]
+        retriever{"Retriever"}
+        runner["Runner"]
+        agent <--> retriever
+    end
+
+    web["Web UI"]
+    ogc[["OGC API – Processes servers"]]
+    pgvector[("pgvector<br/>catalog")]
+    mcp["MCP server"]
+
+    web -- request --> agent
+    agent -- workflow graph --> web
+    web -- execute --> runner
+    runner -- results --> web
+    runner --> ogc
+    retriever -- RAG --> pgvector
+    retriever -- MCP --> mcp
+    ogc -. crawl .-> pgvector
+    ogc -. crawl .-> mcp

@@ -1,0 +1,27 @@
+---
+config:
+  layout: dagre
+---
+flowchart LR
+    prompts[("Paraphrased prompts")]
+
+    subgraph orch["Orchestrator (batch script)"]
+        variant["variant:<br/>MCP | RAG"]
+
+        subgraph runs["Concurrent runs, one context each"]
+            agent["Agent workflow<br/>(in-process, no web UI)"]
+            retriever{"Retriever"}
+            agent <--> retriever
+        end
+
+        variant -.-> retriever
+    end
+
+    mcp["MCP server<br/>(all tools)"]
+    pgvector[("pgvector<br/>(top-k similar)")]
+    metrics[("Metrics<br/>LLM calls · tool searches<br/>per node · cumulative")]
+
+    prompts --> agent
+    retriever -- MCP --> mcp
+    retriever -- RAG --> pgvector
+    runs --> metrics
