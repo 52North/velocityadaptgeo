@@ -15,6 +15,7 @@
 \ifpaper@german
   \RequirePackage[ngerman]{babel}
   \newcommand{\sourcename}{Quelle:}
+  \newcommand{\datasourcename}{Datenquelle:}
   \newcommand{\ownwork}{eigene Darstellung}
   \newcommand{\bibinname}{In:}
   \newcommand{\bibedsname}{(Hrsg.)}
@@ -22,6 +23,7 @@
 \else
   \RequirePackage[english]{babel}
   \newcommand{\sourcename}{Source:}
+  \newcommand{\datasourcename}{Data source:}
   \newcommand{\ownwork}{own illustration}
   \newcommand{\bibinname}{In:}
   \newcommand{\bibedsname}{(Eds.)}
@@ -157,7 +159,8 @@
 \setlength{\floatsep}{19.8pt}
 
 % --- Source line [Tabellen-/Abbildungsquelle]: "Source:" + tab at 1 cm, 6 pt before --------
-% Like a Word tab: a label wider than the 1 cm stop ("Source:") is followed by a space.
+% Like a Word tab: a label wider than the 1 cm stop ("Source:", "Data source:") is followed by
+% a space. Maps with external data use "Data source:"/"Datenquelle:" (guidelines 2.5.1).
 \newsavebox{\sourcelabelbox}
 % Source line directly followed by a heading: Word sets its "after" to 6 pt instead of 18 pt
 % (guidelines 2.5.1). The flag is cleared by the next paragraph; a heading that follows
@@ -173,21 +176,28 @@
 \pretocmd{\subsubsection}{\paper@aftersourcefix}{}{}
 % #1: space above. Word has 6 pt "before"; measured against the sample, LaTeX needs 6.8 pt
 % after a table (rule and strut depth) and 4 pt after a graphic (its line has no depth).
-\newcommand{\paper@source}[2]{%
-  \par\vspace{#1}\normalsize\noindent% floats have \parskip=0
-  \sbox{\sourcelabelbox}{\sourcename\ }%
+% #2: label (\sourcename or \datasourcename), #3: text.
+% A source line right after another one (map: Source + Data source) follows at line pitch.
+\newcommand{\paper@source}[3]{%
+  \par
+  \ifpaper@aftersource\vspace{-\paper@belowsource}\else\vspace{#1}\fi
+  \normalsize\noindent% floats have \parskip=0
+  \sbox{\sourcelabelbox}{#2\ }%
   \hangindent\ifdim\wd\sourcelabelbox<1cm 1cm\else\wd\sourcelabelbox\fi
   \hangafter\@ne
   \ifdim\wd\sourcelabelbox<1cm
-    \makebox[1cm][l]{\sourcename}%
+    \makebox[1cm][l]{#2}%
   \else
     \usebox{\sourcelabelbox}%
   \fi
-  #2\vrule\@width\z@\@height\z@\@depth0.3\baselineskip\par% same depth with or without descenders
+  #3\vrule\@width\z@\@height\z@\@depth0.3\baselineskip\par% same depth with or without descenders
   \vspace{\paper@belowsource}% measured against the sample
   \global\paper@aftersourcetrue}
-\newcommand{\tabsource}[1]{\paper@source{6.8pt}{#1}}
-\newcommand{\figsource}[1]{\paper@source{4pt}{#1}}
+\newcommand{\tabsource}[1]{\paper@source{6.8pt}{\sourcename}{#1}}
+\newcommand{\figsource}[1]{\paper@source{4pt}{\sourcename}{#1}}
+% Map with external data, below \figsource{\ownwork}:
+% \figdatasource{<url>; \textcopyright{} <holder>, <licence url>}
+\newcommand{\figdatasource}[1]{\paper@source{4pt}{\datasourcename}{#1}}
 
 % --- Figures [Grafik]: left-aligned ------------------------------------------------------
 \RequirePackage{graphicx}

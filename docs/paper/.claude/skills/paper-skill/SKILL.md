@@ -55,6 +55,7 @@ the sample's own content (its text, its citation box, its author data).
 | `\runningauthors{R. Flores \& B. Gräler}`, `\runningtitle{Short title}` | odd running head |
 | `\headcell{Text}` | bold table header cell with the 3 pt padding |
 | `\tabsource{\ownwork}`, `\figsource{...}` | source line below a table / figure |
+| `\figdatasource{<url>; \textcopyright{} <holder>, <licence url>}` | "Data source:"/"Datenquelle:" line for maps with external data (e.g. OSM basemap), directly below `\figsource{\ownwork}` |
 | `\begin{abstract}` | "Abstract"/"Zusammenfassung" block (`ÜSZusammenfassung`) |
 
 The header rules, captions, lists, footnotes and the
