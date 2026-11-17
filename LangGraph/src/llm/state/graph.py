@@ -28,15 +28,23 @@ set of node kinds.
 """
 
 import logging
+import os
 
 from pydantic import BaseModel, ConfigDict, Field
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_TIMEOUT_SECONDS = 300
+# The longest a node's process call may take. `timeout_seconds` comes from the LLM's plan or from
+# an API caller, so without a cap one node could hold an outbound request open indefinitely.
+MAX_NODE_TIMEOUT_SECONDS = int(os.environ.get("MAX_NODE_TIMEOUT_SECONDS", "600"))
 
 # Config keys that carry transport settings rather than a process parameter, so nothing
-# should offer them for editing or resolve them as an input.
+# should offer them for editing or resolve them as an input. Internally a node's `config` is
+# flat, so these names are reserved: no process input value can use them. Callers of the HTTP
+# API do not see that layout: there the values are nested in `config.values`, and src/api_graph.py
+# explains why and converts between the two. A new setting added here must also become a field
+# of ApiNodeConfig there.
 CONFIG_KEYS = ("server_url", "timeout_seconds")
 NODE_X_SPACING = 200
 NODE_Y = 200
@@ -87,6 +95,17 @@ class WorkflowGraph(BaseModel):
     edges: list[EdgeDefinition] = Field(default_factory=list)
 
 
+def node_timeout(value) -> int | float:
+    """`value` as a node's timeout in seconds, at most MAX_NODE_TIMEOUT_SECONDS.
+
+    Anything that is not a positive number (unset, a string, NaN) means the default, so a bad value
+    cannot fail a run or disable the limit.
+    """
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not value > 0:
+        return DEFAULT_TIMEOUT_SECONDS
+    return min(value, MAX_NODE_TIMEOUT_SECONDS)
+
+
 def find_cycle(graph: dict) -> list[str]:
     """The node ids left on a cycle, or [] when the graph is a DAG.
 
@@ -129,10 +148,20 @@ def new_graph_node(
     input/output names, taken from the catalog, so an edge can be validated against the
     inputs/outputs that actually exist. When they are unknown, the inputs fall back to the
     static keys.
+
+    `inputs` and `config` come from the LLM's plan (auto_build, the manager's add_node) or an
+    /api/graph/op caller, and the flat `config` keeps their values next to the settings. So the
+    settings are never taken from those values: `server_url` comes only from its argument, and
+    `timeout_seconds` only from `config`, capped by `node_timeout`. A value named like a setting
+    (CONFIG_KEYS) is dropped with a warning instead of overwriting it, since it could otherwise
+    point the process call at another server or lift the timeout (src/api_graph.py explains why
+    values and settings must not share names).
     """
-    resolved_config = {"server_url": server_url, "timeout_seconds": DEFAULT_TIMEOUT_SECONDS}
-    resolved_config.update(inputs or {})
-    resolved_config.update(config or {})
+    given = {**(inputs or {}), **(config or {})}
+    if ignored := sorted({k for k in (inputs or {}) if k in CONFIG_KEYS} | ({"server_url"} & set(config or {}))):
+        logger.warning("Node %s: ignored %s among its values; settings are not taken from values", node_id, ignored)
+    resolved_config = {"server_url": server_url, "timeout_seconds": node_timeout((config or {}).get("timeout_seconds"))}
+    resolved_config.update({k: v for k, v in given.items() if k not in CONFIG_KEYS})
 
     node = NodeDefinition(
         id=node_id,

@@ -96,6 +96,10 @@ def test_chat_returns_the_graph_and_its_validation(client):
     {"prompt": "hi", "unknown": 1},
     {"prompt": "hi", "graph": {"nodes": [node(f"n{i}") for i in range(app_module.MAX_GRAPH_NODES + 1)], "edges": []}},
     {"prompt": "hi", "graph": {"nodes": [{**node("a"), "extra": 1}], "edges": []}},
+    # Process input values belong in config.values (src/api_graph.py), never directly in config,
+    # and may not take the names of the service's settings.
+    {"prompt": "hi", "graph": {"nodes": [{**node("a"), "config": {"server_url": SERVER, "distance": 5}}], "edges": []}},
+    {"prompt": "hi", "graph": {"nodes": [{**node("a"), "config": {"values": {"server_url": SERVER}}}], "edges": []}},
 ])
 def test_chat_input_limits(client, body):
     assert client.post("/api/chat", json=body).status_code == 422
@@ -133,6 +137,47 @@ def test_stream_error_hides_exception_text(client, monkeypatch):
     error, done = events(client.get("/api/stream", params={"prompt": "hi", "thread_id": THREAD}))
     assert "secret" not in error["error"] and error["error"].startswith("The turn failed (error id ")
     assert done == {"event": "done"}
+
+
+def test_chat_nests_values_at_the_api_and_flattens_them_inside(client, monkeypatch):
+    seen = {}
+
+    class Recording(StubGraph):
+        async def ainvoke(self, update, config):
+            seen["graph"] = update["workflow_graph"]
+            return await super().ainvoke(update, config)
+
+    monkeypatch.setattr(app_module, "compiled_graph", Recording())
+    posted = {"nodes": [{**node("a"), "config": {"server_url": SERVER, "values": {"distance": 500}}}], "edges": []}
+    body = client.post("/api/chat", json={"prompt": "buffer it", "graph": posted}).json()
+
+    assert seen["graph"]["nodes"][0]["config"] == {"server_url": SERVER, "distance": 500}
+    assert body["graph"]["nodes"][0]["config"] == {"server_url": SERVER, "values": {"distance": 500}}
+
+
+def test_stream_graph_events_use_the_api_layout(client, monkeypatch):
+    class Building(StubGraph):
+        async def astream(self, update, config, **kwargs):
+            graph = {"nodes": [{**node("a"), "config": {"server_url": SERVER, "distance": 500}}], "edges": []}
+            yield (), "updates", {"auto_build": {"workflow_graph": graph}}
+
+    monkeypatch.setattr(app_module, "compiled_graph", Building())
+    graph_event = events(client.get("/api/stream", params={"prompt": "hi", "thread_id": THREAD}))[0]
+    assert graph_event["workflow_graph"]["nodes"][0]["config"] == {"server_url": SERVER, "values": {"distance": 500}}
+
+
+def test_graph_op_returns_the_api_layout(client, monkeypatch):
+    stored = {}
+    monkeypatch.setattr(app_module, "compiled_graph", type("G", (), {
+        "get_state": lambda self, config: type("S", (), {"values": {"workflow_graph": {"nodes": [node("a")], "edges": []}}})(),
+        "update_state": lambda self, config, update: stored.update(update),
+    })())
+    response = client.post("/api/graph/op", json={
+        "thread_id": THREAD, "op": "set_input", "args": {"node_id": "a", "input": "distance", "value": 5},
+    })
+    assert response.json()["graph"]["nodes"][0]["config"] == {"server_url": SERVER, "values": {"distance": 5}}
+    # The thread keeps the internal, flat layout.
+    assert stored["workflow_graph"]["nodes"][0]["config"] == {"server_url": SERVER, "distance": 5}
 
 
 def test_stream_forwards_graph_events(client):

@@ -19,13 +19,12 @@ from urllib.parse import quote
 
 import httpx
 
-from src.llm.state.graph import CONFIG_KEYS
+from src.llm.state.graph import CONFIG_KEYS, node_timeout
 # The only servers a node may be executed against (src/ogc_servers.py).
 from src.ogc_servers import LOCAL_PYGEOAPI_HOST, LOCAL_PYGEOAPI_INTERNAL, OGC_SERVERS
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_TIMEOUT_SECONDS = 300.0
 
 GEOJSON_TYPES = frozenset({
     "Feature", "FeatureCollection", "Point", "MultiPoint", "LineString",
@@ -204,7 +203,8 @@ async def _post_execution(client: httpx.AsyncClient, node: dict, inputs: dict) -
         raise ExecutionError(f"node '{node['id']}': {server_url} is not one of the configured OGC servers")
     # One path segment, so a process id cannot reach another path or add a query.
     url = f"{server}/processes/{quote(str(node['type']), safe='')}/execution"
-    timeout = float(config.get("timeout_seconds") or DEFAULT_TIMEOUT_SECONDS)
+    # Capped here too, whatever built the graph (the LLM, an API caller, a batch file).
+    timeout = float(node_timeout(config.get("timeout_seconds")))
 
     response = await client.post(
         url,
@@ -277,7 +277,7 @@ async def run_graph(
                 failed.add(node_id)
                 message = str(err) or type(err).__name__
                 if isinstance(err, httpx.TimeoutException):
-                    message = f"timed out after {node.get('config', {}).get('timeout_seconds', DEFAULT_TIMEOUT_SECONDS)}s"
+                    message = f"timed out after {node_timeout((node.get('config') or {}).get('timeout_seconds'))}s"
                 logger.warning("Node %s (%s) failed: %s", node_id, node["type"], message)
                 yield {"event": "node-error", "node": node_id, "process": node["type"],
                        "ms": int((time.monotonic() - started) * 1000), "error": message}

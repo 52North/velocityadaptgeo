@@ -33,7 +33,7 @@ With `APP_ENV=production` the service refuses to start without a token, and serv
 
 | Answer | When |
 |---|---|
-| `422` | `prompt` empty or longer than `MAX_PROMPT_CHARS` (default 4000); `thread_id` not matching `^[A-Za-z0-9_-]{8,64}$`; a `graph` with more than `MAX_GRAPH_NODES` nodes (default 50) or four times as many edges; any unknown field in a request body. |
+| `422` | `prompt` empty or longer than `MAX_PROMPT_CHARS` (default 4000); `thread_id` not matching `^[A-Za-z0-9_-]{8,64}$`; a `graph` with more than `MAX_GRAPH_NODES` nodes (default 50) or four times as many edges; a graph node with a value directly in `config` instead of in `config.values`, or with `timeout_seconds` not above 0 or above `MAX_NODE_TIMEOUT_SECONDS` (default 600); any unknown field in a request body. |
 | `429` | `MAX_CONCURRENT_TURNS` turns (default 4) are already running. Retry after the `Retry-After` seconds. |
 | `504` | A turn ran longer than `TURN_TIMEOUT_SECONDS` (default 300). `/api/stream` sends an `error` event instead. |
 
@@ -84,7 +84,7 @@ Thread ids are not tied to users: anyone who can reach the API and knows an id c
       "type": "<process_id>",
       "label": "",
       "position": {"x": 0, "y": 200},
-      "config": {"server_url": "https://demo.pygeoapi.io/master/", "timeout_seconds": 300, "distance": 500},
+      "config": {"server_url": "https://demo.pygeoapi.io/master/", "timeout_seconds": 300, "values": {"distance": 500}},
       "inputs": ["geometry", "distance"],
       "outputs": ["result"]
     }
@@ -96,7 +96,9 @@ Thread ids are not tied to users: anyone who can reach the API and knows an id c
 ```
 
 - `type` is the id of an OGC API - Processes process, not a fixed set of node kinds.
-- `config.server_url` is the OGC server the process runs on, `config.timeout_seconds` its time limit; every other `config` key is a static input value of the process.
+- `config` holds the service's settings and, apart from them, the process's input values: `config.server_url` is the OGC server the process runs on, `config.timeout_seconds` its time limit (optional), and `config.values` maps input names to static values. Any other key in `config` is rejected (`422`), and so are `server_url` and `timeout_seconds` as names inside `values`, since the service uses them for its settings.
+- Why the values are nested: settings and values are told apart by where they are, not by their names, so a caller can store `config` as it is. A setting added later becomes a new field of `config`, outside `values`, so it never takes a name an input already uses and stays an additive change; kept flat, it would turn a name callers treat as an input into a setting, which is a breaking change. The two names refused inside `values` are a limit of the service's internal layout, where `config` is flat; later settings do not add to them. `src/api_graph.py` converts at the API and has the full reasoning.
+- Security: values are untrusted input (from callers and from the LLM), settings decide where the service sends requests and for how long. Mixed in one set of keys, a value named `server_url` could send the process call and its input data to another server, and a future secret setting could be forwarded to an OGC server as an input by a client that does not know it. Keeping values in `config.values` and refusing setting names there prevents that at the API; the `OGC_SERVERS` allowlist is checked in addition, at validation and at execution.
 - `inputs`/`outputs` are the names of the process's inputs and outputs; an edge connects `source_output` of one node to `target_input` of another.
 - `id` matches `^[a-zA-Z0-9_\-]+$`; unknown fields are rejected.
 - The graph is a DAG. This service executes it only against the servers in `OGC_SERVERS` and the local pygeoapi, and its validation reports any other server.

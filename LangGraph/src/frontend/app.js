@@ -22,7 +22,6 @@ const IO_GAP = 15;
 const IO_R = 3.5;
 const CHAR_W = 6;  // advance width of one character in the 10px monospace input/output labels
 const HOP_R = 6;
-const HIDDEN_CONFIG_KEYS = ["server_url", "timeout_seconds"];
 
 let executionGraph = { nodes: [], edges: [] };
 let lastValidation = null;
@@ -224,8 +223,9 @@ function columnOf(nodes, edges) {
 function ioOf(nodes, edges) {
     const map = new Map(nodes.map((n) => [n.id, {
         in: [...(n.inputs || [])], out: [...(n.outputs || [])], wired: new Set(),
-        values: Object.fromEntries(Object.entries(n.config || {})
-            .filter(([k]) => !HIDDEN_CONFIG_KEYS.includes(k))
+        // The API nests a process's input values in `config.values`, apart from the service's
+        // settings (`server_url`, `timeout_seconds`); src/api_graph.py explains why.
+        values: Object.fromEntries(Object.entries((n.config || {}).values || {})
             .map(([k, v]) => [k, formatValue(v)])),
     }]));
     // A value set on an input the catalog never declared is still a parameter of this node,
@@ -724,7 +724,7 @@ function editInput(nodeId, side, input, wired) {
     if (side !== "in" || wired) return;
     closeEditor();
     const node = (executionGraph.nodes || []).find((n) => n.id === nodeId);
-    const current = (node && node.config || {})[input];
+    const current = ((node && node.config || {}).values || {})[input];
     const socket = graphCanvas.querySelector(
         `.gio-group[data-node="${nodeId}"][data-side="in"][data-io="${input}"]`);
     if (!socket) return;
