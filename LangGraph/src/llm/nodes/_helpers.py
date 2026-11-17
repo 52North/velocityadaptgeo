@@ -1,6 +1,12 @@
 """Shared helpers for retriever, builder, and validator nodes."""
 
+import json
+import logging
 from typing import Any
+
+from src.llm.tools.fewshot_client import search_examples
+
+logger = logging.getLogger(__name__)
 
 
 def _log(
@@ -25,8 +31,8 @@ def _log(
     return history
 
 
-# Logged with manager decisions for the decision model, never shown to an LLM.
-_LOGGED_ONLY = ("state", "laya")
+# Logged with manager decisions for the decision model and the few-shot audit, never shown to an LLM.
+_LOGGED_ONLY = ("state", "laya", "examples")
 
 
 def _for_prompt(entries: list[dict]) -> list[dict]:
@@ -60,3 +66,34 @@ def _summarize(obj: Any) -> Any:
     if isinstance(obj, dict):
         return {k: type(v).__name__ for k, v in obj.items()}
     return str(obj)[:200]
+
+
+EXAMPLES_HEADING = (
+    "SOLVED EXAMPLES (earlier requests similar to the USER GOAL, each with the workflow graph that "
+    "solved it - follow their pattern of steps and wiring where it fits, but build only what the "
+    "USER GOAL asks for):"
+)
+
+
+def lookup_examples(goal: str) -> list[dict]:
+    """The fewshot variant's examples for `goal`; none, with the error logged, if the lookup fails.
+
+    A failed lookup must not end the turn: the agent then works as without examples.
+    """
+    try:
+        return search_examples(goal)
+    except Exception:
+        logger.exception("Few-shot lookup failed; continuing without examples")
+        return []
+
+
+def examples_block(examples: list[dict] | None) -> str:
+    """The examples as a prompt section, or "" when there are none (the prompt is then unchanged)."""
+    if not examples:
+        return ""
+    shown = [
+        {"request": e["request"], "workflow_graph": (e.get("solution") or {}).get("workflow_graph"),
+         **({"notes": e["notes"]} if e.get("notes") else {})}
+        for e in examples
+    ]
+    return f"{EXAMPLES_HEADING}\n{json.dumps(shown, indent=2, ensure_ascii=False)}"

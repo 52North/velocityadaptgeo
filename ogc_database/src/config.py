@@ -1,6 +1,7 @@
 """Configuration and constants for OGC database crawler."""
 
 import os
+from pathlib import Path
 
 # Comma-separated OGC API servers to crawl. The local pygeoapi instance is appended,
 # addressed via LOCAL_PYGEOAPI_INTERNAL so it can move without touching this list.
@@ -30,6 +31,10 @@ DB_DSN = os.environ.get("DB_DSN") or "postgresql://{}:{}@{}:{}/{}".format(
 # Embedding model configuration
 OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://ollama:11434")
 OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "nomic-embed-text")
+
+# Few-shot examples, one YAML file each (fewshot_examples/README.md); compose mounts them here.
+# Without FEWSHOT_DIR, the folder at the repository root, for host runs.
+FEWSHOT_DIR = Path(os.environ.get("FEWSHOT_DIR") or Path(__file__).resolve().parents[2] / "fewshot_examples")
 
 # HTTP client configuration
 HTTP_TIMEOUT = float(os.environ.get("HTTP_TIMEOUT", "30.0"))
@@ -72,4 +77,39 @@ DELETE FROM ogc_processes WHERE server_url = %s AND NOT (process_id = ANY(%s));
 # Processes of servers no longer configured; the LangGraph runner refuses to execute them
 DELETE_UNCONFIGURED_SQL = """
 DELETE FROM ogc_processes WHERE NOT (server_url = ANY(%s));
+"""
+
+# Few-shot examples: the table is created by the sync, sized like the catalog's embedding column
+CREATE_FEWSHOT_SQL = """
+CREATE TABLE IF NOT EXISTS fewshot_examples (
+    id          TEXT PRIMARY KEY,
+    request     TEXT NOT NULL,
+    solution    JSONB NOT NULL,
+    notes       TEXT,
+    source_file TEXT NOT NULL,
+    embedding   VECTOR({dim}) NOT NULL,
+    updated_at  TIMESTAMPTZ DEFAULT now()
+);
+"""
+
+FEWSHOT_DIM_SQL = """
+SELECT atttypmod FROM pg_attribute
+WHERE attrelid = 'fewshot_examples'::regclass AND attname = 'embedding';
+"""
+
+UPSERT_FEWSHOT_SQL = """
+INSERT INTO fewshot_examples (id, request, solution, notes, source_file, embedding)
+VALUES (%s, %s, %s, %s, %s, %s)
+ON CONFLICT (id) DO UPDATE SET
+    request     = EXCLUDED.request,
+    solution    = EXCLUDED.solution,
+    notes       = EXCLUDED.notes,
+    source_file = EXCLUDED.source_file,
+    embedding   = EXCLUDED.embedding,
+    updated_at  = now();
+"""
+
+# Examples whose file is gone
+DELETE_FEWSHOT_GONE_SQL = """
+DELETE FROM fewshot_examples WHERE NOT (id = ANY(%s));
 """

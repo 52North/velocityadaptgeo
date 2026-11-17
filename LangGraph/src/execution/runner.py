@@ -20,23 +20,12 @@ from urllib.parse import quote
 import httpx
 
 from src.llm.state.graph import CONFIG_KEYS
+# The only servers a node may be executed against (src/ogc_servers.py).
+from src.ogc_servers import LOCAL_PYGEOAPI_HOST, LOCAL_PYGEOAPI_INTERNAL, OGC_SERVERS
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_TIMEOUT_SECONDS = 300.0
-LOCAL_PYGEOAPI_HOST = os.environ.get("LOCAL_PYGEOAPI_HOST", "localhost:5000")
-LOCAL_PYGEOAPI_INTERNAL = os.environ.get("LOCAL_PYGEOAPI_INTERNAL", "pygeoapi:80")
-# The only servers a node may be executed against: the ones the catalog crawler and the MCP server
-# read (same compose setting and default), plus the local pygeoapi under either address. A graph can
-# come from a client (POST /api/execute, /api/graph/op), so its server_url is not trusted as given.
-OGC_SERVERS = frozenset(
-    url.strip().rstrip("/")
-    for url in os.environ.get(
-        "OGC_SERVERS", "https://demo.pygeoapi.io/master/,https://maps.ecere.com/ogcapi/"
-    ).split(",")
-    + [os.environ.get("LOCAL_PYGEOAPI_URL", ""), f"http://{LOCAL_PYGEOAPI_HOST}", f"http://{LOCAL_PYGEOAPI_INTERNAL}"]
-    if url.strip()
-)
 
 GEOJSON_TYPES = frozenset({
     "Feature", "FeatureCollection", "Point", "MultiPoint", "LineString",
@@ -89,22 +78,22 @@ def _static_inputs(node: dict) -> dict:
     return {k: v for k, v in (node.get("config") or {}).items() if k not in CONFIG_KEYS}
 
 
-def _pick_output(node_id: str, produced: dict, port: str) -> object:
+def _pick_output(node_id: str, produced: dict, output: str) -> object:
     """Read one named output from a finished node's response body.
 
     Tolerates a process that answers with a single unnamed value rather than a map of
     named outputs, which OGC API - Processes permits for single-output processes.
     """
     if isinstance(produced, dict):
-        if port in produced:
-            return produced[port]
+        if output in produced:
+            return produced[output]
         if len(produced) == 1:
             only = next(iter(produced))
             logger.info("Node %s has no output '%s'; using its only output '%s'.",
-                        node_id, port, only)
+                        node_id, output, only)
             return produced[only]
         raise ExecutionError(
-            f"node '{node_id}' produced no output '{port}' "
+            f"node '{node_id}' produced no output '{output}' "
             f"(available: {sorted(produced)})"
         )
     return produced

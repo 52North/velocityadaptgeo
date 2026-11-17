@@ -365,7 +365,7 @@ button:disabled:hover {
     border-radius: 2px;
 }
 
-.legend-port {
+.legend-io {
     width: 7px;
     height: 7px;
     border-radius: 50%;
@@ -373,7 +373,7 @@ button:disabled:hover {
     box-shadow: 0 0 0 1.5px #94a3b8;
 }
 
-.legend-port-open {
+.legend-io-open {
     background: #0f172a;
     box-shadow: 0 0 0 1.5px #475569;
 }
@@ -594,23 +594,23 @@ button:disabled:hover {
     fill: #475569;
 }
 
-.gport {
+.gio {
     stroke-width: 1.5;
 }
 
-/* A port carrying an edge is filled; one still free is hollow and dimmed, so a node
+/* An input/output carrying an edge is filled; one still free is hollow and dimmed, so a node
    advertises its unused parameters without them competing with the actual pipeline. */
-.gport-wired {
+.gio-wired {
     fill: #64748b;
     stroke: #94a3b8;
 }
 
-.gport-open {
+.gio-open {
     fill: #0f172a;
     stroke: #475569;
 }
 
-.gport-label {
+.gio-label {
     fill: #94a3b8;
     font-size: 10px;
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -622,21 +622,21 @@ button:disabled:hover {
     stroke-linejoin: round;
 }
 
-.gport-label-open { fill: #64748b; }
+.gio-label-open { fill: #64748b; }
 
 /* Invisible but generous: a 3.5px dot is not a target anyone should have to hit, and
    `transparent` still receives the pointer where `none` would let it pass through. */
-.gport-hit {
+.gio-hit {
     fill: transparent;
 }
 
-.gport-group {
+.gio-group {
     cursor: crosshair;
 }
 
 /* Mid-drag every free socket lights up, so the places a wire can actually land are
    visible while the wire is being dragged rather than only after it is dropped. */
-.wiring .gport-open {
+.wiring .gio-open {
     fill: #38bdf8;
     stroke: #38bdf8;
 }
@@ -678,7 +678,7 @@ button:disabled:hover {
     cursor: crosshair;
 }
 
-.deleting .gport-group {
+.deleting .gio-group {
     cursor: crosshair;
 }
 
@@ -982,9 +982,9 @@ button:disabled:hover {
 .score-strong { color: #4ade80; }
 .score-weak { color: #fbbf24; }
 
-/* Editing one port's value: a field pinned under the socket it belongs to, rather than a
+/* Editing one input's value: a field pinned under the socket it belongs to, rather than a
    browser dialog that blocks the page and looks nothing like the rest of it. */
-.port-editor {
+.input-editor {
     position: fixed;
     z-index: 40;
     display: flex;
@@ -997,13 +997,13 @@ button:disabled:hover {
     box-shadow: 0 8px 20px rgba(2, 6, 23, 0.6);
 }
 
-.port-editor label {
+.input-editor label {
     color: #94a3b8;
     font-size: 10px;
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
-.port-editor input {
+.input-editor input {
     width: 180px;
     padding: 6px 8px;
     border-radius: 6px;
@@ -1011,11 +1011,11 @@ button:disabled:hover {
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
-.port-editor input:focus {
+.input-editor input:focus {
     outline: 2px solid #38bdf8;
 }
 
-.port-editor span {
+.input-editor span {
     color: #64748b;
     font-size: 10px;
 }

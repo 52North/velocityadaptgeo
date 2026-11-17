@@ -80,9 +80,9 @@ class FeatureMergeProcessor(BaseProcessor):
     def execute(self, data, outputs=None):
         try:
             pairs = [
-                (geom, {**props, "mergeSource": port})
-                for port in ("features", "otherFeatures")
-                for geom, props in load_features(data[port])
+                (geom, {**props, "mergeSource": name})
+                for name in ("features", "otherFeatures")
+                for geom, props in load_features(data[name])
             ]
         except (KeyError, ValueError, TypeError, ShapelyError) as err:
             raise ProcessorExecuteError(

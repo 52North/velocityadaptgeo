@@ -9,6 +9,7 @@ from src.llm.nodes import (
     action_router,
     auto_build_node,
     builder_node,
+    catalog_retriever_node,
     chat_node,
     management_node,
     mcp_retriever_node,
@@ -18,6 +19,7 @@ from src.llm.nodes import (
 )
 from src.llm.nodes.management import MAX_WORKFLOW_ITERATIONS
 from src.llm.state.state import WorkflowState
+from src.llm.variants import Variant, selected_variant
 
 _SUPERSTEPS_PER_ITERATION = 3
 _TRAILING_SUPERSTEPS = 5
@@ -28,12 +30,10 @@ WORKFLOW_RECURSION_LIMIT = int(os.environ.get(
 ))
 DEFAULT_WORKFLOW_CONFIG = {"recursion_limit": WORKFLOW_RECURSION_LIMIT}
 
-# How the retriever finds candidate processes: a pgvector catalog search (top 5), or every
-# tool of the MCP server in `mcp/`. Everything else in the graph is the same for both.
-RETRIEVERS = {"pgvector": retriever_node, "mcp": mcp_retriever_node}
-VARIANT = os.environ.get("WORKFLOW_VARIANT", "pgvector")
-if VARIANT not in RETRIEVERS:
-    raise ValueError(f"WORKFLOW_VARIANT must be one of {', '.join(RETRIEVERS)}, not {VARIANT!r}")
+# How the retriever node finds candidate processes, by `Variant.tools`: a pgvector catalog search
+# (top 5), every tool of the MCP server in `mcp/`, or every process of the catalog. Everything else
+# in the graph is shared.
+RETRIEVER_NODES = {"search": retriever_node, "mcp_all": mcp_retriever_node, "catalog_all": catalog_retriever_node}
 
 llm = ChatAnthropic(
     model=os.environ.get("ANTHROPIC_MODEL", "claude-haiku-5-5"),
@@ -45,37 +45,44 @@ llm = ChatAnthropic(
     effort=os.environ.get("ANTHROPIC_EFFORT", "medium"),
 )
 
-graph = StateGraph(WorkflowState)
 
-graph.add_node("manager",       partial(management_node, llm=llm))
-graph.add_node("retriever",     partial(RETRIEVERS[VARIANT], llm=llm))
-graph.add_node("auto_build",    partial(auto_build_node, llm=llm, variant=VARIANT))
-graph.add_node("builder",       builder_node)
-graph.add_node("validator",     validator_node)
-graph.add_node("responder",     partial(responder_node,  llm=llm))
-graph.add_node("chat",          partial(chat_node,       llm=llm))
+def build_workflow(variant: Variant):
+    """Compile the agent graph for one workflow variant (src.llm.variants)."""
+    graph = StateGraph(WorkflowState)
 
-graph.set_entry_point("manager")
+    graph.add_node("manager",       partial(management_node, llm=llm, use_examples=variant.examples))
+    graph.add_node("retriever",     partial(RETRIEVER_NODES[variant.tools], llm=llm))
+    graph.add_node("auto_build",    partial(auto_build_node, llm=llm, variant=variant))
+    graph.add_node("builder",       builder_node)
+    graph.add_node("validator",     validator_node)
+    graph.add_node("responder",     partial(responder_node,  llm=llm))
+    graph.add_node("chat",          partial(chat_node,       llm=llm))
 
-graph.add_conditional_edges(
-    "manager",
-    action_router,
-    {
-        "search":   "retriever",
-        "build":    "builder",
-        "validate": "validator",
-        "chat":     "chat",
-        "done":     "responder",
-    },
-)
+    graph.set_entry_point("manager")
 
-graph.add_edge("retriever",  "auto_build")
-graph.add_edge("auto_build", "manager")
+    graph.add_conditional_edges(
+        "manager",
+        action_router,
+        {
+            "search":   "retriever",
+            "build":    "builder",
+            "validate": "validator",
+            "chat":     "chat",
+            "done":     "responder",
+        },
+    )
 
-graph.add_edge("builder",   "manager")
-graph.add_edge("validator", "manager")
+    graph.add_edge("retriever",  "auto_build")
+    graph.add_edge("auto_build", "manager")
 
-graph.add_edge("responder", END)
-graph.add_edge("chat",      END)
+    graph.add_edge("builder",   "manager")
+    graph.add_edge("validator", "manager")
 
-compiled_graph = graph.compile(checkpointer=MemorySaver())
+    graph.add_edge("responder", END)
+    graph.add_edge("chat",      END)
+
+    return graph.compile(checkpointer=MemorySaver())
+
+
+VARIANT = selected_variant()
+compiled_graph = build_workflow(VARIANT)

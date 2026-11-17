@@ -5,8 +5,7 @@ from `src.batch_summary`, so the reports count exactly what `python -m src.batch
 modules only use the standard library, so the agent's dependencies are not needed here.
 
 The run folder defaults to the Münster run; set `REPORT_RUN_DIR` to use another one. Every loader takes the
-workflow `variant` (`VARIANTS`, default pgvector), as `src.batch --variant` does: pgvector catalog search, or
-every tool of the MCP server.
+workflow `variant` (`VARIANTS`, from `src.llm.variants`; default pgvector), as `src.batch --variant` does.
 """
 
 import collections
@@ -25,6 +24,7 @@ sys.path.insert(0, str(ROOT / "LangGraph"))
 
 from src.batch import DEFAULT_VARIANT, SEED_CATEGORY, _key, _read_jsonl, _sha1, latest_results, load_results, seed_prompt
 from src.batch_summary import _edges, _structure, fisher, lenient, strict, trend, wilson
+from src.llm.variants import VARIANTS as WORKFLOW_VARIANTS
 
 RUN_DIR = Path(os.environ.get("REPORT_RUN_DIR", ROOT / "metrics/prompt_gen/out/20261012-174604_muenster_green_300m"))
 CHAIN = ["city-boundary", "osm-green-areas", "min-area-filter", "multi-ring-buffer"]
@@ -37,7 +37,7 @@ CATEGORY_NAMES = {
     "morphological": "Morphological",
     "lexical": "Lexical",
 }
-VARIANTS = {"pgvector": "catalog search", "mcp": "all MCP tools"}  # src.batch.VARIANTS, with plain names
+VARIANTS = {name: variant.label for name, variant in WORKFLOW_VARIANTS.items()}  # with plain names
 SIZE_NOTE = "Drops the size requirement"
 QUALITY_WORDING = re.compile(r"\b(adequate|suitable|sufficient) for recreation", re.IGNORECASE)
 NETWORK_SEARCH = re.compile(r"network|route|\bstreets?\b|\bpaths?\b|pedestrian|isochron|travel", re.IGNORECASE)
