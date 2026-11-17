@@ -1,0 +1,16 @@
+% Read by pandoc in front of main.tex (make docx): plain definitions for the commands of
+% paper-style.sty that pandoc does not know. Labels as in paper-style.sty (English).
+% Source lines become environments; pandoc turns them into Divs that docx/paper.lua styles.
+\newcommand{\sourcename}{Source:}
+\newcommand{\datasourcename}{Data source:}
+\newcommand{\ownwork}{own illustration}
+\newcommand{\bibinname}{In:}
+\newcommand{\bibedsname}{(Eds.)}
+\newcommand{\bibnodatename}{n.d.}
+\newcommand{\tabsource}[1]{\begin{tabsourceline}\sourcename{} #1\end{tabsourceline}}
+\newcommand{\figsource}[1]{\begin{figsourceline}\sourcename{} #1\end{figsourceline}}
+\newcommand{\figdatasource}[1]{\begin{figsourceline}\datasourcename{} #1\end{figsourceline}}
+\newcommand{\headcell}[1]{\textbf{#1}}
+\newcommand{\rowcolor}[1]{}
+% Table rows are read from the CSV by docx/paper.lua
+\newcommand{\csvreader}[4][]{}

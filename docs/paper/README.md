@@ -13,6 +13,15 @@ Requires `lualatex` (`texlive-luatex`) and `bibtex`; `pdflatex` works as a fallb
 the right font. `latexmk`, `biber` and `biblatex` are not
 needed.
 
+## Word export
+
+```sh
+make docx   # -> build/main.docx in the styles of template/Mustertext_Tagungsband.docx
+```
+
+Requires `pandoc` (Arch: AUR `pandoc-bin`) and the local `template/` files. Scripts in `docx/`;
+known issues and their solutions in `docx/latex_docx_conversion_issues.md`.
+
 ## Layout
 
 | Path              | Content                                                       |
@@ -25,6 +34,7 @@ needed.
 | `chapters/`       | Text only, one file per section                               |
 | `tables/`         | Data as `*.csv` plus one thin `tab-*.tex` wrapper per table   |
 | `figures/`        | Images, referenced without the folder prefix                  |
+| `docx/`           | Word export: pandoc macro shim, Lua filter, post-processing, known issues |
 | `template/`       | Delivered guidelines, Word template and our abstract exports; local only, ignored by git |
 
 ## Conventions

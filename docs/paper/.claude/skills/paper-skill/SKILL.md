@@ -94,9 +94,11 @@ colon) apply only when the paper is German.
 LaTeX stays the source. At the very end, a `.docx` is built in parallel so the publisher's
 Word-based accessibility workflow can be served:
 
-1. Start from a copy of `template/Mustertext_Tagungsband.docx` and fill in our content using
-   its own paragraph styles (`Beitragstitel`, `Überschrift 1`, `Tabellenüberschrift`, ...) -
-   never direct formatting. Use the Word/docx skill for this.
+1. `make -C docs/paper docx` -> `build/main.docx`: pandoc with the template as reference doc,
+   `docx/paper.lua` and `docx/postprocess.py` put our content into the template's own
+   paragraph styles (`Beitragstitel`, `Überschrift 1`, `Tabellenüberschrift`, ...). Known
+   issues and what was solved: `docx/latex_docx_conversion_issues.md` - update it when the
+   export changes. Formatting is checked by hand in Word.
 2. Check it in Word for the web (Microsoft 365 account available; driven via the Chrome
    extension): "Überprüfen -> Barrierefreiheit überprüfen". Record the result (screenshot).
 3. Only a `.docx` can be checked this way - opening our LaTeX PDF in Word converts it and says
