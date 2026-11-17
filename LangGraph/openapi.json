@@ -325,6 +325,119 @@
   },
   "components": {
     "schemas": {
+      "ApiGraph": {
+        "properties": {
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/ApiNode"
+            },
+            "type": "array",
+            "title": "Nodes"
+          },
+          "edges": {
+            "items": {
+              "$ref": "#/components/schemas/EdgeDefinition"
+            },
+            "type": "array",
+            "title": "Edges"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ApiGraph",
+        "description": "A workflow graph at the API (see the module docstring for how it differs internally)."
+      },
+      "ApiNode": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[a-zA-Z0-9_\\-]+$",
+            "title": "Id"
+          },
+          "type": {
+            "type": "string",
+            "title": "Type"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label",
+            "default": ""
+          },
+          "position": {
+            "$ref": "#/components/schemas/NodePosition"
+          },
+          "config": {
+            "$ref": "#/components/schemas/ApiNodeConfig"
+          },
+          "inputs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Inputs"
+          },
+          "outputs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Outputs"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "type"
+        ],
+        "title": "ApiNode",
+        "description": "A graph node at the API: like the internal node, with ApiNodeConfig as its `config`."
+      },
+      "ApiNodeConfig": {
+        "properties": {
+          "server_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Server Url"
+          },
+          "timeout_seconds": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "gt": 0,
+                "le": 600
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timeout Seconds"
+          },
+          "values": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Values"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ApiNodeConfig",
+        "description": "A node's `config` at the API: the service's settings, and the process's input values apart.\n\n`extra=\"forbid\"`: a value placed directly in `config`, as in the internal layout, is rejected\ninstead of being taken for a setting. A new setting is added here as a new optional field."
+      },
       "ChatRequest": {
         "properties": {
           "prompt": {
@@ -348,7 +461,7 @@
           "graph": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/WorkflowGraph"
+                "$ref": "#/components/schemas/ApiGraph"
               },
               {
                 "type": "null"
@@ -453,7 +566,7 @@
           "graph": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/WorkflowGraph"
+                "$ref": "#/components/schemas/ApiGraph"
               },
               {
                 "type": "null"
@@ -503,55 +616,6 @@
         },
         "type": "object",
         "title": "HTTPValidationError"
-      },
-      "NodeDefinition": {
-        "properties": {
-          "id": {
-            "type": "string",
-            "minLength": 1,
-            "pattern": "^[a-zA-Z0-9_\\-]+$",
-            "title": "Id"
-          },
-          "type": {
-            "type": "string",
-            "title": "Type"
-          },
-          "label": {
-            "type": "string",
-            "title": "Label",
-            "default": ""
-          },
-          "position": {
-            "$ref": "#/components/schemas/NodePosition"
-          },
-          "config": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Config"
-          },
-          "inputs": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Inputs"
-          },
-          "outputs": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Outputs"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "id",
-          "type"
-        ],
-        "title": "NodeDefinition",
-        "description": "A node in the workflow DAG."
       },
       "NodePosition": {
         "properties": {
@@ -610,28 +674,6 @@
           "type"
         ],
         "title": "ValidationError"
-      },
-      "WorkflowGraph": {
-        "properties": {
-          "nodes": {
-            "items": {
-              "$ref": "#/components/schemas/NodeDefinition"
-            },
-            "type": "array",
-            "title": "Nodes"
-          },
-          "edges": {
-            "items": {
-              "$ref": "#/components/schemas/EdgeDefinition"
-            },
-            "type": "array",
-            "title": "Edges"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "title": "WorkflowGraph",
-        "description": "The full DAG, i.e. the `NodeGraph` per the schema linked above."
       }
     }
   }

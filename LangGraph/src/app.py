@@ -15,7 +15,7 @@ from fastapi.responses import StreamingResponse
 from src.llm.workflow import compiled_graph, DEFAULT_WORKFLOW_CONFIG, MAX_WORKFLOW_ITERATIONS
 from src.llm.nodes.builder import apply_build_op
 from src.llm.nodes.validator import validate_graph
-from src.llm.state.graph import WorkflowGraph
+from src.api_graph import ApiGraph, from_api, to_api
 from src.execution import store
 from src.execution.runner import (
     ExecutionError,
@@ -112,7 +112,7 @@ if not PRODUCTION:
     app.mount("/static", RevalidatingStaticFiles(directory=FRONTEND_DIR), name="static")
 
 
-def _bounded(graph: WorkflowGraph) -> WorkflowGraph:
+def _bounded(graph: ApiGraph) -> ApiGraph:
     if len(graph.nodes) > MAX_GRAPH_NODES:
         raise ValueError(f"a graph may have at most {MAX_GRAPH_NODES} nodes")
     if len(graph.edges) > MAX_GRAPH_EDGES:
@@ -122,8 +122,12 @@ def _bounded(graph: WorkflowGraph) -> WorkflowGraph:
 
 Prompt = Annotated[str, Field(min_length=1, max_length=MAX_PROMPT_CHARS)]
 ThreadId = Annotated[str, Field(pattern=THREAD_ID_PATTERN)]
-# A graph from a client: the graph format (unknown fields rejected) within the size limits.
-PostedGraph = Annotated[WorkflowGraph, AfterValidator(_bounded)]
+# A graph from a client: the API graph format (unknown fields rejected) within the size limits.
+# Every graph crossing the API uses the layout of src/api_graph.py, with the process's input
+# values nested in `config.values` rather than flat in `config` as inside the service; that
+# module explains why. Posted graphs go through `from_api`, returned and streamed ones through
+# `to_api`, so nothing past this layer sees the API layout.
+PostedGraph = Annotated[ApiGraph, AfterValidator(_bounded)]
 
 
 class ChatRequest(BaseModel):
@@ -139,6 +143,8 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     response: str
     thread_id: str
+    # In the ApiGraph layout (`to_api`). Typed as a plain dict so an oddly built graph is still
+    # returned instead of failing the whole turn with a 500 at response validation.
     graph: dict = Field(default_factory=lambda: {"nodes": [], "edges": []})
     validation: dict | None = None
     unmet_capabilities: list[dict] = Field(default_factory=list)
@@ -223,7 +229,7 @@ async def chat(req: ChatRequest):
     on every turn and leave `thread_id` out.
     """
     thread_id = req.thread_id or str(uuid4())
-    graph = req.graph.model_dump() if req.graph is not None else None
+    graph = from_api(req.graph.model_dump()) if req.graph is not None else None
 
     reject_if_busy()
     async with _turns:
@@ -244,7 +250,7 @@ async def chat(req: ChatRequest):
     return ChatResponse(
         response=assistant_message,
         thread_id=thread_id,
-        graph=result.get("workflow_graph") or {"nodes": [], "edges": []},
+        graph=to_api(result.get("workflow_graph")),
         validation=result.get("last_validation"),
         unmet_capabilities=result.get("unmet_capabilities") or [],
     )
@@ -286,6 +292,8 @@ async def stream(
                             for key in ("workflow_graph", "last_validation", "unmet_capabilities")
                             if update.get(key) is not None
                         }
+                        if "workflow_graph" in graph_payload:
+                            graph_payload["workflow_graph"] = to_api(graph_payload["workflow_graph"])
                         if graph_payload:
                             graph_payload.update({"event": "graph", "node": node_name})
                             yield f"data: {json.dumps(graph_payload)}\n\n"
@@ -418,7 +426,7 @@ async def execute_sync(req: ExecuteRequest):
     directly - so the executor is usable from a script or another service without going
     through the chat at all.
     """
-    graph = req.graph.model_dump() if req.graph is not None else graph_for_thread(req.thread_id or "")
+    graph = from_api(req.graph.model_dump()) if req.graph is not None else graph_for_thread(req.thread_id or "")
     try:
         return await execute_graph(graph)
     except ExecutionError as exc:
@@ -473,7 +481,7 @@ async def graph_op(req: GraphOpRequest):
             "error": None,
         }],
     })
-    return {"graph": graph, "validation": validation}
+    return {"graph": to_api(graph), "validation": validation}
 
 
 # The demo frontend, in a development run only (see PRODUCTION).
